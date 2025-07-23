@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DnD Dungeon Master</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        #chat { width: 500px; height: 300px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; }
+        #user-input { width: 400px; }
+    </style>
+</head>
+<body>
+    <h1>DnD Dungeon Master</h1>
+    <div id="chat"></div>
+    <input type="text" id="user-input" placeholder="Type your message..." autofocus>
+    <button onclick="sendMessage()">Send</button>
+    <script>
+        function sendMessage() {
+            var input = document.getElementById("user-input");
+            var message = input.value;
+            if (!message) return;
+            var chat = document.getElementById("chat");
+            chat.innerHTML += "<b>You:</b> " + message + "<br>";
+            input.value = "";
+            fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                chat.innerHTML += "<b>Dungeon Master:</b> " + data.response + "<br>";
+                chat.scrollTop = chat.scrollHeight;
+            });
+        }
+        document.getElementById("user-input").addEventListener("keydown", function(e) {
+            if (e.key === "Enter") sendMessage();
+        });
+    </script>
+</body>
+</html>
