@@ -1,0 +1,10 @@
+[project]
+name = "dnd"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.11.7",
+    "pydantic-ai>=0.4.6",
+]
