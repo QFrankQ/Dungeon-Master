@@ -1,7 +1,9 @@
 from typing import List, Dict
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 import json
+import pickle
 import os
 import requests
 load_dotenv()
@@ -15,13 +17,13 @@ def get_embedding(texts):
     result = client.models.embed_content(
         model="gemini-embedding-001",
         contents= texts,
-        task_type="RETRIEVAL_DOCUMENT"
+        config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT", output_dimensionality=768)
         )
     return result.embeddings
 
 def prepare_docs(rules_data: Dict) -> List[Dict]:
     documents = []
-    for rule in rules_data["combat_rules"][:2]:
+    for rule in rules_data["combat_rules"]:
         doc = {
             "text": f"{rule['section_title']}\n\n{rule['content']}",
             "metadata": {
@@ -54,5 +56,5 @@ if __name__ == "__main__":
         })
 
     # Save locally
-    with open("combat_rules_embedded.json", "w") as f:
-        json.dump(embeddings, f)
+    with open("db/combat_rules_embedded.pkl", "wb") as f:
+        pickle.dump(embeddings, f)
