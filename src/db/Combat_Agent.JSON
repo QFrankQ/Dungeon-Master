@@ -1,0 +1,443 @@
+{
+  "combat_rules": [
+    {
+      "section_title": "Adjusting for Small Groups",
+      "content": "A group that contains fewer than four players might find combat encounters difficult, especially if the party lacks important capabilities (such as armored characters to stand toe-to-toe with enemies or healing magic to keep everyone alive). You can compensate by reducing the number of monsters in a combat encounter or by giving the party resources they need, such as *Potions of Healing*.\n\nYou can also add party members, as described in the sections that follow.\n\n#### DM-Controlled Adventurer\n\nYou can make an adventurer character of your own (sometimes called a \"DM PC\"—a \"Dungeon Master player character\") to accompany the party. This is a rewarding way for you to roleplay with your friends while they're exploring your world, but keep in mind that you'll have to run this NPC in combat.\n\nBe sure to keep the players' characters in the spotlight, and don't take away the players' agency by having your character make decisions for the group.\n\n#### NPC Party Members\n\nYou can add nonplayer characters (NPCs) to the adventuring party. Use the NPC stat blocks in the *Monster Manual* to represent these supporting characters. If you don't want to run these NPCs yourself, invite one or more of your players to take on an NPC as a secondary character. These NPCs might be apprentices or employees of the adventurers, so it's natural for the main characters to take the lead in exploration and social interactions while the NPCs fade into the background.\n\nSee \"*Nonplayer Characters*\" in *chapter 3* for more information.\n\n#### Players with Multiple Characters\n\nOne or more of your players can each play two characters. Running two characters at once is a challenge, so make sure those players are comfortable taking on multiple characters.\n\nThis approach works best in a game that's focused on combat, since it fills out a party with combat-capable characters. It can be difficult for a player to roleplay two characters at once. You might suggest that the player focus on roleplaying one character while relegating the other character to a supporting role.",
+      "tags": [
+        "small groups",
+        "fewer than four players",
+        "adjusting difficulty",
+        "party size",
+        "combat balance",
+        "DM PC",
+        "DMPC",
+        "NPC party members",
+        "underpowered party",
+        "balancing for small party"
+      ]
+    },
+    {
+      "section_title": "Managing Large Groups in Combat",
+      "content": "The biggest considerations with large groups are maintaining order at the table and keeping combat from becoming too slow.\n\n#### Structured Turns\n\nIf you find yourself in a situation where individual players are having trouble getting a chance to do things during exploration or social interaction, have the characters roll Initiative and act in Initiative order, just as you do in combat. Taking turns ensures that everyone has the chance to do something. Use this approach sparingly, as it can feel artificial and sometimes slows down the game.\n\n#### Party Leader\n\nConsider having the players designate a party leader, who is then the only person who tells you what the group is doing. It becomes the leader's role to work with the rest of the players to find consensus on what the group will do.\n\n#### Speeding Combat\n\nPlayers who have to wait a long time between their characters' turns in combat are susceptible to distraction. Consider these tips to speed combat with a large group.\n\n***Be Generous with Information.*** If you tell the players what the Armor Class of their opponents is, you reduce the steps of interaction needed to resolve an attack. Instead of telling you a number and asking if it hits, a player can simply tell you that an attack hits and how much damage it deals, perhaps adding some narration for good measure (see \"*Narration in Combat*\" later in this chapter). In the same way, if you know each character's AC, you don't need to ask whether a monster's attack hits.\n\n***Help Players Keep Up.*** If a player isn't sure what to do on their turn in combat, help the player decide by offering a quick recap of the state of the battle. How many foes are still standing, and how hurt do they look? What's the most immediate threat to that character?\n\n***Make Initiative Obvious.*** Display the Initiative order to your players so they each know when their character's turn is coming up and can think ahead about what their character will do on their next turn. Using Initiative scores (see \"*Running Combat*\" in this chapter)—and perhaps seating the players in Initiative order—can be helpful with a large group.\n\n***Roll Handfuls of Dice.*** Encourage players to roll the dice for their attack rolls and their damage at the same time. You can do the same.",
+      "tags": [
+        "large groups",
+        "more than six players",
+        "speeding up combat",
+        "slow combat",
+        "combat pacing",
+        "structured turns",
+        "party leader",
+        "generous with information",
+        "monster AC",
+        "rolling dice together",
+        "obvious initiative"
+      ]
+    },
+    {
+      "section_title": "Resolving D20 Tests",
+      "content": "You decide when a player makes a D20 Test based on what the character is trying to do. Players shouldn't just roll ability checks without context; they should tell you what their characters are trying to achieve, and make ability checks only if you ask them to.\n\nWhen a situation comes up and you're not sure how to adjudicate it using the rules, use these four questions to help you decide:\n\n- **Is a D20 Test Warranted?** If the task is trivial or impossible, don't bother with a D20 Test. A character can move across an empty room or drink from a flask without making a Dexterity check, whereas no lucky die roll will allow a character with an ordinary bow to hit the moon with an arrow. Call for a D20 Test only if there's a chance of both success and failure and if there are meaningful consequences for failure.\n- **What Kind of D20 Test?** If a character is actively trying to do something, use an ability check (or an attack roll if the character is trying to hit something). If the character is reactively trying to avoid or resist something, use a saving throw.\n- **Which Ability Does the Test Use?** Think about which ability has the most influence on a character's chance to succeed on the ability check or saving throw. Refer to the Abilities, Ability Checks, and Saving Throws table for guidance. Also consider whether a skill or tool proficiency might apply to an ability check.\n- **What's the DC?** Based on how hard you think the task should be, set the DC as follows: 10 for an easy task, 15 for a moderately difficult task, or 20 for a hard task.",
+      "tags": [
+        "d20 test",
+        "resolving outcomes",
+        "adjudicating actions",
+        "when to roll",
+        "ability check",
+        "saving throw",
+        "attack roll",
+        "success and failure",
+        "consequences",
+        "trivial tasks",
+        "impossible tasks",
+        "setting DC"
+      ]
+    },
+    {
+      "section_title": "Abilities, Ability Checks, and Saving Throws Reference",
+      "content": "| Ability      | Score Measures...                   | Make an Ability Check To...                                | Make a Saving Throw To...      |\n|--------------|-------------------------------------|------------------------------------------------------------|--------------------------------|\n| Strength     | Physical might                      | Lift, push, pull, or break something                       | Physically resist direct force |\n| Dexterity    | Agility, reflexes, balance          | Move nimbly, quickly, or quietly                           | Dodge out of harm's way        |\n| Constitution | Health and stamina                  | Push your body beyond normal limits                        | Endure a toxic hazard          |\n| Intelligence | Reasoning and memory                | Reason or remember                                         | Recognize an illusion as fake  |\n| Wisdom       | Perceptiveness and mental fortitude | Notice things in the environment or in creatures' behavior | Resist a mental assault        |\n| Charisma     | Confidence, poise, and charm        | Influence, entertain, or deceive                           | Assert your identity           |",
+      "tags": [
+        "ability scores",
+        "ability checks",
+        "saving throws",
+        "strength",
+        "dexterity",
+        "constitution",
+        "intelligence",
+        "wisdom",
+        "charisma",
+        "what ability to use",
+        "ability reference table"
+      ]
+    },
+    {
+      "section_title": "Ability Checks",
+      "content": "An ability check is a test to see whether a character succeeds at a task the character has decided to attempt. The Abilities, Ability Checks, and Saving Throws table summarizes what each ability is used for. (Constitution checks are rare, as tests of a character's endurance are usually passive or reactive, making a saving throw more appropriate.)\n\n#### Proficiency\n\nWhen the rules or a published adventure calls for an ability check, a skill or tool proficiency is often called out: for example, \"a character who succeeds on a DC 15 Intelligence (Arcana) check can puzzle out the magic involved.\" Sometimes the rules allow for any one of two or more proficiencies to apply to a check. When deciding what check a character should make, be generous in determining if the character's Proficiency Bonus comes into play. You might specifically ask for an Intelligence (Arcana) check, or you can ask for an Intelligence check and let the player negotiate with you to see if one of the character's skill or tool proficiencies applies.\n\n#### Trying Again\n\nSometimes a character fails an ability check and the player wants to try again. In many cases, failing an ability check makes it impossible to attempt the same thing again. For some tasks, however, the only consequence of failure is the time it takes to attempt the task again. For example, failing a Dexterity check to pick a lock on a treasure chest doesn't mean the character can't try again, but each attempt might take a minute.\n\nIf failure has no consequences and a character can try and try again, you can skip the ability check and just tell the player how long the task takes. Alternatively, you can call for a single ability check and use the result to determine how long it takes for the character to complete the task.\n\n#### Group Checks\n\nGroup checks are a tool you can use when the party is trying to accomplish something together and the most skilled characters can cover for characters who are less adept at the task. To make a group ability check, everyone in the group makes the ability check. If at least half the group succeeds, the whole group succeeds. Otherwise, the group fails.\n\nGroup checks aren't appropriate when one character's failure would spell disaster for the whole party, such as if the characters are creeping across a castle courtyard while trying not to alert the guards. In that case, one noisy character will draw the guards' attention, and there's not much that stealthier characters can do about it, so relying on individual checks makes more sense. Similarly, don't use a group check when a single successful check is sufficient, as is the case when finding a hidden compartment with a Wisdom (Perception) check.\n\n#### Passive Checks\n\nAbility checks normally represent a character's active effort to accomplish something, but occasionally you need a passive measure of how good a character is at doing a thing. Passive Perception is the most common example. (See \"*Perception*\" later in this chapter.) You can extend the concept of a passive ability check to other abilities and skills.",
+      "tags": [
+        "ability check",
+        "skill check",
+        "tool proficiency",
+        "proficiency bonus",
+        "retrying a check",
+        "trying again",
+        "failure consequences",
+        "group checks",
+        "passive checks",
+        "passive perception",
+        "passive insight"
+      ]
+    },
+    {
+      "section_title": "Attack Rolls",
+      "content": "In combat, an attack roll is used to determine whether an attack hits.\n\nYou can also use attack rolls to resolve noncombat activities that are similar to attacks in combat, such as an archery contest or a game of darts. Assign an Armor Class to the target, decide whether the character is proficient with the weapon used, then have the player make an attack roll. (See also \"*Degrees of Success*\" in this chapter.)",
+      "tags": [
+        "attack roll",
+        "to hit",
+        "making an attack",
+        "armor class",
+        "AC",
+        "hitting a target",
+        "noncombat attack"
+      ]
+    },
+    {
+      "section_title": "Saving Throws",
+      "content": "In contrast to an ability check, a saving throw is an instant response to an effect and is almost never made by choice. A saving throw makes the most sense when something bad threatens a character and the character has a chance to avoid or resist it.\n\nMost of the time, a saving throw comes into play when an effect—such as a spell, monster ability, or trap—calls for it, telling you what kind of saving throw is involved and providing a DC for it.\n\nIn other situations that call for a saving throw, it's up to you to decide which ability score is involved. The Abilities, Ability Checks, and Saving Throws table offers suggestions.",
+      "tags": [
+        "saving throw",
+        "save",
+        "resist effect",
+        "avoid harm",
+        "spell save",
+        "trap save",
+        "monster ability save",
+        "determining save ability"
+      ]
+    },
+    {
+      "section_title": "Difficulty Class (DC)",
+      "content": "You establish the Difficulty Class for an ability check or a saving throw when a rule or an adventure doesn't give you one. Choose a DC from the Typical DCs table based on the task's difficulty.\n\n##### Typical DCs\n| Task              |  DC |\n|-------------------|:---:|\n| Very easy         |  5  |\n| Easy              |  10 |\n| Moderate          |  15 |\n| Hard              |  20 |\n| Very hard         |  25 |\n| Nearly impossible |  30 |\n\nThe task difficulties are explained below:\n\n- **Very Easy.** Most people can accomplish a DC 5 task with little chance of failure. Unless circumstances are unusual, let characters succeed at such a task without making a check.\n- **Easy, Moderate, and Hard.** These are the most common difficulties, and you can run your game using only them. A character with a 10 in the associated ability and no proficiency will succeed at an easy task around 50 percent of the time. For a moderate task, a character needs either a higher score or proficiency to have a similar chance of success, whereas a hard task typically requires both to have a similar chance.\n- **Very Hard and Nearly Impossible.** A DC 25 task is almost out of reach for low-level characters, but more reasonable after level 10 or so. Low-level characters have no chance to accomplish a DC 30 task, while a level 20 character with proficiency and a relevant ability score of 20 still needs a 19 or 20 on the die roll to succeed at a task of this difficulty.\n\nIf you're setting the DC for a saving throw, don't go lower than 10 or higher than 20. If a creature is the source of the effect forcing a saving throw, use the standard formula for calculating a save DC (see \"*Calculated DCs*\" below).\n\n#### Calculated DCs\n\nFor some ability checks and most saving throws, the rules default to the following formula:\n\n**DC** = 8 + ability modifier + Proficiency Bonus\n\nThis formula often sets the saving throw DC when a creature is casting a spell or using a special ability, but it can also apply to ability checks that are contests between two creatures. For example, if one creature is holding a door shut, use its Strength modifier and Proficiency Bonus to set the DC for opening the door. When another creature tries to force the door open, the creature makes a Strength (Athletics) check against that DC.",
+      "tags": [
+        "difficulty class",
+        "DC",
+        "setting a DC",
+        "save DC",
+        "check DC",
+        "typical DCs",
+        "easy task",
+        "moderate task",
+        "hard task",
+        "calculated DC",
+        "spell save DC",
+        "contested check"
+      ]
+    },
+    {
+      "section_title": "Advantage and Disadvantage",
+      "content": "Advantage and Disadvantage are among the most useful tools in your toolbox. They reflect temporary circumstances that might affect the chances of a character succeeding at a task. Advantage is also a great way to reward a player who shows exceptional creativity in play.\n\nCharacters often gain Advantage or Disadvantage through the use of special abilities, actions, spells, or other features of their classes or species. In other cases, you decide whether a circumstance would merit Advantage or Disadvantage.\n\nAs described in the *Player's Handbook*, if different circumstances would give both Advantage and Disadvantage in the same situation, the Advantage and Disadvantage cancel out, regardless of how many circumstances would grant Advantage or Disadvantage.\n\n#### Advantage\n\nConsider granting Advantage when...\n\n- Circumstances not related to a creature's own capabilities provide it with an edge.\n- Some aspect of the environment improves the character's chance of success.\n- A player shows exceptional creativity or cunning in attempting or describing a task.\n- Previous actions (whether taken by the character making the attempt or some other creature) improve the chances of success.\n\n#### Disadvantage\n\nConsider imposing Disadvantage when...\n\n- Circumstances hinder success in some way.\n- Some aspect of the environment makes success less likely.\n- An element of the plan or description of an action makes success less likely.",
+      "tags": [
+        "advantage",
+        "disadvantage",
+        "roll with advantage",
+        "roll with disadvantage",
+        "granting advantage",
+        "imposing disadvantage",
+        "canceling advantage and disadvantage",
+        "circumstances"
+      ]
+    },
+    {
+      "section_title": "Consequences of Rolls",
+      "content": "As a DM, you can use a variety of approaches when adjudicating success and failure to tailor the game to your liking.\n\n#### Success at a Cost\n\nWhen a character fails a D20 Test by only 1 or 2, you can offer to let the character succeed at the cost of a complication or hindrance.\n\n#### Degrees of Failure\n\nSometimes a failed D20 Test has different consequences depending on the degree of failure. For example, a character who fails to disarm a trapped chest might accidentally spring the trap if the check fails by 5 or more, whereas a lesser failure means the trap wasn't triggered during the botched disarm attempt.\n\n#### Degrees of Success\n\nA successful D20 Test can have degrees of success. For example, when characters participate in an archery contest, you might decide that the more an attack roll exceeds the target's AC, the higher the character's score.\n\n#### Critical Success or Failure\n\nRolling a 20 or a 1 on an ability check or a saving throw doesn't normally have any special effect. However, you can take such an exceptional roll into account when adjudicating the outcome. It's up to you to determine how this manifests in the game. One approach is to increase the impact of the success or failure. For example, rolling a 1 on a failed attempt to pick a lock might jam the lock, and rolling a 20 on a successful Intelligence (Investigation) check might reveal an extra clue.\n\nFor attack rolls, the rules cover what happens on a natural 20 (it's a Critical Hit) or a natural 1 (it always misses). Resist the temptation to add additional negative consequences to a natural 1 on an attack roll: the automatic failure is bad enough.",
+      "tags": [
+        "consequences",
+        "success",
+        "failure",
+        "success at a cost",
+        "degrees of failure",
+        "fail by 5 or more",
+        "degrees of success",
+        "critical success",
+        "critical failure",
+        "natural 20",
+        "nat 20",
+        "natural 1",
+        "nat 1",
+        "critical hit",
+        "automatic miss",
+        "fumble"
+      ]
+    },
+    {
+      "section_title": "Improvising Damage",
+      "content": "The Improvising Damage table gives guidelines for determining damage on the fly.\n\n##### Improvising Damage\n| Damage | Examples                                                                                                                          |\n|:------:|-----------------------------------------------------------------------------------------------------------------------------------|\n|  1d10  | Burned by coals, hit by a falling bookcase, pricked by a poison needle                                                            |\n|  2d10  | Struck by lightning, stumbling into a firepit                                                                                     |\n|  4d10  | Hit by falling rubble in a collapsing tunnel, tumbling into a vat of acid                                                         |\n|  10d10 | Crushed by compacting walls, hit by whirling steel blades, wading through lava                                                    |\n|  18d10 | Submerged in lava, hit by a crashing flying fortress                                                                              |\n|  24d10 | Tumbling into a vortex of fire on the *Elemental Plane of Fire*, crushed in the jaws of a godlike creature or a moon-size monster |\n\nThe Damage Severity and Level table is a guide to how deadly these damage amounts are for characters of different levels. Cross-reference a character's level with the damage being dealt to gauge the severity of the damage.\n\n##### Damage Severity and Level\n| Character Levels |   Nuisance |     Deadly |\n|:----------------:|-----------:|-----------:|\n|        1–4       |   5 (1d10) |  11 (2d10) |\n|       5–10       |  11 (2d10) |  22 (4d10) |\n|       11–16      |  22 (4d10) | 55 (10d10) |\n|       17–20      | 55 (10d10) | 99 (18d10) |\n\nNuisance damage rarely poses a risk of death to characters of the levels shown, but a severely weakened character might be laid low by this damage.\n\nDeadly damage poses a significant threat to characters of the levels shown and could potentially kill such a character that's missing many Hit Points.",
+      "tags": [
+        "improvising damage",
+        "damage",
+        "environmental damage",
+        "trap damage",
+        "damage on the fly",
+        "damage severity",
+        "nuisance damage",
+        "deadly damage",
+        "falling damage",
+        "lava damage",
+        "acid damage",
+        "lightning damage"
+      ]
+    },
+    {
+      "section_title": "Perception and Starting Encounters",
+      "content": "If the characters encounter another group of creatures and neither side is being stealthy, the two groups automatically notice each other once they are within sight or hearing range of one another. The Audible Distance table can help you determine the hearing range, and the following sections address visibility. If one group tries to hide from the other, use the rules in the *Player's Handbook*.\n\n##### Audible Distance\n| Noise              |    Distance   |\n|--------------------|:-------------:|\n| Trying to be quiet |  2d6 × 5 feet |\n| Normal noise level | 2d6 × 10 feet |\n| Very loud          | 2d6 × 50 feet |\n\n***Visibility Outdoors.*** When traveling outdoors, most characters can see about 2 miles in any direction on a clear day, except where obstructions block their view. That range increases to 40 miles if they are atop a mountain or a tall hill or are otherwise able to look down on the area from a height. Lightly Obscured conditions reduce visibility: rain reduces maximum visibility to 1 mile, and fog reduces it to between 100 and 300 feet.\n\n***Visibility at Sea.*** From a ship's crow's nest, a lookout can see things up to 10 miles away, assuming clear skies and a relatively calm sea. Overcast skies reduce that distance by half. Lightly Obscured conditions reduce visibility just as they do on land.\n\n***Visibility Underwater.*** Visibility underwater depends on water clarity and the available light. Use the Underwater Encounter Distance table to determine the encounter distances underwater.\n\n##### Underwater Encounter Distance\n| Visibility                | Encounter Distance |\n|---------------------------|:------------------:|\n| Clear water, Bright Light |       60 feet      |\n| Clear water, Dim Light    |       30 feet      |\n| Murky water or Darkness   |       10 feet      |",
+      "tags": [
+        "perception",
+        "encounter start",
+        "surprise",
+        "noticing creatures",
+        "encounter distance",
+        "audible distance",
+        "hearing distance",
+        "visibility",
+        "lightly obscured",
+        "fog",
+        "rain",
+        "underwater combat",
+        "underwater visibility"
+      ]
+    },
+    {
+      "section_title": "Rolling Initiative",
+      "content": "Combat starts when—and only when—you say it does. Some characters have abilities that trigger on an Initiative roll; you, not the players, decide if and when Initiative is rolled. A high-level Barbarian can't just punch their Paladin friend and roll Initiative to regain expended uses of Rage.\n\nIn any situation where a character's actions initiate combat, you can give the acting character Advantage on their Initiative roll. For example, if a conversation with an NPC is cut short because the Sorcerer is convinced that NPC is a doppelganger and targets it with a *Chromatic Orb* spell, everyone rolls Initiative, and the Sorcerer does so with Advantage. If the doppelganger rolls well, it might still act before the Sorcerer's spell goes off, reflecting the monster's ability to anticipate the spell.\n\n#### Using Initiative Scores\n\nYou can get to the action of combat more quickly by using Initiative scores instead of rolling. You might decide to use Initiative scores just for characters, just for monsters, or for both.\n\n***Initiative Scores for Characters.*** A character's Initiative score is typically 10 plus all modifiers to the character's Initiative roll (including their Dexterity modifier and any special modifiers).\n\n***Initiative Scores for Monsters.*** A monster's stat block in the *Monster Manual* includes its Initiative score after its Initiative bonus.\n\n***Advantage and Disadvantage.*** If a creature has Advantage on Initiative rolls, increase its Initiative score by 5. If it has Disadvantage on those rolls, decrease that score by 5.",
+      "tags": [
+        "initiative",
+        "rolling initiative",
+        "starting combat",
+        "turn order",
+        "initiative roll",
+        "advantage on initiative",
+        "disadvantage on initiative",
+        "initiative scores",
+        "passive initiative"
+      ]
+    },
+    {
+      "section_title": "Tracking Initiative",
+      "content": "The following sections describe different methods for keeping track of who goes when in combat.\n\n#### Hidden List\n\nYou can track Initiative on a list your players can't see using any of the following tools:\n\n- Paper or a notebook behind the DM screen\n- A spreadsheet or document on a laptop or tablet\n- An app on your tablet or phone\n- Index cards for each character and each group of identical monsters, placed in Initiative order in a stack you cycle through\n\nA hidden list allows you to track combatants who haven't been revealed yet, and you can use the list as a place to record the current Hit Points of monsters, as well as other useful notes.\n\n#### Open List\n\nYou can track Initiative on a list that is visible to the players using any of the following tools:\n\n- A whiteboard on a wall or propped up nearby\n- A battle mat you use for miniatures\n- Folded index cards for each character and each group of identical monsters, placed like tents in Initiative order across the top of your DM screen\n- A virtual tabletop program you're using or a group text chat\n- Magnets, clothespins, or an accessory designed to represent the Initiative order spatially\n\nAn open list makes everyone aware of the order of play. Players know when their characters' turns are coming up so they can plan their actions in advance.",
+      "tags": [
+        "tracking initiative",
+        "initiative order",
+        "turn order",
+        "combat tracking",
+        "initiative list",
+        "hidden initiative",
+        "open initiative",
+        "DM screen",
+        "whiteboard",
+        "virtual tabletop"
+      ]
+    },
+    {
+      "section_title": "Tracking Monster Hit Points",
+      "content": "During a combat encounter, you or a player should track how much damage each monster takes. Most DMs track damage in secret so their players don't know how many Hit Points a monster has remaining.\n\nIt helps to have a system to track damage for groups of monsters. If you aren't using miniatures or other visual aids, one way to track your monsters is to assign them unique features. For example, imagine that you're running an encounter with three ogres. You might attach descriptions such as \"the ogre with a big scar\" and \"the ogre with the helmet\" to help you and your players track which monster is which. Once Initiative is rolled, jot down each ogre's Hit Points and add notes (and even a name, if you like) to differentiate each one:\n\n**Krag (ogre w/ scar):** 68\n\n**Thod (ogre w/ helm):** 71\n\n**Mur (ogre smeared w/ dirt):** 59\n\nIf you use miniatures to represent monsters, one way to differentiate them is to give each one a unique miniature. If you use identical miniatures to represent multiple monsters, you can tag the miniatures with small stickers of different colors or stickers with different letters or numbers on them.",
+      "tags": [
+        "hit points",
+        "HP",
+        "tracking damage",
+        "monster HP",
+        "tracking monster health",
+        "differentiating monsters",
+        "tracking monster hp",
+        "monster hit points"
+      ]
+    },
+    {
+      "section_title": "Using and Tracking Conditions",
+      "content": "Many rules and features in the game apply conditions to creatures. You can also apply conditions on the fly when it makes sense to do so. For example, the Poisoned condition can reflect a variety of impairments, from influenza to intoxication.\n\nYou can track monsters' conditions wherever you track their Hit Points. Players should track any conditions affecting their characters. Character conditions can also be marked on index cards or a whiteboard.\n\nYou might also mark index cards or sticky notes with conditions and their effects or use tokens or some other tangible reminder. Then hand the cards, notes, or tokens to players when their characters have a condition.",
+      "tags": [
+        "conditions",
+        "status effects",
+        "tracking conditions",
+        "poisoned",
+        "prone",
+        "incapacitated",
+        "frightened",
+        "blinded",
+        "charmed",
+        "deafened",
+        "exhaustion",
+        "grappled",
+        "invisible",
+        "paralyzed",
+        "petrified",
+        "restrained",
+        "stunned",
+        "unconscious"
+      ]
+    },
+    {
+      "section_title": "Creature Size and Space",
+      "content": "A creature's size determines how much space it occupies on squares or hexes, as shown in the Creature Size and Space table and the accompanying diagrams.\n\nIf the miniature you use for a monster takes up an amount of space different from what's in the table, that's fine, but treat the monster as its official size for all rules. For example, you might use a miniature that has a Large base to represent a Huge giant. That giant takes up less space on the battlefield than its size suggests, but it is still Huge for the purposes of rules like grappling.\n\n##### Creature Size and Space\n| Size       | Space in Squares            | Space in Hexes   |\n|------------|-----------------------------|------------------|\n| Tiny       | 4 per square                | 4 per hex        |\n| Small      | 1 square                    | 1 hex            |\n| Medium     | 1 square                    | 1 hex            |\n| Large      | 4 squares (2 by 2)          | 3 hexes          |\n| Huge       | 9 squares (3 by 3)          | 7 hexes          |\n| Gargantuan | 16 squares (4 by 4) or more | 12 hexes or more |",
+      "tags": [
+        "creature size",
+        "space",
+        "grid",
+        "battle grid",
+        "squares",
+        "hexes",
+        "token size",
+        "tiny",
+        "small",
+        "medium",
+        "large",
+        "huge",
+        "gargantuan",
+        "miniatures"
+      ]
+    },
+    {
+      "section_title": "Areas of Effect on a Grid",
+      "content": "An area of effect must be translated onto squares or hexes to determine which potential targets are in the area. If the area has a point of origin, choose an intersection of squares or hexes to be the point of origin, then follow its rules as normal. If an area of effect covers at least half a square or hex, the entire square or hex is affected.",
+      "tags": [
+        "area of effect",
+        "AOE",
+        "spell area",
+        "grid",
+        "squares",
+        "hexes",
+        "point of origin",
+        "cone",
+        "cube",
+        "cylinder",
+        "line",
+        "sphere",
+        "targeting"
+      ]
+    },
+    {
+      "section_title": "Line of Sight",
+      "content": "To determine whether there is line of sight between two spaces, pick a corner of one space and trace an imaginary line from that corner to any part of another space. If you can trace a line that doesn't pass through or touch an object or effect that blocks vision—such as a stone wall, a thick curtain, or a dense cloud of fog—then there is line of sight.",
+      "tags": [
+        "line of sight",
+        "vision",
+        "targeting",
+        "blocked vision",
+        "obscured",
+        "seeing a target",
+        "range"
+      ]
+    },
+    {
+      "section_title": "Cover",
+      "content": "To determine whether a target has cover against an attack or other effect, choose a corner of the attacker's space or the point of origin of an area of effect. Then trace imaginary lines from that corner to every corner of any one square the target occupies. If one or two of those lines are blocked by an obstacle (including a creature), the target has Half Cover. If three or four of those lines are blocked but the attack or effect can still reach the target (such as when the target is behind an arrow slit), the target has Three-Quarters Cover.\n\nOn hexes, use the same procedure as above, drawing lines between the corners of the hexagons. The target has Half Cover if one, two, or three lines are blocked by an obstacle, and Three-Quarters Cover if four or more lines are blocked but the attack or effect can still reach the target.",
+      "tags": [
+        "cover",
+        "half cover",
+        "three-quarters cover",
+        "total cover",
+        "AC bonus from cover",
+        "dexterity save bonus from cover",
+        "obstacle",
+        "grid cover",
+        "targeting"
+      ]
+    },
+    {
+      "section_title": "Diagonal Movement",
+      "content": "The *Player's Handbook* presents a simple method for counting movement and measuring range on a grid of squares: count every square as 5 feet, even if the creature is moving or counting diagonally. While fast in play, this rule breaks the laws of geometry.\n\nIf you want more accuracy, use the following rule: the first diagonal square counts as 5 feet, but the second diagonal square counts as 10 feet. This pattern of 5 feet and then 10 feet continues whenever you're counting diagonally, even if the creature moves straight between different bits of diagonal movement. For example, a character might move 1 square diagonally (5 feet), then 3 squares straight (15 feet), and then another square diagonally (10 feet) for a total movement of 30 feet.",
+      "tags": [
+        "diagonal movement",
+        "grid movement",
+        "moving on a grid",
+        "variant diagonal rule",
+        "5-10 rule",
+        "counting distance",
+        "measuring range"
+      ]
+    },
+    {
+      "section_title": "Tracking Position at Long Range",
+      "content": "If combat erupts between two groups that are hundreds of feet away from each other, try the following techniques to keep track of who's where:\n\n- **Note Paper.** List all combatants on a piece of paper, and keep a running tally of each creature's distance from the party's starting point (the party starts at 0 feet). As the characters advance, increase their numbers; as the monsters advance toward the characters, decrease their numbers.\n- **Adjust the Grid Scale.** If you're using a battle grid, take a section of that grid and use it to track position, changing the scale so that each square is 30 feet. You don't need to be precise about creatures' positions, just their distance from each other.\n- **Dice as Range Counters.** Do away with the grid and put miniatures in their relative positions, using dice next to each miniature to show how far they've traveled. You can use percentile dice (or three d10s, with each die representing a digit in a three-digit number, if the encounter begins at a range between 100 and 1,000 feet), or use one or more d20s to show how many 5-foot or 10-foot squares the creature has advanced.",
+      "tags": [
+        "long range combat",
+        "tracking distance",
+        "ranged combat",
+        "position tracking",
+        "large battlefields",
+        "tracking position"
+      ]
+    },
+    {
+      "section_title": "Narration in Combat",
+      "content": "Although it's important that the players understand what's going on in terms of the rules, the game can get dull if everyone uses only \"gamespeak\": \"That's an 18 to hit,\" \"You hit; now roll damage,\" \"11 points,\" and \"OK, now we're to Initiative count 13.\" Instead, use the rules and your knowledge of the scene to help your narration. If 18 is barely a hit, but the 11 points of damage is a bad wound for the enemy, say: \"You swing wildly, and the knight brings his shield up just a second too late. Your blade catches him along the jaw, drawing a deep gash. He recoils, bleeding badly!\"\n\nAs the characters fight monsters, you can reveal information to help the players make good choices, as described in the sections that follow.\n\n> ##### Awarding Heroic Inspiration\n> As discussed in the *Player's Handbook*, Heroic Inspiration is a reward you can give to characters when their players make the game more fun, exciting, and memorable for everyone at the table. Any player who makes the whole table erupt in laughter, cheers, or howls of surprise probably deserves Heroic Inspiration.\n\n#### Loss of Hit Points\n\nYou can give players a sense of how well they're doing against a creature by describing, in narrative terms, how hurt the creature is. For example, if the creature is Bloodied, you might say the creature has visible wounds and appears beaten down.\n\n#### Abilities, Strengths, and Weaknesses\n\nShare information with the players about the characteristics of creatures they fight as those characteristics become apparent. For example, if a Wizard casts *Fire Bolt* against a **Fire Elemental** (a creature that has Immunity to Fire damage), let the players know the spell doesn't seem to bother the creature at all.\n\n#### Actions in Combat\n\nWhen a monster takes an action in combat, the players need to have some idea what's going on both in the fictional reality of the game and in terms of the rules of the game. This means that when an enemy with a Crossbow takes the Ready action to cover the area in front of a door, the players should have a pretty good idea that if their characters move in front of that door, the enemy will shoot them. \n\n##### Describing Actions\n| Action    | Description                                                             |\n|-----------|-------------------------------------------------------------------------|\n| Dash      | \"Dispensing with attacks, your foe hurries across the room.\"            |\n| Disengage | \"Careful not to drop its guard, your foe edges away from you.\"          |\n| Dodge     | \"Your foe watches you closely and tries to parry your attacks.\"         |\n| Help      | \"While its ally attacks, your foe darts around, causing a distraction.\" |\n| Magic     | \"Your foe gestures in a deliberate manner and utters an invocation.\"    |\n| Ready     | \"Your foe seems to be waiting for something, ready to act.\"             |\n\n#### Monsters Casting Spells\n\nWhen a monster casts a spell, check the components it's using and describe its activity appropriately. If the spell has Verbal components, the monster might chant, boldly proclaim, or hiss the mystic syllables of the spell. Somatic components involve the monster moving its hands (or similar appendages) in graceful patterns, shaping them into angular positions, or thrusting them sharply forward. Finally, the monster might be holding a Spellcasting Focus or some other Material component.\n\nSome monsters have the special ability to ignore some or all of a spell's normal components, which might prevent characters from recognizing what the monster is doing. Similarly, when monsters use magical abilities that don't involve casting spells, make sure it's clear to the players that the monster is drawing on its unique magical abilities, not casting a spell their characters could counter.",
+      "tags": [
+        "combat narration",
+        "describing combat",
+        "describing damage",
+        "loss of hit points",
+        "bloodied",
+        "monster weaknesses",
+        "vulnerability",
+        "resistance",
+        "immunity",
+        "describing actions",
+        "dash",
+        "disengage",
+        "dodge",
+        "help",
+        "ready",
+        "monster spellcasting",
+        "verbal components",
+        "somatic components",
+        "counterspell",
+        "heroic inspiration"
+      ]
+    },
+    {
+      "section_title": "Keeping Combat Moving",
+      "content": "Sometimes even the best-planned combat encounter can turn into a slog, where no one's moving and neither side is hitting or dealing much damage to the other. When that happens, here are a few techniques you can use to get things moving again or bring the encounter to a speedy close.\n\n#### Don't Repeat Game States\n\nWhen characters do something to change the tactical situation, don't respond by putting things back to the way they were before.\n\n#### Hasten a Monster's Demise\n\nIf a combat has gone on long enough and the characters' victory is almost certain, you can simply have the monster drop dead. The players don't ever need to know that it still had 15 Hit Points left after the characters' last attack.\n\n#### End Hostilities\n\nMost monsters can see when a fight's not going their way (or not going anywhere at all). A sapient monster might parley with the characters in an effort to get out of the situation alive.\n\n#### Add a Combatant\n\nTo add excitement to a battle, consider adding a combatant. Maybe a monstrous predator wanders onto the scene where the characters are locked in battle with another foe. Or maybe the noise of the ongoing combat attracts the attention of nearby dungeon denizens.\n\n#### Change the Terrain\n\nConsider changing a battle's terrain to introduce a new element and give combatants reasons to move around. Perhaps a powerful attack or an explosive spell topples a column, shatters a wall, or breaks up the floor.\n\n#### Change the Monster\n\nYou can transform one monster into another to keep a fight interesting. Maybe a **worg** splits open, and a **gibbering mouther** spills out to take its place.",
+      "tags": [
+        "combat pacing",
+        "slow combat",
+        "speeding up combat",
+        "combat slog",
+        "ending combat early",
+        "hasten demise",
+        "end hostilities",
+        "parley",
+        "add a combatant",
+        "reinforcements",
+        "change terrain",
+        "dynamic combat",
+        "transform monster"
+      ]
+    },
+    {
+      "section_title": "Adjusting Combat Difficulty",
+      "content": "Many of the same techniques that help keep combat moving can also be useful in situations where a combat encounter is either harder or easier than you anticipated and you want to adjust it. Monsters might initiate negotiations when they're winning, allowing overmatched characters a chance to surrender or retreat. One of the monsters might switch sides and help the characters defeat its kin (for noble or selfish reasons). A change of terrain can provide characters a chance to escape or give overmatched monsters an edge.",
+      "tags": [
+        "adjusting difficulty",
+        "combat balancing",
+        "on the fly adjustments",
+        "encounter too hard",
+        "encounter too easy",
+        "balancing combat",
+        "dynamic difficulty"
+      ]
+    },
+    {
+      "section_title": "Fight or Flight (Monster Morale)",
+      "content": "Few creatures fight to the death. Nearly all creatures have survival instincts that cause them to reevaluate their tactics in the face of their own destruction. Sapient creatures confronted by obviously more numerous or powerful opponents usually try to avoid battle. But brave, desperate, or devoted creatures might never retreat from a battle.\n\nIf you can't decide whether a creature is willing to fight, have it make a DC 10 Wisdom saving throw before Initiative is rolled. You can set the DC higher or lower if you like. On a failed save, the creature either flees or tries to parley with the enemy (see \"*Avoiding or Ending a Fight*\" below). On a successful save, the creature is willing to fight.\n\nWhen creatures that are already engaged in battle realize they're likely to lose, they usually try to exit that battle. A monster is likely to flee if either of the following is true:\n\n- The monster starts its turn Bloodied and more than half its allies are dead or have the Incapacitated condition, while no one is dead or Incapacitated on the other side.\n- The monster starts its turn Bloodied and has the Frightened condition.\n\nIn those circumstances, you can decide the monster flees, or you can have it make a DC 10 Wisdom saving throw and flee or parley on a failed save. In general, if it is obvious to you that a creature is going to lose, assume it's obvious to that creature as well.\n\n#### Avoiding or Ending a Fight\n\nA creature that wishes to end or avoid a fight has two options:\n\n- **Flight.** The creature can retreat or run away on its turn. Select a destination for the fleeing party, such as a known place of safety (perhaps a room with a door that can be closed and barred).\n- **Parley.** A parley is an attempt to settle a conflict nonviolently. The side that wishes to end or avoid combat offers to surrender or proposes some sort of exchange. If one side wants to parley in the middle of combat and the other side agrees, you can suspend the Initiative order for some interaction.",
+      "tags": [
+        "morale",
+        "monster morale",
+        "fight or flight",
+        "fleeing",
+        "retreating",
+        "surrendering",
+        "parley",
+        "ending a fight",
+        "when do monsters flee",
+        "bloodied",
+        "monster tactics"
+      ]
+    }
+  ]
+}
