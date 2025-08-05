@@ -24,9 +24,9 @@ def search_combat_rules(query: str, top_k: int = 3):
     """Search for combat rules using semantic similarity"""
     query_vector = get_embedding(query)
     
-    search_result = client_qdrant.search(
+    search_result = client_qdrant.query_points(
         collection_name="COMBAT_RULES",
-        query_vector=query_vector,
+        query=query_vector,
         limit=top_k
     )
     
