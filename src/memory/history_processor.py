@@ -4,7 +4,8 @@ Message history processor for token-based trimming and summarization.
 
 from typing import List, Optional, Callable, Awaitable
 from dataclasses import dataclass
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, SystemPromptPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, SystemPromptPart, ModelMessagesTypeAdapter
+from pydantic_core import to_jsonable_python
 import asyncio
 import json
 import os
@@ -147,31 +148,32 @@ class MessageHistoryProcessor:
         
         return total_tokens
     
-    #TODO: potentially use to_jsonable_python and ModelMessagesTypeAdapter for serialization and deserialization
     def _load_summary(self) -> List[ModelMessage]:
-        """Load accumulated summary from file."""
+        """Load accumulated summary from file using ModelMessagesTypeAdapter."""
         try:
             if os.path.exists(self.config.summary_file):
                 with open(self.config.summary_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     if 'summary_messages' in data:
-                        # TODO: Deserialize ModelMessage objects properly
-                        # For now, return empty list until we implement proper serialization
-                        return []
+                        # Deserialize ModelMessage objects using PydanticAI's adapter
+                        return ModelMessagesTypeAdapter.validate_python(data['summary_messages'])
         except Exception as e:
             print(f"Failed to load summary: {e}")
         return []
     
     def _save_summary(self) -> None:
-        """Save accumulated summary to file."""
+        """Save accumulated summary to file using to_jsonable_python."""
         try:
             os.makedirs(os.path.dirname(self.config.summary_file), exist_ok=True)
             with open(self.config.summary_file, 'w', encoding='utf-8') as f:
+                # Serialize ModelMessage objects using PydanticAI's recommended approach
+                summary_as_json = to_jsonable_python(self.accumulated_summary)
+                
                 json.dump({
-                    'summary_messages_count': len(self.accumulated_summary),
-                    'last_updated': str(asyncio.get_event_loop().time()),
-                    # TODO: Serialize ModelMessage objects properly using ModelMessagesTypeAdapter
-                    'note': 'ModelMessage serialization not yet implemented'
+                    'summary_messages': summary_as_json,
+                    'summary_token_count': self.summary_token_count,
+                    'message_count': len(self.accumulated_summary),
+                    'last_updated': str(asyncio.get_event_loop().time())
                 }, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Failed to save summary: {e}")
