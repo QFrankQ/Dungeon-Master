@@ -27,11 +27,12 @@ class MessageHistoryProcessor:
     def __init__(
         self, 
         config: HistoryConfig,
-        summarizer_func: Optional[Callable[[str, List[ModelMessage]], Awaitable[str]]] = None
+        summarizer_func: Optional[Callable[[List[ModelMessage]], Awaitable[List[ModelMessage]]]] = None
     ):
         self.config = config
         self.summarizer_func = summarizer_func
-        self.accumulated_summary = self._load_summary()
+        self.accumulated_summary: List[ModelMessage] = self._load_summary()
+        self.summary_token_count: int = self._calculate_summary_tokens()
     
     #TODO: count tokens
     def count_tokens(self, messages: List[ModelMessage]) -> int:
@@ -52,16 +53,16 @@ class MessageHistoryProcessor:
         
         return total_tokens
     
-    # def _estimate_tokens_from_content(self, message: ModelMessage) -> int:
-    #     """Estimate tokens from message content (fallback method)."""
-    #     total_chars = 0
+    def _estimate_tokens_from_content(self, message: ModelMessage) -> int:
+        """Estimate tokens from message content (fallback method)."""
+        total_chars = 0
         
-    #     if hasattr(message, 'parts'):
-    #         for part in message.parts:
-    #             if hasattr(part, 'content') and part.content:
-    #                 total_chars += len(str(part.content))
+        if hasattr(message, 'parts'):
+            for part in message.parts:
+                if hasattr(part, 'content') and part.content:
+                    total_chars += len(str(part.content))
         
-    #     return total_chars // 4  # Rough approximation: 4 chars per token
+        return total_chars // 4  # Rough approximation: 4 chars per token
     
     async def __call__(self, messages: List[ModelMessage]) -> List[ModelMessage]:
         """
@@ -69,25 +70,26 @@ class MessageHistoryProcessor:
         This is the main entry point called by PydanticAI.
         """
         if not messages:
-            return self._add_summary_to_messages([])
+            return self.accumulated_summary
         
-        current_tokens = self.count_tokens(messages)
+        content_tokens = self.count_tokens(messages) - self.summary_token_count
+        effective_max, effective_min = self._get_effective_token_limits()
         
-        # If under max threshold, return as-is with summary
-        if current_tokens <= self.config.max_tokens:
-            return self._add_summary_to_messages(messages)
+        # If content under effective max threshold, return messages as-is
+        if content_tokens <= effective_max:
+            return messages
         
         # Need to trim - find cutoff point to get down to min_tokens
         messages_to_keep = []
         messages_to_summarize = []
         
-        # Work backwards to find where to cut for min_tokens
+        # Work backwards to find where to cut for effective min_tokens
         running_tokens = 0
         cutoff_index = len(messages)
         
         for i in range(len(messages) - 1, -1, -1):
             message_tokens = self.count_tokens([messages[i]])
-            if running_tokens + message_tokens <= self.config.min_tokens:
+            if running_tokens + message_tokens <= effective_min:
                 running_tokens += message_tokens
                 cutoff_index = i
             else:
@@ -99,41 +101,66 @@ class MessageHistoryProcessor:
         # Summarize trimmed messages if summarizer is available
         if messages_to_summarize and self.summarizer_func:
             try:
-                # Pass old summary + new messages for integrated summarization
-                new_summary = await self.summarizer_func(
-                    self.accumulated_summary, 
-                    messages_to_summarize
-                )
+                # Combine old summary + new messages for integrated summarization
+                all_messages_to_summarize = self.accumulated_summary + messages_to_summarize
+                new_summary = await self.summarizer_func(all_messages_to_summarize)
                 self.accumulated_summary = new_summary
+                self.summary_token_count = self._calculate_summary_tokens()
                 self._save_summary()
             except Exception as e:
                 print(f"Summarization failed: {e}")
         
-        return self._add_summary_to_messages(messages_to_keep)
+        # Return new summary + kept messages
+        return self.accumulated_summary + messages_to_keep
     
-    def _add_summary_to_messages(self, messages: List[ModelMessage]) -> List[ModelMessage]:
-        """Add the accumulated summary as a ModelRequest with SystemPromptPart."""
+    def _get_effective_token_limits(self) -> tuple[int, int]:
+        """Calculate effective token limits accounting for summary size."""
+        max_summary_allowed = int(self.config.max_tokens * self.config.max_summary_ratio)
+        
+        # Check if summary is too large #TODO: may have other ways to handle this in the future
+        if self.summary_token_count > max_summary_allowed:
+            print(f"Warning: Summary ({self.summary_token_count} tokens) exceeds max allowed "
+                  f"({max_summary_allowed} tokens, {self.config.max_summary_ratio:.1%} of budget)")
+        
+        effective_max = self.config.max_tokens - self.summary_token_count
+        effective_min = self.config.min_tokens - self.summary_token_count
+        
+        # Ensure we have at least some budget for content
+        effective_max = max(effective_max, 1000)  # Always leave room for at least 1000 tokens
+        effective_min = max(effective_min, 500)   # Always leave room for at least 500 tokens
+        
+        return effective_max, effective_min
+    
+    def _calculate_summary_tokens(self) -> int:
+        """Calculate token count of the accumulated summary using ModelResponse.usage.response_tokens."""
         if not self.accumulated_summary:
-            return messages
+            return 0
         
-        summary_message = ModelRequest(
-            parts=[SystemPromptPart(
-                content=f"CONVERSATION HISTORY SUMMARY:\n{self.accumulated_summary}"
-            )]
-        )
+        total_tokens = 0
+        for message in self.accumulated_summary:
+            if isinstance(message, ModelResponse) and message.usage:
+                # Use actual response tokens from the summarization
+                total_tokens += message.usage.response_tokens
+            else:
+                # Fallback for other message types
+                total_tokens += self._estimate_tokens_from_content(message)
         
-        return [summary_message] + messages
+        return total_tokens
     
-    def _load_summary(self) -> str:
+    #TODO: potentially use to_jsonable_python and ModelMessagesTypeAdapter for serialization and deserialization
+    def _load_summary(self) -> List[ModelMessage]:
         """Load accumulated summary from file."""
         try:
             if os.path.exists(self.config.summary_file):
                 with open(self.config.summary_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    return data.get('summary', '')
+                    if 'summary_messages' in data:
+                        # TODO: Deserialize ModelMessage objects properly
+                        # For now, return empty list until we implement proper serialization
+                        return []
         except Exception as e:
             print(f"Failed to load summary: {e}")
-        return ""
+        return []
     
     def _save_summary(self) -> None:
         """Save accumulated summary to file."""
@@ -141,26 +168,45 @@ class MessageHistoryProcessor:
             os.makedirs(os.path.dirname(self.config.summary_file), exist_ok=True)
             with open(self.config.summary_file, 'w', encoding='utf-8') as f:
                 json.dump({
-                    'summary': self.accumulated_summary,
-                    'last_updated': str(asyncio.get_event_loop().time())
+                    'summary_messages_count': len(self.accumulated_summary),
+                    'last_updated': str(asyncio.get_event_loop().time()),
+                    # TODO: Serialize ModelMessage objects properly using ModelMessagesTypeAdapter
+                    'note': 'ModelMessage serialization not yet implemented'
                 }, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Failed to save summary: {e}")
     
     def clear_summary(self) -> None:
         """Clear the accumulated summary."""
-        self.accumulated_summary = ""
+        self.accumulated_summary = []
+        self.summary_token_count = 0
         try:
             if os.path.exists(self.config.summary_file):
                 os.remove(self.config.summary_file)
         except Exception as e:
             print(f"Failed to clear summary file: {e}")
+    
+    def get_memory_stats(self) -> dict:
+        """Get current memory usage statistics."""
+        effective_max, effective_min = self._get_effective_token_limits()
+        max_summary_allowed = int(self.config.max_tokens * self.config.max_summary_ratio)
+        
+        return {
+            "summary_token_count": self.summary_token_count,
+            "summary_message_count": len(self.accumulated_summary),
+            "max_summary_allowed": max_summary_allowed,
+            "summary_ratio": self.summary_token_count / self.config.max_tokens if self.config.max_tokens > 0 else 0,
+            "effective_max_tokens": effective_max,
+            "effective_min_tokens": effective_min,
+            "config_max_tokens": self.config.max_tokens,
+            "config_min_tokens": self.config.min_tokens
+        }
 
 
 def create_history_processor(
     max_tokens: int = 10000,
     min_tokens: int = 5000,
-    summarizer_func: Optional[Callable[[str, List[ModelMessage]], Awaitable[str]]] = None
+    summarizer_func: Optional[Callable[[List[ModelMessage]], Awaitable[List[ModelMessage]]]] = None
 ) -> MessageHistoryProcessor:
     """Factory function to create a configured history processor."""
     config = HistoryConfig(
