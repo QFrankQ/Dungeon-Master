@@ -4,25 +4,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a D&D Dungeon Master AI assistant built with PydanticAI and Google's Gemini models. The project provides both a command-line interface and a Flask web interface for interactive D&D sessions.
+This is a D&D Dungeon Master AI assistant built with PydanticAI and Google's Gemini models. The project provides both a command-line interface and a Flask web interface for interactive D&D sessions with sophisticated memory management and vector-based rule lookup.
 
 ## Architecture
 
+The system follows a modular design with clear separation of concerns:
+
+```
+User Interface (CLI/Web) → DungeonMasterAgent → Memory Management → Gemini AI → Vector Database → Response
+```
+
 ### Core Components
 
-- **Agent System** (`src/agents/`): Contains the main DungeonMasterAgent class that handles AI interactions
-  - `agents.py`: Main agent implementation using PydanticAI with Gemini 2.5 Flash model
-  - `prompts.py`: System prompts for the Dungeon Master persona
-  - `tools.py`: Currently minimal, contains placeholder for future tool implementations
+- **Agent System** (`src/agents/`): Main AI interaction layer
+  - `agents.py`: `DungeonMasterAgent` class with factory pattern for flexible creation
+  - `prompts.py`: Combat arbiter system prompts focused on D&D Rules as Written (RAW)
+  - `tools.py`: Dice rolling tool with configurable sides
+
+- **Memory Management System** (`src/memory/`): **New comprehensive memory infrastructure**
+  - `config.py`: Configuration with token thresholds (10k max, 5k min) and feature toggles
+  - `history_processor.py`: Token-based message trimming and PydanticAI integration
+  - `summarizer.py`: Dedicated conversation summarization using Gemini 1.5 Flash
+
+- **Vector Database & Knowledge** (`src/db/`):
+  - `combat_rules.json`: 442-line comprehensive D&D 5e combat rules with semantic tags
+  - `vector_service.py`: Qdrant integration with Google embeddings (`gemini-embedding-001`)
+  - `prepare_embeddings.py` & `upload_to_vector_DB.py`: Vector database setup
+  - `test_vector_db.py`: Testing utilities
 
 - **User Interfaces**:
-  - `src/main.py`: Command-line interface with message tracing
-  - `src/app.py`: Flask web server with HTML template interface
-
-- **Data & Knowledge Base** (`src/db/`):
-  - `combat_rules.json`: Comprehensive D&D combat rules and guidelines with semantic tags
-  - `prepare_embeddings.py`: Vector embedding preparation using Google's embedding model
-  - `upload_to_vector_DB.py`: For uploading to vector databases (likely Qdrant based on API key usage)
+  - `src/main.py`: CLI with memory commands (`clear`, `exit`, `quit`) and token usage tracking
+  - `src/app.py`: Flask web server with basic chat endpoint
 
 - **Game Data** (`src/characters/`):
   - `enemies.json`: Enemy stats and information
@@ -31,59 +43,87 @@ This is a D&D Dungeon Master AI assistant built with PydanticAI and Google's Gem
 ## Development Setup
 
 ### Dependencies
-The project uses `uv` for dependency management with Python 3.11+. Main dependencies:
+The project uses `uv` for dependency management with Python 3.11+. Key dependencies:
+- `google-genai` (v1.26.0+): Google Gemini API client
 - `pydantic-ai` (v0.4.6+): AI agent framework
 - `pydantic` (v2.11.7+): Data validation
-- Flask (for web interface)
-- Google AI libraries for Gemini integration
+- `qdrant-client` (v1.15.0+): Vector database client
+- `flask`: Web interface
 
 ### Environment Variables
-Required environment variables:
-- `GEMINI_API_KEY`: For Google Gemini model access
-- `GOOGLE_API_KEY`: For Google embedding services  
-- `QDRANT_API_KEY`: For vector database operations
+Required:
+- `GEMINI_API_KEY`: Google Gemini API access
+- `QDRANT_API_KEY`: Vector database operations
 
-### Running the Application
+### Common Commands
 
-**Command Line Interface:**
+**Install dependencies:**
+```bash
+uv sync
+```
+
+**Run CLI interface:**
 ```bash
 python src/main.py
 ```
 
-**Web Interface:**
+**Run web interface:**
 ```bash
 python src/app.py
+# Access at http://localhost:5000
 ```
-Access at http://localhost:5000
 
-## Key Features
+**Test vector database:**
+```bash
+python src/db/test_vector_db.py
+```
 
-### AI Agent Capabilities
-- Dice rolling tool (`roll_dice` function with configurable sides)
-- Message history tracking and persistence
-- JSON message tracing for debugging/analysis
+## Key Features & Architecture Patterns
 
-### Combat Rules Integration
-The `combat_rules.json` contains structured D&D 5e combat rules with:
-- Detailed rule explanations
-- Semantic tags for efficient retrieval
-- Topics include initiative, damage, conditions, morale, and encounter management
+### Memory Management
+- **Token-aware processing**: Automatic trimming when exceeding 10k token limit
+- **Integrated summarization**: Preserves context using Gemini 1.5 Flash for cost efficiency
+- **Persistent summaries**: Saved to JSON with proper serialization using `to_jsonable_python`
+- **History processor pattern**: Custom `MessageHistoryProcessor` following PydanticAI conventions
 
-### Vector Search Preparation
-The embedding system processes rule content for semantic search:
-- Uses `gemini-embedding-001` model
-- Processes rule sections with metadata preservation
-- Prepares for vector database storage and retrieval
+### Agent System
+- **Factory pattern**: `create_dungeon_master_agent()` for flexible agent creation with optional memory
+- **Dual AI models**: Gemini 2.5 Flash for main interactions, Gemini 1.5 Flash for summarization
+- **Combat arbiter**: System prompts focused on D&D Rules as Written (RAW) enforcement
 
-## File Structure Notes
+### Vector Search Integration
+- **Qdrant vector database**: Semantic search for D&D combat rules using `gemini-embedding-001`
+- **Tagged content**: 442-line rules with semantic tags for precise retrieval
+- **Testing utilities**: `test_vector_db.py` for validation
 
-- Template files are in `src/templates/` (currently just `index.html`)
-- Message traces are saved to `src/message_trace/message_trace.json`
-- The project uses a flat module structure within `src/`
+### CLI Memory Commands
+- `clear`: Reset conversation memory
+- `exit`/`quit`: Terminate with cleanup
+- Token usage tracking in message traces
 
-## Development Patterns
+### Configuration Management
+- **Environment-based**: Support for environment variables with sensible defaults
+- **Dataclass pattern**: Using `@dataclass` for configuration with built-in validation
+- **Feature toggles**: Enable/disable memory and summarization features
 
-- Agent responses include both structured data and natural language output
-- Message history is maintained throughout sessions for context
-- JSON serialization is used for message persistence and debugging
-- The system separates CLI and web interfaces while sharing the core agent logic
+## Development Notes
+
+### Message Tracing
+- Comprehensive conversation logs saved to `src/message_trace/message_trace.json`
+- Includes token usage tracking for cost monitoring
+
+### Agent Creation Pattern
+```python
+# With memory management
+agent = create_dungeon_master_agent(use_memory=True)
+
+# Without memory (for testing)
+agent = create_dungeon_master_agent(use_memory=False)
+```
+
+### Memory Statistics
+The history processor provides memory usage statistics and automatic management when token thresholds are exceeded.
+
+## Development Workflow Notes
+
+- **Always run with uv**: Use `uv` for consistent dependency management and virtual environment setup

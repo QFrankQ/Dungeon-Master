@@ -9,4 +9,7 @@ dependencies = [
     "pydantic>=2.11.7",
     "pydantic-ai>=0.4.6",
     "qdrant-client>=1.15.0",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "flask",
 ]

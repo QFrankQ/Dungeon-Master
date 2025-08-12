@@ -16,6 +16,7 @@ class HistoryConfig:
     """Configuration for message history management."""
     max_tokens: int = 10000
     min_tokens: int = 5000
+    max_summary_ratio: float = 0.3
     summary_file: str = "message_trace/conversation_summary.json"
 
 
