@@ -32,9 +32,23 @@ User Interface (CLI/Web) → DungeonMasterAgent → Memory Management → Gemini
   - `prepare_embeddings.py` & `upload_to_vector_DB.py`: Vector database setup
   - `test_vector_db.py`: Testing utilities
 
-- **User Interfaces**:
+- **Web Interface** (`src/`): **Refactored modular architecture**
+  - `app.py`: Flask server with chat endpoint and static file serving (port 5001)
+  - `templates/index.html`: Clean HTML template with external file references
+  - `static/css/styles.css`: All custom CSS styles
+  - `static/js/`: Modular JavaScript architecture
+    - `api-service.js`: Backend API communication
+    - `app-core.js`: Core application logic and initialization
+    - `chat.js`: Chat functionality and dice rolling
+    - `rendering.js`: UI rendering methods
+    - `agents.js`: Agent management functionality
+    - `user-profile.js`: User profile and notes management
+    - `templates.js`: D&D data templates and form building
+    - `utils.js`: Utility functions and import/export
+    - `init.js`: Application initialization
+
+- **CLI Interface**:
   - `src/main.py`: CLI with memory commands (`clear`, `exit`, `quit`) and token usage tracking
-  - `src/app.py`: Flask web server with basic chat endpoint
 
 - **Game Data** (`src/characters/`):
   - `enemies.json`: Enemy stats and information
@@ -70,7 +84,7 @@ python src/main.py
 **Run web interface:**
 ```bash
 python src/app.py
-# Access at http://localhost:5000
+# Access at http://localhost:5001
 ```
 
 **Test vector database:**
