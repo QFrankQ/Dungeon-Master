@@ -35,8 +35,7 @@ class DungeonMasterAgent:
             model,
             name="Dungeon Master",
             system_prompt=system_prompt,
-            tools=[roll_dice],
-            history_processor=history_processor
+            tools=[roll_dice]
         )
 
     def respond(self, message: str, message_history: Optional[List[ModelMessage]] = None):
@@ -52,15 +51,16 @@ class DungeonMasterAgent:
 
 def create_dungeon_master_agent(
     system_prompt: str = None, 
-    memory_config: Optional[MemoryConfig] = None
+    memory_config: Optional[MemoryConfig] = None,
+    use_memory: bool = False
 ):
     """Factory function to create a DM agent with optional memory management."""
-    if memory_config is None:
-        memory_config = DEFAULT_MEMORY_CONFIG
-    
     history_processor = None
     
-    if memory_config.enable_memory:
+    if use_memory and memory_config is None:
+        memory_config = DEFAULT_MEMORY_CONFIG
+    
+    if use_memory and memory_config.enable_memory:
         summarizer = None
         if memory_config.enable_summarization:
             summarizer = create_summarizer(memory_config.summarizer_model)

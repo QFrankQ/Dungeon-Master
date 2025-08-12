@@ -1,0 +1,78 @@
+/* ===================================================================================
+   CUSTOM STYLES FOR D&D AGENT DRIVE
+   =================================================================================== */
+
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Custom scrollbar for a cleaner look */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #f1f5f9; /* bg-slate-100 */
+}
+.dark ::-webkit-scrollbar-track {
+    background: #1e293b; /* bg-slate-800 */
+}
+::-webkit-scrollbar-thumb {
+    background: #94a3b8; /* bg-slate-400 */
+    border-radius: 4px;
+}
+.dark ::-webkit-scrollbar-thumb {
+    background: #475569; /* bg-slate-600 */
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #64748b; /* bg-slate-500 */
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: #334155; /* bg-slate-700 */
+}
+
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
+
+/* Dice roll animations */
+.roll-max {
+    color: #16a34a; /* Bright Green */
+    font-weight: bold;
+    animation: pulse-green 1s;
+}
+.roll-min {
+    color: #dc2626; /* Dark Red */
+    font-weight: bold;
+    animation: pulse-red 1s;
+}
+@keyframes pulse-green {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
+    50% { transform: scale(1.1); box-shadow: 0 0 10px 10px rgba(22, 163, 74, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+@keyframes pulse-red {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+    50% { transform: scale(1.1); box-shadow: 0 0 10px 10px rgba(220, 38, 38, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+/* Agent abilities styling */
+.ability-group .ability-item:not(:last-child) {
+    border-bottom: 1px solid;
+    @apply border-gray-200 dark:border-gray-700;
+}
+
+/* Chat thinking indicator */
+#chat-thinking-indicator {
+    animation: bounce 1s infinite;
+}
+@keyframes bounce {
+    0%, 100% { transform: translateY(-25%); animation-timing-function: cubic-bezier(0.8, 0, 1, 1); }
+    50% { transform: translateY(0); animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
+}
