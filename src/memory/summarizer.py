@@ -30,7 +30,7 @@ class ConversationSummarizer:
         self.agent = Agent(
             model,
             name="Conversation Summarizer",
-            system_prompt=self._get_summarizer_prompt()
+            instructions=self._get_summarizer_prompt()
         )
     
     def _get_summarizer_prompt(self) -> str:
