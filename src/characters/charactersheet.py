@@ -1,4 +1,9 @@
 from pydantic import BaseModel
+from typing import List, Optional
+from .dnd_enums import (
+    AbilityScore, Alignment, Race, CharacterClass, Language, 
+    WeaponType, ArmorType, HitDieType, DamageType
+)
 
 class AbilityScores(BaseModel):
     strength: int
@@ -14,13 +19,14 @@ class AbilityScores(BaseModel):
         return {ab: (score - 10) // 2 for ab, score in self.model_dump().items()}
     
 class HitPoints(BaseModel):
-    max_hp: int
+    maximum_hp: int
     current_hp: int
-    temp_hp: int = 0
+    temporary_hp: int = 0
 
 class HitDice(BaseModel):
     total: int  # total number available (e.g., levels)
     used: int = 0
+    die_type: Optional[HitDieType] = None  # Type of hit die for this character
 
 class DeathSaves(BaseModel):
     successes: int = 0
@@ -59,26 +65,24 @@ class Skills(BaseModel):
     stealth: bool = False
     survival: bool = False
 
-from typing import List, Optional
-
 class CharacterInfo(BaseModel):
     name: str
     player_name: Optional[str]
     background: Optional[str]
-    alignment: Optional[str]
-    race: Optional[str]
-    classes: List[str]  # e.g., ["Fighter", "Rogue"]
+    alignment: Optional[Alignment]
+    race: Optional[Race]
+    classes: List[CharacterClass]  # e.g., ["Fighter", "Rogue"]
     level: int
     experience_points: int
     proficiency_bonus: int
     inspiration: bool = False
     passive_perception: Optional[int] = None
-
+#TODO
 class ProficienciesAndLanguages(BaseModel):
-    armor: List[str] = []
-    weapons: List[str] = []
+    armor: List[ArmorType] = []
+    weapons: List[WeaponType] = []
     tools: List[str] = []
-    languages: List[str] = []
+    languages: List[Language] = []
 
 class Feature(BaseModel):
     name: str
@@ -88,13 +92,13 @@ class FeaturesAndTraits(BaseModel):
     features: List[Feature] = []
 
 class Spellcasting(BaseModel):
-    spellcasting_ability: Optional[str]
+    spellcasting_ability: Optional[AbilityScore]
     spell_save_dc: Optional[int]
     spell_attack_bonus: Optional[int]
     cantrips_known: int = 0
     spells_known: int = 0
-    spell_slots_total: dict[str, int] = {}      # e.g. {"1":4, "2":3}
-    spell_slots_expended: dict[str, int] = {}
+    spell_slots: dict[int, int] = {}  # e.g. {1: 4, 2: 3} - available slots by level
+    spell_slots_expended: dict[int, int] = {}  # e.g. {1: 1, 2: 0} - used slots
 
 class Character(BaseModel):
     info: CharacterInfo
