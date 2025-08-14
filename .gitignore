@@ -13,3 +13,8 @@ wheels/
 .env
 
 .DS_Store
+
+.pytest_cache
+.logfire
+.claude
+test_box_example.py
