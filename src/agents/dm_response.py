@@ -21,7 +21,7 @@ class DMResponse(BaseModel):
     """
     narrative: str = Field(..., description="The main narrative response for the user")
     tool_calls: Optional[List[ToolCall]] = Field(None, description="Optional list of tool calls to execute")
-    
+    #TODO tool calls are simple flags no parameter needed for now
     class Config:
         """Pydantic configuration."""
         json_schema_extra = {

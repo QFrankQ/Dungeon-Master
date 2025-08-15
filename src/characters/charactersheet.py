@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from .dnd_enums import (
     AbilityScore, Alignment, Race, CharacterClass, Language, 
-    WeaponType, ArmorType, HitDieType, DamageType
+    WeaponType, ArmorType, HitDieType, DamageType, Condition
 )
 
 class AbilityScores(BaseModel):
@@ -109,6 +109,7 @@ class Character(BaseModel):
     hit_dice: HitDice
     death_saves: DeathSaves
     combat_stats: CombatStats
-    proficiencies: ProficienciesAndLanguages
-    features: FeaturesAndTraits
+    proficiencies: Optional[ProficienciesAndLanguages] = None
+    features: Optional[FeaturesAndTraits] = None 
     spellcasting: Optional[Spellcasting] = None
+    conditions: Optional[List[Condition]] = None

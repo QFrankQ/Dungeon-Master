@@ -81,9 +81,9 @@ class HitDiceUpdate(BaseModel):
 
 class DeathSaveUpdate(BaseModel):
     """Death saving throw update information."""
-    successes: Optional[int] = Field(None, description="Number of successful saves (0-3)")
-    failures: Optional[int] = Field(None, description="Number of failed saves (0-3)")
-    reset: Optional[bool] = Field(None, description="Whether to reset all saves")
+    success_increment: Optional[int] = Field(None, description="Number of successful saves to add (positive integer)")
+    failure_increment: Optional[int] = Field(None, description="Number of failed saves to add (positive integer)")
+    reset: Optional[bool] = Field(None, description="Whether to reset all saves to 0")
 
 
 class CombatStatUpdate(BaseModel):
@@ -110,12 +110,12 @@ class CharacterUpdate(BaseModel):
     # Different types of updates
     hp_update: Optional[HPUpdate] = None
     condition_update: Optional[ConditionUpdate] = None
-    ability_update: Optional[AbilityUpdate] = None
-    inventory_update: Optional[InventoryUpdate] = None
+    # ability_update: Optional[AbilityUpdate] = None
+    # inventory_update: Optional[InventoryUpdate] = None
     spell_slot_update: Optional[SpellSlotUpdate] = None
-    hit_dice_update: Optional[HitDiceUpdate] = None
+    # hit_dice_update: Optional[HitDiceUpdate] = None
     death_save_update: Optional[DeathSaveUpdate] = None
-    combat_stat_update: Optional[CombatStatUpdate] = None
+    # combat_stat_update: Optional[CombatStatUpdate] = None
     
     # Metadata
     reason: Optional[str] = Field(None, description="Reason for the updates")
