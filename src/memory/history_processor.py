@@ -4,12 +4,14 @@ Message history processor for token-based trimming and summarization.
 
 from typing import List, Optional, Callable, Awaitable
 from dataclasses import dataclass
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, SystemPromptPart, ModelMessagesTypeAdapter
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, SystemPromptPart, ModelMessagesTypeAdapter, TextPart
 from pydantic_core import to_jsonable_python
 import asyncio
 import json
 import os
 
+#TODO: total_tokens != request tokens + response tokens
+#TODO: filter out unrelated parts when summarizing
 
 @dataclass
 class HistoryConfig:
@@ -37,6 +39,45 @@ class MessageHistoryProcessor:
         self.summary_token_count: int = self._calculate_summary_tokens()
     
     #TODO: count tokens
+    def _extract_narrative_from_structured_response(self, message: ModelMessage) -> ModelMessage:
+        """
+        Extract narrative from DMResponse structured output in ModelResponse.
+        Replaces JSON content with just the narrative field for cleaner history.
+        """
+        if not isinstance(message, ModelResponse):
+            return message
+        
+        # Process each TextPart in the response
+        modified_parts = []
+        for part in message.parts:
+            if isinstance(part, TextPart):
+                try:
+                    # Try to parse as DMResponse JSON
+                    response_data = json.loads(part.content)
+                    if isinstance(response_data, dict) and 'narrative' in response_data:
+                        # Replace JSON with just the narrative
+                        modified_part = TextPart(content=response_data['narrative'])
+                        modified_parts.append(modified_part)
+                    else:
+                        # Not a valid DMResponse, keep original
+                        modified_parts.append(part)
+                except (json.JSONDecodeError, KeyError):
+                    # Not JSON or missing narrative field, keep original
+                    modified_parts.append(part)
+            else:
+                # Non-text parts, keep as-is
+                modified_parts.append(part)
+        
+        # Create new ModelResponse with modified parts
+        return ModelResponse(
+            parts=modified_parts,
+            usage=message.usage,
+            model_name=message.model_name,
+            timestamp=message.timestamp,
+            vendor_details=message.vendor_details,
+            vendor_id=message.vendor_id
+        )
+
     def count_tokens(self, messages: List[ModelMessage]) -> int:
         """
         Count tokens from ModelResponse usage data.
@@ -74,12 +115,15 @@ class MessageHistoryProcessor:
         if not messages:
             return self.accumulated_summary
         
-        content_tokens = self.count_tokens(messages) - self.summary_token_count
+        # Extract narratives from structured responses for cleaner history
+        processed_messages = [self._extract_narrative_from_structured_response(msg) for msg in messages]
+        
+        content_tokens = self.count_tokens(processed_messages) - self.summary_token_count
         effective_max, effective_min = self._get_effective_token_limits()
         
         # If content under effective max threshold, return messages as-is
         if content_tokens <= effective_max:
-            return messages
+            return processed_messages
         
         # Need to trim - find cutoff point to get down to min_tokens
         messages_to_keep = []
@@ -87,18 +131,18 @@ class MessageHistoryProcessor:
         
         # Work backwards to find where to cut for effective min_tokens
         running_tokens = 0
-        cutoff_index = len(messages)
+        cutoff_index = len(processed_messages)
         
-        for i in range(len(messages) - 1, -1, -1):
-            message_tokens = self.count_tokens([messages[i]])
+        for i in range(len(processed_messages) - 1, -1, -1):
+            message_tokens = self.count_tokens([processed_messages[i]])
             if running_tokens + message_tokens <= effective_min:
                 running_tokens += message_tokens
                 cutoff_index = i
             else:
                 break
         
-        messages_to_keep = messages[cutoff_index:]
-        messages_to_summarize = messages[:cutoff_index]
+        messages_to_keep = processed_messages[cutoff_index:]
+        messages_to_summarize = processed_messages[:cutoff_index]
         #TODO: work from here
         # Summarize trimmed messages if summarizer is available
         if messages_to_summarize and self.summarizer_func:
