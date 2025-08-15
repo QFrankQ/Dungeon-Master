@@ -11,7 +11,8 @@ import json
 import os
 
 #TODO: total_tokens != request tokens + response tokens
-#TODO: filter out unrelated parts when summarizing
+#TODO: usage.token_count does no reflect the actual context token count
+#TODO: filter out unrelated message parts when summarizing
 
 @dataclass
 class HistoryConfig:
