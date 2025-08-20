@@ -57,6 +57,9 @@ class HistoryManager:
         self.accumulated_summary: List[ModelMessage] = self._load_summary()
         self.summary_token_count: int = self._calculate_summary_tokens()
         
+        # Running token count optimization
+        self._current_history_token_count: int = self.count_tokens(self._current_history)
+        
         # Storage for current FormattedGameMessage objects (needed for player action extraction)
         self._current_formatted_messages: List[FormattedGameMessage] = []
         
@@ -86,7 +89,7 @@ class HistoryManager:
             return self.accumulated_summary
         
         # Apply token management similar to MessageHistoryProcessor
-        content_tokens = self.count_tokens(self._current_history) 
+        content_tokens = self._current_history_token_count
         effective_max, effective_min = self._get_effective_token_limits()
         
         # If content under effective max threshold, return messages as-is
@@ -124,6 +127,7 @@ class HistoryManager:
                 
                 # Update current history to only keep recent messages
                 self._current_history = messages_to_keep
+                self._current_history_token_count = self.count_tokens(messages_to_keep)
                 self._save_history()
                 
             except Exception as e:
@@ -179,6 +183,10 @@ class HistoryManager:
         
         # Add filtered messages to history
         self._current_history.extend(filtered_messages)
+        
+        # Update running token count
+        for message in filtered_messages:
+            self._current_history_token_count += self._estimate_tokens_from_content(message)
         
         # Clear stored formatted messages
         self._current_formatted_messages = []
@@ -254,16 +262,12 @@ class HistoryManager:
         )
     
     def count_tokens(self, messages: List[ModelMessage]) -> int:
-        """Count tokens from ModelResponse usage data with fallback estimation."""
+        """Count tokens using content-based estimation for all messages."""
         total_tokens = 0
         
         for message in messages:
-            if isinstance(message, ModelResponse) and message.usage:
-                # Use actual token counts from the model
-                total_tokens += message.usage.total_tokens
-            else:
-                # Fallback estimation for ModelRequest or messages without usage
-                total_tokens += self._estimate_tokens_from_content(message)
+            # Use content-based estimation for all messages to match stored history
+            total_tokens += self._estimate_tokens_from_content(message)
         
         return total_tokens
     
@@ -297,20 +301,11 @@ class HistoryManager:
         return effective_max, effective_min
     
     def _calculate_summary_tokens(self) -> int:
-        """Calculate token count of the accumulated summary."""
+        """Calculate token count of the accumulated summary using content-based estimation."""
         if not self.accumulated_summary:
             return 0
         
-        total_tokens = 0
-        for message in self.accumulated_summary:
-            if isinstance(message, ModelResponse) and message.usage:
-                # Use actual response tokens from the summarization
-                total_tokens += message.usage.response_tokens
-            else:
-                # Fallback for other message types
-                total_tokens += self._estimate_tokens_from_content(message)
-        
-        return total_tokens
+        return self.count_tokens(self.accumulated_summary)
     
     def _load_history(self) -> List[ModelMessage]:
         """Load message history from JSON file."""
@@ -392,6 +387,7 @@ class HistoryManager:
         self._current_history = []
         self.accumulated_summary = []
         self.summary_token_count = 0
+        self._current_history_token_count = 0
         self._current_formatted_messages = []
         
         # Remove files
@@ -409,6 +405,7 @@ class HistoryManager:
         
         return {
             'history_message_count': len(self._current_history),
+            'history_token_count': self._current_history_token_count,
             'summary_message_count': len(self.accumulated_summary),
             'summary_token_count': self.summary_token_count,
             'max_summary_allowed': max_summary_allowed,
