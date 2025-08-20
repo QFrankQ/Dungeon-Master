@@ -5,7 +5,6 @@ from pydantic_ai.messages import ModelMessage
 import os
 from agents.prompts import DUNGEON_MASTER_DEFAULT_INSTRUCTIONS
 from agents.dm_response import DMResponse
-from memory import MessageHistoryProcessor, create_summarizer, create_history_processor, MemoryConfig, DEFAULT_MEMORY_CONFIG
 from memory.session_manager import SessionManager, create_session_manager
 from typing import List, Optional, Union
 import random
@@ -22,7 +21,6 @@ class DungeonMasterAgent:
     def __init__(
         self, 
         instructions: str = None,
-        history_processor: Optional[MessageHistoryProcessor] = None,
         use_structured_output: bool = False,
         session_manager: Optional[SessionManager] = None
     ):
@@ -35,7 +33,6 @@ class DungeonMasterAgent:
             instructions = DUNGEON_MASTER_DEFAULT_INSTRUCTIONS
         
         self.use_structured_output = use_structured_output
-        self.history_processor = history_processor
         self.session_manager = session_manager
         # Configure agent based on output type
         if use_structured_output:
@@ -93,56 +90,30 @@ class DungeonMasterAgent:
         return result
     
     def clear_memory(self):
-        """Clear the conversation memory/summary."""
-        if self.history_processor:
-            self.history_processor.clear_summary()
+        """Clear the session context. History management is now external."""
         if self.session_manager:
             self.session_manager.clear_session_context()
 
 # Optionally, keep the function for backward compatibility
 
 def create_dungeon_master_agent(
-    instructions: str = None, 
-    memory_config: Optional[MemoryConfig] = None,
-    use_memory: bool = False,
+    instructions: str = None,
     use_structured_output: bool = False,
     enable_state_management: bool = False
 ):
     """
-    Factory function to create a DM agent with optional memory and state management.
+    Factory function to create a DM agent with optional state management.
+    Note: Memory management is now handled externally via HistoryManager.
     
     Args:
         instructions: Custom system prompt (uses default if None)
-        memory_config: Memory configuration (uses default if None)
-        use_memory: Enable memory management
         use_structured_output: Enable structured DMResponse output
         enable_state_management: Enable automatic state management
     
     Returns:
         Configured DungeonMasterAgent instance
     """
-    history_processor = None
     session_manager = None
-    
-    # Setup memory management
-    if use_memory and memory_config is None:
-        memory_config = DEFAULT_MEMORY_CONFIG
-    
-    if use_memory and memory_config.enable_memory:
-        summarizer = None
-        if memory_config.enable_summarization:
-            summarizer = create_summarizer(memory_config.summarizer_model)
-            
-            async def summarize_func(messages: List[ModelMessage]) -> List[ModelMessage]:
-                return await summarizer.create_integrated_summary(messages)
-        else:
-            summarize_func = None
-        
-        history_processor = create_history_processor(
-            max_tokens=memory_config.max_tokens,
-            min_tokens=memory_config.min_tokens,
-            summarizer_func=summarize_func
-        )
     
     # Setup state management
     if enable_state_management:
@@ -152,7 +123,6 @@ def create_dungeon_master_agent(
     
     return DungeonMasterAgent(
         instructions=instructions,
-        history_processor=history_processor,
         use_structured_output=use_structured_output,
         session_manager=session_manager
     )
