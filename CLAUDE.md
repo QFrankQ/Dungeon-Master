@@ -11,20 +11,30 @@ This is a D&D Dungeon Master AI assistant built with PydanticAI and Google's Gem
 The system follows a modular design with clear separation of concerns:
 
 ```
-User Interface (CLI/Web) → DungeonMasterAgent → Memory Management → Gemini AI → Vector Database → Response
+User Interface (CLI/Web) → SessionManager → DungeonMasterAgent → Gemini AI → Vector Database → Response
+                              ↓
+                     MessageFormatter + HistoryManager + StateManager
 ```
 
 ### Core Components
 
-- **Agent System** (`src/agents/`): Main AI interaction layer
-  - `agents.py`: `DungeonMasterAgent` class with factory pattern for flexible creation
+- **Agent System** (`src/agents/`): Pure AI response generation
+  - `agents.py`: `DungeonMasterAgent` class focused solely on AI response generation (no session management)
   - `prompts.py`: Combat arbiter system prompts focused on D&D Rules as Written (RAW)
   - `tools.py`: Dice rolling tool with configurable sides
 
-- **Memory Management System** (`src/memory/`): **New comprehensive memory infrastructure**
+- **Message Processing System** (`src/services/`, `src/models/`): **New message handling architecture**
+  - `message_formatter.py`: Transforms messages between formats, creates structured agent input with player actions + character status
+  - `history_manager.py`: **External message history management** with PydanticAI `ModelMessage` storage and filtering
+  - `chat_message.py`: Frontend-backend communication format with player/character context
+  - `formatted_game_message.py`: Agent processing format with character information for DM decision-making
+
+- **Memory Management System** (`src/memory/`): **Comprehensive session orchestration and memory infrastructure**
   - `config.py`: Configuration with token thresholds (10k max, 5k min) and feature toggles
   - `history_processor.py`: Token-based message trimming and PydanticAI integration
   - `summarizer.py`: Dedicated conversation summarization using Gemini 1.5 Flash
+  - `session_manager.py`: **Primary interface** - owns DungeonMasterAgent and orchestrates entire session workflow
+  - `state_manager.py`: Handles character and game state updates
 
 - **Vector Database & Knowledge** (`src/db/`):
   - `combat_rules.json`: 442-line comprehensive D&D 5e combat rules with semantic tags
@@ -48,7 +58,7 @@ User Interface (CLI/Web) → DungeonMasterAgent → Memory Management → Gemini
     - `init.js`: Application initialization
 
 - **CLI Interface**:
-  - `src/main.py`: CLI with memory commands (`clear`, `exit`, `quit`) and token usage tracking
+  - `src/main.py`: CLI using SessionManager as primary interface with memory commands (`clear`, `exit`, `quit`) and token usage tracking
 
 - **Game Data** (`src/characters/`):
   - `enemies.json`: Enemy stats and information
@@ -78,32 +88,52 @@ uv sync
 
 **Run CLI interface:**
 ```bash
-python src/main.py
+uv run python src/main.py
 ```
 
 **Run web interface:**
 ```bash
-python src/app.py
+uv run python src/app.py
 # Access at http://localhost:5001
 ```
 
 **Test vector database:**
 ```bash
-python src/db/test_vector_db.py
+uv run python src/db/test_vector_db.py
+```
+
+**Run tests:**
+```bash
+uv run pytest
+uv run pytest -v  # verbose output
+uv run pytest path/to/specific_test.py  # single test file
 ```
 
 ## Key Features & Architecture Patterns
 
-### Memory Management
-- **Token-aware processing**: Automatic trimming when exceeding 10k token limit
-- **Integrated summarization**: Preserves context using Gemini 1.5 Flash for cost efficiency
-- **Persistent summaries**: Saved to JSON with proper serialization using `to_jsonable_python`
-- **History processor pattern**: Custom `MessageHistoryProcessor` following PydanticAI conventions
+### Session-Centric Architecture (Current Architecture)
+- **SessionManager as Primary Interface**: All user interactions go through `SessionManager.process_user_input()`
+- **Dependency Inversion**: SessionManager owns and orchestrates DungeonMasterAgent, not the reverse
+- **Clean Separation**: Agent handles pure AI response generation, SessionManager handles session orchestration
+- **Unified API**: Consistent interface regardless of agent configuration (structured vs plain text output)
 
-### Agent System
-- **Factory pattern**: `create_dungeon_master_agent()` for flexible agent creation with optional memory
+### External Message History Management 
+- **HistoryManager**: Handles PydanticAI `ModelMessage` storage outside of the agent
+- **Player action filtering**: Stores only conversational content (`"Aragorn: I attack the orc"`), excludes character status bloat
+- **Dynamic summarization**: Applies token management (10k max, 5k min) with integrated summarization when limits exceeded
+- **Content-based token counting**: Uses estimation-only approach to accurately reflect stored history content
+
+### Message Processing Pipeline
+- **MessageFormatter**: Transforms between `ChatMessage` → `FormattedGameMessage` → structured agent input
+- **Two-part agent input**: `=== PLAYER ACTIONS ===` (stored in history) + `=== CHARACTER STATUS ===` (fresh context, not stored)
+- **Character status separation**: Status information provided each turn but never bloats history
+- **Proper PydanticAI serialization**: Uses `ModelMessagesTypeAdapter` and `to_jsonable_python()`
+
+### Agent System (Simplified)
+- **Pure AI Response Generation**: DungeonMasterAgent focused solely on generating responses from Gemini AI
+- **External Dependencies**: Receives `message_history` parameter, no internal state management
+- **Factory pattern**: `create_dungeon_master_agent()` creates lightweight agents for SessionManager use
 - **Dual AI models**: Gemini 2.5 Flash for main interactions, Gemini 1.5 Flash for summarization
-- **Combat arbiter**: System prompts focused on D&D Rules as Written (RAW) enforcement
 
 ### Vector Search Integration
 - **Qdrant vector database**: Semantic search for D&D combat rules using `gemini-embedding-001`
@@ -126,18 +156,65 @@ python src/db/test_vector_db.py
 - Comprehensive conversation logs saved to `src/message_trace/message_trace.json`
 - Includes token usage tracking for cost monitoring
 
-### Agent Creation Pattern
+### Session-Centric Integration Pattern (Current Recommended Approach)
 ```python
-# With memory management
-agent = create_dungeon_master_agent(use_memory=True)
+# Primary integration pattern - SessionManager as main interface
+session_manager = create_session_manager(
+    enable_state_management=True,
+    use_structured_output=True,
+    agent_instructions=custom_instructions  # optional
+)
 
-# Without memory (for testing)
-agent = create_dungeon_master_agent(use_memory=False)
+# Process user input through unified interface
+results = session_manager.process_user_input_sync(
+    user_input="I attack the orc with my sword",
+    message_history=current_message_history,
+    session_context={"characters": {...}, "combat_state": {...}}
+)
+
+# Extract results
+narrative = results["narrative"]              # Always available
+agent_result = results["agent_result"]        # For message history tracking  
+state_processing = results["state_processing"] # If state management enabled
+errors = results["errors"]                    # Any processing errors
 ```
 
-### Memory Statistics
-The history processor provides memory usage statistics and automatic management when token thresholds are exceeded.
+### Legacy Direct Agent Pattern (For Advanced Use Cases)
+```python
+# Direct agent usage when you need fine-grained control
+dm_agent = create_dungeon_master_agent(use_structured_output=True)
+history_manager = create_history_manager(enable_memory=True)
+
+# Manual orchestration
+agent_result = dm_agent.respond(user_input, message_history=current_history)
+# ... handle result processing manually
+```
+
+### Message Data Types & Flow
+The system uses three key message types for different purposes:
+
+1. **ChatMessage** (`src/models/chat_message.py`): Frontend-backend communication
+   - Contains `player_id`, `character_id`, `text`, `timestamp`, `message_type`
+   - Factory methods: `create_player_message()`, `create_dm_message()`, `create_system_message()`
+
+2. **FormattedGameMessage** (`src/models/formatted_game_message.py`): Agent processing format
+   - Contains character stats (`current_hp`, `max_hp`, `armor_class`, `status_effects`) + message text
+   - Methods: `to_history_format()` (clean), `get_character_summary()` (status), `to_agent_input()` (full context)
+
+3. **PydanticAI ModelMessage**: Internal agent history storage
+   - `ModelRequest` with `UserPromptPart` for player messages
+   - `ModelResponse` with `TextPart` for DM responses
+   - Serialized using `ModelMessagesTypeAdapter` and `to_jsonable_python()`
+
+### Key Architectural Decisions
+
+- **Session-Centric Design**: SessionManager serves as the primary interface, owning and orchestrating all other components including the DM agent
+- **Dependency Inversion**: High-level orchestrator (SessionManager) depends on low-level services (Agent, HistoryManager, StateManager) rather than the reverse
+- **Pure Component Responsibilities**: Each component has a single, clear responsibility (Agent=AI responses, HistoryManager=memory, StateManager=game state)
+- **History vs Context Separation**: Character status is contextual information (provided fresh each turn) but never stored in history (which only contains conversational content)
+- **Content-Based Token Counting**: Token estimation reflects only the content actually stored in filtered history, not full conversation including tool calls
+- **Unified Interface**: SessionManager provides consistent API regardless of underlying agent configuration or output format
 
 ## Development Workflow Notes
 
-- **Always run with uv**: Use `uv` for consistent dependency management and virtual environment setup
+- **Always run with uv**: Use `uv run python` instead of plain `python` for consistent dependency management and virtual environment setup

@@ -12,6 +12,11 @@ from .state_manager import StateManager, create_state_manager
 from .session_tools import SessionToolRegistry, create_default_tool_registry
 from .session_tools import StateExtractionTool
 
+# Forward reference to avoid circular import - will import in factory function
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..agents.agents import DungeonMasterAgent
+
 
 class SessionManager:
     """
@@ -26,6 +31,7 @@ class SessionManager:
     
     def __init__(
         self,
+        dungeon_master_agent: Optional["DungeonMasterAgent"] = None,
         state_extractor: Optional[StateExtractorAgent] = None,
         state_manager: Optional[StateManager] = None,
         enable_state_management: bool = True,
@@ -35,12 +41,16 @@ class SessionManager:
         Initialize session manager.
         
         Args:
+            dungeon_master_agent: The DM agent for generating responses
             state_extractor: Agent for extracting state changes from narratives
             state_manager: Manager for applying state updates
             enable_state_management: Whether to enable automatic state management
             tool_registry: Registry for session tools (created with defaults if None)
         """
         self.enable_state_management = enable_state_management
+        
+        # Store the DM agent 
+        self.dungeon_master_agent = dungeon_master_agent
         
         # Initialize components
         self.state_extractor = state_extractor or create_state_extractor_agent()
@@ -57,6 +67,75 @@ class SessionManager:
         # Session state
         self.session_context: Dict[str, Any] = {}
         self.recent_narratives: list = []
+        
+    async def process_user_input(
+        self,
+        user_input: str,
+        message_history: Optional[List] = None,
+        session_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Process user input through the DM agent and handle state management.
+        This is the primary interface for session interaction.
+        
+        Args:
+            user_input: User's message/input
+            message_history: Optional message history for the agent
+            session_context: Current session context (characters, combat state, etc.)
+        
+        Returns:
+            Dictionary with agent response and processing results
+        """
+        if not self.dungeon_master_agent:
+            raise ValueError("No DungeonMasterAgent configured. Use create_session_manager() factory function.")
+        
+        # Get response from the DM agent
+        agent_result = self.dungeon_master_agent.respond(
+            user_input, 
+            message_history=message_history, 
+            session_context=session_context
+        )
+        
+        # Initialize results dictionary
+        results = {
+            "agent_result": agent_result,
+            "raw_response": None,
+            "structured_response": None,
+            "narrative": None,
+            "state_processing": None,
+            "errors": []
+        }
+        
+        # Extract response based on agent configuration
+        if hasattr(agent_result, 'output'):
+            # This is a structured response (DMResponse)
+            dm_response = agent_result.output
+            results["structured_response"] = dm_response
+            results["narrative"] = dm_response.narrative
+            results["raw_response"] = agent_result
+            
+            # Process for state management if enabled
+            if self.enable_state_management:
+                try:
+                    state_results = await self.process_dm_response(dm_response, session_context)
+                    results["state_processing"] = state_results
+                except Exception as e:
+                    results["errors"].append(f"State processing error: {e}")
+        else:
+            # This is a plain string response
+            results["raw_response"] = agent_result
+            results["narrative"] = str(agent_result)
+        
+        return results
+    
+    def process_user_input_sync(
+        self,
+        user_input: str,
+        message_history: Optional[List] = None,
+        session_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Synchronous version of process_user_input."""
+        return asyncio.run(self.process_user_input(user_input, message_history, session_context))
         
     async def process_dm_response(
         self, 
@@ -193,23 +272,41 @@ class SessionManager:
 def create_session_manager(
     enable_state_management: bool = True,
     character_data_path: str = "src/characters/",
-    tool_registry: Optional[SessionToolRegistry] = None
+    tool_registry: Optional[SessionToolRegistry] = None,
+    agent_instructions: Optional[str] = None,
+    use_structured_output: bool = True,
+    dungeon_master_agent: Optional["DungeonMasterAgent"] = None
 ) -> SessionManager:
     """
-    Factory function to create a configured session manager.
+    Factory function to create a configured session manager with DM agent.
     
     Args:
         enable_state_management: Whether to enable automatic state management
-        character_data_path: Path to character data files
+        character_data_path: Path to character data files  
         tool_registry: Custom tool registry (creates default if None)
+        agent_instructions: Custom instructions for the DM agent
+        use_structured_output: Enable structured output for the DM agent
+        dungeon_master_agent: Existing agent to use (creates new one if None)
     
     Returns:
-        Configured SessionManager instance
+        Configured SessionManager instance with DM agent
     """
+    # Import here to avoid circular imports
+    from ..agents.agents import create_dungeon_master_agent
+    
+    # Create or use provided DM agent
+    if dungeon_master_agent is None:
+        dungeon_master_agent = create_dungeon_master_agent(
+            instructions=agent_instructions,
+            use_structured_output=use_structured_output
+        )
+    
+    # Create other components
     state_extractor = create_state_extractor_agent()
     state_manager = create_state_manager(character_data_path)
     
     return SessionManager(
+        dungeon_master_agent=dungeon_master_agent,
         state_extractor=state_extractor,
         state_manager=state_manager,
         enable_state_management=enable_state_management,

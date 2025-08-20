@@ -5,7 +5,6 @@ from pydantic_ai.messages import ModelMessage
 import os
 from agents.prompts import DUNGEON_MASTER_DEFAULT_INSTRUCTIONS
 from agents.dm_response import DMResponse
-from memory.session_manager import SessionManager, create_session_manager
 from typing import List, Optional, Union
 import random
 
@@ -21,8 +20,7 @@ class DungeonMasterAgent:
     def __init__(
         self, 
         instructions: str = None,
-        use_structured_output: bool = False,
-        session_manager: Optional[SessionManager] = None
+        use_structured_output: bool = False
     ):
         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
         # print(f"GEMINI_API_KEY: {GEMINI_API_KEY}")
@@ -33,7 +31,6 @@ class DungeonMasterAgent:
             instructions = DUNGEON_MASTER_DEFAULT_INSTRUCTIONS
         
         self.use_structured_output = use_structured_output
-        self.session_manager = session_manager
         # Configure agent based on output type
         if use_structured_output:
             self.agent = Agent(
@@ -60,69 +57,46 @@ class DungeonMasterAgent:
         message: str, 
         message_history: Optional[List[ModelMessage]] = None,
         session_context: Optional[dict] = None
-    ) -> Union[str, DMResponse, dict]:
+    ):
         """
         Send a message to the Dungeon Master agent and get a response.
         
         Args:
             message: User message
             message_history: Optional message history
-            session_context: Optional session context for state management
+            session_context: Optional session context (unused, kept for compatibility)
         
         Returns:
-            Either string response, DMResponse, or dict with processing results
+            Agent result from PydanticAI (either structured output or plain response)
         """
-        # Get the response from the agent
-        result = self.agent.run_sync(message, message_history=message_history)
-        
-        # Handle structured responses with state management
-        if self.use_structured_output and self.session_manager:
-            dm_response = result.output if hasattr(result, 'output') else result
-            
-            # Process the response through session manager for state updates
-            processing_results = self.session_manager.process_dm_response_sync(
-                dm_response, session_context
-            )
-            
-            return processing_results
-        
-        # Return the raw result for non-structured responses
-        return result
+        # Get the response from the agent - this is now the only responsibility
+        return self.agent.run_sync(message, message_history=message_history)
     
     def clear_memory(self):
-        """Clear the session context. History management is now external."""
-        if self.session_manager:
-            self.session_manager.clear_session_context()
+        """
+        Clear memory - this is now a no-op as memory management is external.
+        Kept for backward compatibility.
+        """
+        pass
 
 # Optionally, keep the function for backward compatibility
 
 def create_dungeon_master_agent(
     instructions: str = None,
-    use_structured_output: bool = False,
-    enable_state_management: bool = False
+    use_structured_output: bool = False
 ):
     """
-    Factory function to create a DM agent with optional state management.
-    Note: Memory management is now handled externally via HistoryManager.
+    Factory function to create a DM agent.
+    Note: State management and memory management are now handled externally via SessionManager.
     
     Args:
         instructions: Custom system prompt (uses default if None)
         use_structured_output: Enable structured DMResponse output
-        enable_state_management: Enable automatic state management
     
     Returns:
         Configured DungeonMasterAgent instance
     """
-    session_manager = None
-    
-    # Setup state management
-    if enable_state_management:
-        session_manager = create_session_manager(
-            enable_state_management=True
-        )
-    
     return DungeonMasterAgent(
         instructions=instructions,
-        use_structured_output=use_structured_output,
-        session_manager=session_manager
+        use_structured_output=use_structured_output
     )

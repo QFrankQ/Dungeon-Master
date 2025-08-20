@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from agents.agents import create_dungeon_master_agent
+from memory.session_manager import create_session_manager
 from dotenv import load_dotenv
 import os
 import random
@@ -7,8 +7,11 @@ import random
 load_dotenv()
 
 app = Flask(__name__)
-# Create DM agent with memory management
-agent = create_dungeon_master_agent()
+# Create session manager with DM agent and state management
+session_manager = create_session_manager(
+    enable_state_management=True,
+    use_structured_output=True
+)
 
 @app.route("/")
 def index():
@@ -29,11 +32,11 @@ def chat():
         # Get the DM agent from the agents list, or use default
         dm_agent_data = next((a for a in agents if a.get("isDM", False)), None)
         
-        # Generate response using the DM agent
-        response = agent.respond(last_message)
+        # Generate response using the session manager
+        results = session_manager.process_user_input_sync(last_message)
         
-        # Extract the output if it's a response object
-        response_text = response.output if hasattr(response, "output") else str(response)
+        # Extract the narrative response 
+        response_text = results["narrative"]
         
         # Calculate mock usage stats (in a real implementation, you'd get these from the model)
         tokens_used = len(response_text.split()) * 1.3  # Rough estimate

@@ -3,7 +3,7 @@ from pydantic_ai.models.gemini import GeminiModel
 from pydantic_ai.providers.google_gla import GoogleGLAProvider
 from dotenv import load_dotenv
 import os
-from agents.agents import create_dungeon_master_agent
+from memory.session_manager import create_session_manager
 import json
 
 load_dotenv()
@@ -19,8 +19,11 @@ def append_message_trace(messages, filename=MESSAGE_TRACE_FILENAME):
         f.write("\n")
 
 def start_game():
-    # Create DM agent with memory management enabled
-    agent = create_dungeon_master_agent()
+    # Create session manager with DM agent  
+    session_manager = create_session_manager(
+        enable_state_management=True,
+        use_structured_output=True
+    )
     
     print("Welcome to the DnD Dungeon Master! Type 'exit', 'quit', or 'clear' to manage session.")
     print("- 'clear': Clear conversation memory and start fresh")
@@ -37,27 +40,36 @@ def start_game():
             print("Goodbye!")
             break
         elif command == "clear":
-            agent.clear_memory()
+            session_manager.clear_session_context()
             clear_message_trace()
             message_history = []
             print("Conversation memory cleared. Starting fresh!")
             continue
         
-        response = agent.respond(user_input, message_history=message_history)
-        message_history = response.all_messages()
-        print("Dungeon Master:", response.output)
+        # Use session manager to process user input
+        results = session_manager.process_user_input_sync(
+            user_input, 
+            message_history=message_history
+        )
         
-        # Trace messages with token information
-        messages_json = response.all_messages_json().decode("utf-8")
+        # Extract the agent result for message history tracking
+        agent_result = results["agent_result"] 
+        message_history = agent_result.all_messages()
+        
+        # Display the narrative response 
+        print("Dungeon Master:", results["narrative"])
+        
+        # Trace messages with token information  
+        messages_json = agent_result.all_messages_json().decode("utf-8")
         messages = json.loads(messages_json)
         
         # Add token usage info to trace if available
-        if hasattr(response, 'usage') and response.usage:
+        if hasattr(agent_result, 'usage') and agent_result.usage:
             messages.append({
                 "usage_info": {
-                    "request_tokens": response.usage.request_tokens,
-                    "response_tokens": response.usage.response_tokens,
-                    "total_tokens": response.usage.total_tokens
+                    "request_tokens": agent_result.usage.request_tokens,
+                    "response_tokens": agent_result.usage.response_tokens,
+                    "total_tokens": agent_result.usage.total_tokens
                 }
             })
         
