@@ -7,7 +7,7 @@ and chronological order for optimal DM narrative generation.
 """
 
 from typing import List, Optional
-from .turn_manager import TurnContext
+from ..models.turn_context import TurnContext
 
 
 class DMContextBuilder:
@@ -43,6 +43,7 @@ class DMContextBuilder:
         context_parts = []
         
         # Add recent history if available
+        # TODO: history summary + recent history
         if recent_history:
             context_parts.append("=== RECENT TURN HISTORY ===")
             context_parts.extend(recent_history[-3:])  # Last 3 completed turns
@@ -93,6 +94,7 @@ class DMContextBuilder:
         context_parts = []
         
         # Add recent history
+        # TODO: history summary + recent history
         if recent_history:
             context_parts.append("=== RECENT TURN HISTORY ===")
             context_parts.extend(recent_history[-2:])  # Less history for focused view
@@ -145,7 +147,46 @@ class DMContextBuilder:
             )
         
         return " | ".join(summary_parts)
-
+    
+    def build_xml_context(self, turn_stack: List[TurnContext]) -> str:
+        """
+        Build XML context for Dungeon Master with full chronological information.
+        
+        Provides comprehensive XML context including all turns and subturns
+        in chronological order for optimal DM narrative generation.
+        
+        Args:
+            turn_stack: Current active turn stack (may be nested)
+            
+        Returns:
+            XML string wrapped in markdown code fences with full turn context
+        """
+        if not turn_stack:
+            return "```xml\n<turn_log>\n</turn_log>\n```"
+        
+        # Collect all messages chronologically across all turns
+        all_messages = []
+        for turn_context in turn_stack:
+            all_messages.extend(turn_context.messages)
+        
+        # Sort by timestamp to ensure chronological order
+        all_messages.sort(key=lambda msg: msg.timestamp)
+        
+        # Build XML structure
+        xml_parts = ["```xml", "<turn_log>"]
+        
+        for msg in all_messages:
+            element = msg.to_xml_element()
+            
+            # Add proper indentation
+            if msg.message_type.value == "live_message":
+                xml_parts.append(f"  {element}")
+            else:
+                # For reactions, add with base indentation (element already has internal indentation)
+                xml_parts.append(f"  {element}")
+        
+        xml_parts.extend(["</turn_log>", "```"])
+        return "\n".join(xml_parts)
 
 def create_dm_context_builder() -> DMContextBuilder:
     """
