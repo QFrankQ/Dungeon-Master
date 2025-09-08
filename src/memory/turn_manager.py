@@ -104,6 +104,8 @@ from datetime import datetime
 import asyncio
 
 from ..models.formatted_game_message import FormattedGameMessage
+from ..models.turn_message import TurnMessage, MessageType, create_live_message, create_completed_subturn_message
+from .state_extractor_context_builder import StateExtractorContextBuilder
 
 
 
@@ -113,58 +115,114 @@ if TYPE_CHECKING:
     from ..services.message_formatter import MessageFormatter
     from ..agents.state_extractor import StateExtractorAgent
     from ..agents.state_updates import StateExtractionResult
+    from ..agents.structured_summarizer import StructuredTurnSummarizer
 
-
+#TODO: Integrate current step objectives for the narrator as part of context provided by the game manager 
 @dataclass 
 class TurnContext:
     """
     Context for a single turn or sub-turn in the turn stack.
-    Contains all messages and metadata for this specific turn scope.
+    
+    Contains messages with selective filtering capabilities to serve both
+    DM (full chronological context) and StateExtractor (current turn only) needs.
+    
+    Uses TurnMessage system to distinguish between live conversation messages
+    and condensed subturn results for proper context isolation.
     """
     turn_id: str
     turn_level: int  # Stack depth (0=main turn, 1=sub-turn, 2=sub-sub-turn, etc.)
     active_character: Optional[str] = None
     initiative_order: Optional[List[str]] = None
     
-    # Message management following HistoryManager pattern
-    messages: List[FormattedGameMessage] = field(default_factory=list)
+    # Enhanced message management with selective filtering
+    messages: List[TurnMessage] = field(default_factory=list)
+    
+    # Legacy message storage for backward compatibility
+    _formatted_messages: List[FormattedGameMessage] = field(default_factory=list)
     
     # Turn metadata
     start_time: datetime = field(default_factory=datetime.now)
     end_time: Optional[datetime] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     
-    def add_message(self, message: FormattedGameMessage) -> None:
-        """Add a message to this turn's context."""
+    def add_live_message(self, content: str) -> None:
+        """Add a live conversation message to this turn's context."""
+        message = create_live_message(content, self.turn_id, self.turn_level, self.turn_level)
         self.messages.append(message)
+    
+    def add_completed_subturn(self, condensed_content: str, subturn_id: str) -> None:
+        """Add a condensed subturn result to this turn's context."""
+        message = create_completed_subturn_message(condensed_content, subturn_id, self.turn_level, self.turn_level)
+        self.messages.append(message)
+    
+    def get_live_messages_only(self) -> List[str]:
+        """
+        Get only live conversation messages from this specific turn.
+        Used by StateExtractor to avoid processing condensed subturn results.
+        """
+        return [msg.content for msg in self.messages 
+                if msg.message_type == MessageType.LIVE_MESSAGE and 
+                   msg.turn_origin == self.turn_id]
+    
+    def get_all_messages_chronological(self) -> List[str]:
+        """
+        Get all messages (live + condensed subturns) in chronological order.
+        Used by DM context builder for full turn context.
+        """
+        return [msg.content for msg in self.messages]
+    
+    # Legacy compatibility methods 
+    # #TODO: change this so that the TurnContext takes str message directly
+    def add_message(self, message: FormattedGameMessage) -> None:
+        """Legacy method - add FormattedGameMessage and convert to live message."""
+        self._formatted_messages.append(message)
+        # Convert to live message for new system
+        self.add_live_message(message.to_agent_input())
     
     def get_turn_context_messages(self) -> List[str]:
         """
-        Get all messages from this turn context formatted for state extraction.
-        Uses HistoryManager pattern - includes ALL turn content, not just player actions.
+        Legacy method - get messages for state extraction.
+        Now returns only live messages from current turn.
         """
-        context_messages = []
-        
-        for message in self.messages:
-            # For state extraction, we want rich context including character stats
-            context_messages.append(message.to_agent_input())
-        
-        return context_messages
-    
-    def get_turn_summary(self) -> str:
-        """Get a brief summary of what happened in this turn."""
-        if not self.messages:
-            return f"Turn {self.turn_id} (Level {self.turn_level}): No messages"
-        
-        message_count = len(self.messages)
-        character_names = list(set(msg.character_name for msg in self.messages))
-        
-        return (f"Turn {self.turn_id} (Level {self.turn_level}): "
-                f"{message_count} messages from {', '.join(character_names)}")
+        return self.get_live_messages_only()
     
     def is_completed(self) -> bool:
         """Check if this turn has been completed."""
         return self.end_time is not None
+    
+    def to_xml_context(self) -> str:
+        """
+        Convert this TurnContext to XML format for agent consumption.
+        
+        Generates the XML structure used by agents with proper nesting and formatting:
+        ```xml
+        <turn_log>
+          <message type="player/dm">content</message>
+          <reaction id="..." level="...">
+            <action>...</action>
+            <resolution>...</resolution>
+          </reaction>
+        </turn_log>
+        ```
+        
+        Returns:
+            XML string wrapped in markdown code fences
+        """
+        xml_parts = ["```xml", "<turn_log>"]
+        
+        # Process messages chronologically
+        for msg in self.messages:
+            element = msg.to_xml_element()
+            
+            # Add proper indentation
+            if msg.message_type == MessageType.LIVE_MESSAGE:
+                xml_parts.append(f"  {element}")
+            else:
+                # For reactions, add with base indentation (element already has internal indentation)
+                xml_parts.append(f"  {element}")
+        
+        xml_parts.extend(["</turn_log>", "```"])
+        return "\n".join(xml_parts)
 
 
 @dataclass
@@ -195,14 +253,23 @@ class TurnManager:
     Applies HistoryManager pattern for message management and filtering.
     """
     
-    def __init__(self, state_extractor: Optional[StateExtractorAgent] = None):
+    def __init__(
+        self, 
+        state_extractor: Optional["StateExtractorAgent"] = None,
+        turn_condensation_agent: Optional["StructuredTurnSummarizer"] = None
+    ):
         """
         Initialize the turn manager.
         
         Args:
             state_extractor: Optional state extractor for automatic processing
+            turn_condensation_agent: Optional agent for turn condensation
         """
         self.state_extractor = state_extractor
+        self.turn_condensation_agent = turn_condensation_agent
+        
+        # Context builders for different consumers
+        self.state_extractor_context_builder = StateExtractorContextBuilder()
         
         # Turn stack - each entry is a TurnContext
         self.turn_stack: List[TurnContext] = []
@@ -245,6 +312,7 @@ class TurnManager:
             Turn ID for this turn
         """
         self._turn_counter += 1
+        #TODO: just the number
         turn_id = f"turn_{self._turn_counter}"
         turn_level = len(self.turn_stack)  # Stack depth determines nesting level
         
@@ -282,39 +350,30 @@ class TurnManager:
         
         current_turn = self.turn_stack[-1]
         
+        # Add the action context as a live message to the current turn
+        current_turn.add_live_message(action_context, current_turn.turn_id)
+        
         # Perform state extraction if extractor is available
         state_result = None
         if self.state_extractor:
-            # Create temporary extraction context for this action
-            temp_context = TurnExtractionContext(
-                turn_id=current_turn.turn_id,
-                turn_level=current_turn.turn_level,
-                turn_messages=[action_context],
-                active_character=current_turn.active_character,
-                parent_modifications=getattr(current_turn, 'child_modifications', []),
-                metadata=metadata or {}
+            state_result = await self._extract_state_changes_from_turn_context(
+                current_turn, metadata or {}
             )
-            
-            state_result = await self._extract_state_changes(temp_context)
-            # Modifications are already handled by the DM with the subturn context
-            # If there are modifications from this action and we have a parent turn,
-            # add them to the parent turn's context
-            if state_result and hasattr(state_result, 'modifications') and len(self.turn_stack) > 1:
-                parent_turn = self.turn_stack[-2]  # Parent is one level up
-                if not hasattr(parent_turn, 'child_modifications'):
-                    parent_turn.child_modifications = []
-                parent_turn.child_modifications.extend(getattr(state_result, 'modifications', []))
         
         return state_result
 
     async def end_turn(self) -> Dict[str, Any]:
         """
-        End the current turn and handle cleanup.
-        State extraction should be done via resolve_action() during action resolution.
-        This method only handles turn conclusion and end-of-turn effects.
+        End the current turn, condense it, and embed in parent turn if applicable.
+        
+        This method:
+        1. Processes end-of-turn effects
+        2. Condenses the completed turn into structured action-resolution format
+        3. Embeds condensed result in parent turn (if exists)
+        4. Removes completed turn from stack
         
         Returns:
-            Dictionary with turn cleanup results
+            Dictionary with turn completion and condensation results
         """
         if not self.turn_stack:
             raise ValueError("No active turn to end")
@@ -322,9 +381,33 @@ class TurnManager:
         # Process any end-of-turn effects first
         end_of_turn_effects = await self.process_end_of_turn_effects()
         
-        # Pop the current turn from stack
-        completed_turn = self.turn_stack.pop()
+        # Get the current turn to be completed
+        completed_turn = self.turn_stack[-1]
         completed_turn.end_time = datetime.now()
+        
+        # Condense the turn if condensation agent is available
+        condensation_result = None
+        if self.turn_condensation_agent:
+            try:
+                # Condense the turn using TurnContext directly with chronological ordering
+                condensation_result = await self.turn_condensation_agent.condense_turn(
+                    turn_context=completed_turn,
+                    additional_context=completed_turn.metadata
+                )
+                
+                # If there's a parent turn, embed the condensed result
+                if len(self.turn_stack) > 1:  # Has parent
+                    parent_turn = self.turn_stack[-2]  # Parent is one level up
+                    parent_turn.add_completed_subturn(
+                        condensation_result.condensed_summary,
+                        completed_turn.turn_id
+                    )
+                    
+            except Exception as e:
+                print(f"Turn condensation failed for {completed_turn.turn_id}: {e}")
+        
+        # Remove completed turn from stack
+        self.turn_stack.pop()
         
         # Add to completed turns history
         self.completed_turns.append(completed_turn)
@@ -337,7 +420,9 @@ class TurnManager:
             "turn_level": completed_turn.turn_level,
             "duration": (completed_turn.end_time - completed_turn.start_time).total_seconds(),
             "message_count": len(completed_turn.messages),
-            "end_of_turn_effects": end_of_turn_effects
+            "end_of_turn_effects": end_of_turn_effects,
+            "condensation_result": condensation_result,
+            "embedded_in_parent": len(self.turn_stack) >= 1  # Still has turns after popping
         }
     
     async def process_end_of_turn_effects(self) -> List[str]:
@@ -466,6 +551,48 @@ class TurnManager:
             print(f"Failed to extract state changes for turn {context.turn_id}: {e}")
             return None
     
+    async def _extract_state_changes_from_turn_context(
+        self, 
+        current_turn: TurnContext, 
+        additional_context: Dict[str, Any]
+    ) -> Optional[Any]:
+        """
+        Extract state changes using StateExtractorContextBuilder for proper context isolation.
+        
+        Args:
+            current_turn: The turn context to extract state changes from
+            additional_context: Additional context for state extraction
+            
+        Returns:
+            StateExtractionResult if state_extractor is available, None otherwise
+        """
+        if not self.state_extractor:
+            return None
+        
+        try:
+            # Build isolated context using StateExtractorContextBuilder
+            formatted_context = self.state_extractor_context_builder.build_context(
+                current_turn=current_turn,
+                additional_context=additional_context
+            )
+            
+            # Extract state changes with proper context isolation
+            result = await self.state_extractor.extract_state_changes(
+                formatted_turn_context=formatted_context,
+                game_context={
+                    "turn_id": current_turn.turn_id,
+                    "turn_level": current_turn.turn_level,
+                    "active_character": current_turn.active_character,
+                    **additional_context
+                }
+            )
+            
+            return result
+            
+        except Exception as e:
+            print(f"Failed to extract state changes for turn {current_turn.turn_id}: {e}")
+            return None
+    
     def get_turn_stats(self) -> Dict[str, Any]:
         """Get statistics about turn management."""
         return {
@@ -489,14 +616,21 @@ class TurnManager:
         self._turn_counter = 0
 
 
-def create_turn_manager(state_extractor: Optional[Any] = None) -> TurnManager:
+def create_turn_manager(
+    state_extractor: Optional[Any] = None,
+    turn_condensation_agent: Optional[Any] = None
+) -> TurnManager:
     """
     Factory function to create a configured turn manager.
     
     Args:
         state_extractor: Optional state extractor for automatic processing
+        turn_condensation_agent: Optional agent for turn condensation
     
     Returns:
         Configured TurnManager instance
     """
-    return TurnManager(state_extractor=state_extractor)
+    return TurnManager(
+        state_extractor=state_extractor,
+        turn_condensation_agent=turn_condensation_agent
+    )
