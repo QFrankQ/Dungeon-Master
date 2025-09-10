@@ -8,8 +8,8 @@ and chronological order for optimal DM narrative generation.
 
 from typing import List, Optional
 
-from agents.dm_response import DMResponse
-from .turn_manager import TurnManagerSnapshot
+from ..models.dm_response import DMResponse
+from ..memory.turn_manager import TurnManagerSnapshot
 from ..models.turn_message import TurnMessage
 from .. models.turn_context import TurnContext
 
@@ -32,8 +32,8 @@ class GMContextBuilder:
     
     def build_context(
         self, 
-        turn_manager_snapshots: TurnManagerSnapshot,
         new_message: [TurnMessage| DMResponse],
+        turn_manager_snapshots: TurnManagerSnapshot,
         # recent_history: Optional[List[str]] = None
     ) -> str:
         """
@@ -110,13 +110,3 @@ class GMContextBuilder:
         
         xml_parts.extend(["</turn_log>", "```"])
         return "\n".join(xml_parts)
-
-
-def create_dm_context_builder() -> GMContextBuilder:
-    """
-    Factory function to create a DM context builder.
-    
-    Returns:
-        Configured DMContextBuilder instance
-    """
-    return GMContextBuilder()
