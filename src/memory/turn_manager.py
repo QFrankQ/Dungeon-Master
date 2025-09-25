@@ -154,6 +154,7 @@ class TurnManagerSnapshot:
     completed_turns: List[TurnContext]
     current_step_objective: str
     turn_counter: int
+    active_turns_by_level: List[TurnContext]  # First TurnContext from each level for context building
 
 class TurnManager:
     """
@@ -685,11 +686,18 @@ class TurnManager:
         if current_turn:
             current_step_objective = current_turn.current_step_objective
 
+        # Extract first TurnContext from each level for context building
+        active_turns_by_level = []
+        for level_queue in self.turn_stack:
+            if level_queue:  # Only add if queue is not empty
+                active_turns_by_level.append(level_queue[0])  # First turn in queue is active
+
         return TurnManagerSnapshot(
             turn_stack=[level_queue.copy() for level_queue in self.turn_stack],  # Shallow copy of structure
             completed_turns=self.completed_turns.copy(),
             current_step_objective=current_step_objective,
-            turn_counter=self._turn_counter
+            turn_counter=self._turn_counter,
+            active_turns_by_level=active_turns_by_level
         )
 
 def create_turn_manager(
