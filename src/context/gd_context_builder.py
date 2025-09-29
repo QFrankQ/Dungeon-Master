@@ -6,12 +6,10 @@ with both live messages and completed subturn results. Preserves nested structur
 and chronological order for optimal DM narrative generation.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
-from ..models.dm_response import DMResponse
 from ..memory.turn_manager import TurnManagerSnapshot
-from ..models.turn_message import TurnMessage
-from .. models.turn_context import TurnContext
+from ..models.turn_context import TurnContext
 
 
 
@@ -27,13 +25,13 @@ class GDContextBuilder:
     """
     
     def __init__(self):
-        """Initialize the GM context builder."""
+        """Initialize the GD context builder."""
         pass
     
     def build_context(
         self,
         turn_manager_snapshots: TurnManagerSnapshot,
-        new_message_xml: Optional[str] = None,
+        new_message_entries: Optional[List[Dict[str, Any]]] = None,
         # recent_history: Optional[List[str]] = None
     ) -> str:
         """
@@ -41,7 +39,10 @@ class GDContextBuilder:
 
         Args:
             turn_manager_snapshots: Current turn manager state snapshot
-            new_message_xml: Optional new message content in XML format to include
+            new_message_entries: Optional list of message entry dictionaries with keys:
+                - 'player_message': ChatMessage object
+                - 'player_id': Player's ID
+                - 'character_id': Character name/ID
             recent_history: Recent condensed turn history (last few completed turns)
 
         Returns:
@@ -65,13 +66,34 @@ class GDContextBuilder:
         context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level))
         context_parts.extend("</current_turn>")
         
-        # Build New Message (if provided as parameter)
-        if new_message_xml:
-            context_parts.append("<new_message>")
-            context_parts.append(new_message_xml)
-            context_parts.append("</new_message>")
-        
+        # Build New Messages (if provided as parameter)
+        if new_message_entries:
+            context_parts.append("<new_messages>")
+            for message_entry in new_message_entries:
+                xml_message = self._convert_message_entry_to_xml(message_entry)
+                context_parts.append(xml_message)
+            context_parts.append("</new_messages>")
+
         return "\n".join(context_parts)
+
+    def _convert_message_entry_to_xml(self, message_entry: Dict[str, Any]) -> str:
+        """
+        Convert a message entry dictionary to XML format.
+
+        Args:
+            message_entry: Dictionary containing:
+                - 'player_message': ChatMessage object
+                - 'player_id': Player's ID
+                - 'character_id': Character name/ID
+
+        Returns:
+            XML formatted string for the message
+        """
+        player_message = message_entry['player_message']
+        character_name = message_entry['character_id']
+
+        # Format as XML message with character context
+        return f'<message speaker="{character_name}">{player_message.text}</message>'
     
     def build_xml_context(self, active_turns_by_level: List[TurnContext]) -> str:
         """
