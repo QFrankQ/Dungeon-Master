@@ -26,9 +26,9 @@ class TurnContext:
     """
     turn_id: str
     turn_level: int  # Stack depth (0=main turn, 1=sub-turn, 2=sub-sub-turn, etc.)
+    current_step_objective: str
     active_character: Optional[str] = None
     initiative_order: Optional[List[str]] = None
-    
     # Enhanced message management with selective filtering
     messages: List[TurnMessage] = field(default_factory=list)
     
@@ -40,11 +40,11 @@ class TurnContext:
     end_time: Optional[datetime] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     
-    def add_live_message(self, content: str) -> None:
+    def add_live_message(self, content: str, speaker: str) -> None:
         """Add a live conversation message to this turn's context."""
-        message = create_live_message(content, self.turn_id, self.turn_level, self.turn_level)
+        message = create_live_message(content, self.turn_id, self.turn_level, speaker)
         self.messages.append(message)
-    
+     
     def add_completed_subturn(self, condensed_content: str, subturn_id: str) -> None:
         """Add a condensed subturn result to this turn's context."""
         message = create_completed_subturn_message(condensed_content, subturn_id, self.turn_level, self.turn_level)
@@ -55,17 +55,10 @@ class TurnContext:
         Get only live conversation messages from this specific turn.
         Used by StateExtractor to avoid processing condensed subturn results.
         """
-        return [msg.content for msg in self.messages 
-                if msg.message_type == MessageType.LIVE_MESSAGE and 
+        return [msg.content for msg in self.messages
+                if msg.message_type == MessageType.LIVE_MESSAGE and
                    msg.turn_origin == self.turn_id]
-    
-    def get_all_messages_chronological(self) -> List[str]:
-        """
-        Get all messages (live + condensed subturns) in chronological order.
-        Used by DM context builder for full turn context.
-        """
-        return [msg.content for msg in self.messages]
-    
+
     # Legacy compatibility methods 
     def add_message(self, message: FormattedGameMessage) -> None:
         """Legacy method - add FormattedGameMessage and convert to live message."""
@@ -84,28 +77,39 @@ class TurnContext:
         """Check if this turn has been completed."""
         return self.end_time is not None
     
-    def to_xml_context(self) -> str:
+    def to_xml_context(self, exclude_last: bool = False, cause: Optional[str] = None) -> str:
         """
         Convert this TurnContext to XML format for agent consumption.
         
-        Generates the XML structure used by agents with proper nesting and formatting:
-        ```xml
-        <turn_log>
-          <message type="player/dm">content</message>
-          <reaction id="..." level="...">
-            <action>...</action>
-            <resolution>...</resolution>
-          </reaction>
-        </turn_log>
-        ```
+        Generates dynamic XML structure based on turn level:
+        - Level 0: <turn_log>
+        - Level 1+: <subturn_log id="..." cause="...">
+        
+        Args:
+            exclude_last: Whether to exclude the last message
+            cause: Optional cause for subturn (e.g., "trap_sprung")
         
         Returns:
             XML string wrapped in markdown code fences
         """
-        xml_parts = ["```xml", "<turn_log>"]
+        # Determine tag name and attributes based on turn level
+        if self.turn_level == 0:
+            opening_tag = "<turn_log>"
+            closing_tag = "</turn_log>"
+        else:
+            # For subturns, include ID and optional cause
+            if cause:
+                opening_tag = f'<subturn_log id="{self.turn_id}" cause="{cause}">'
+            else:
+                opening_tag = f'<subturn_log id="{self.turn_id}">'
+            closing_tag = f'</subturn_log>'
+        
+        xml_parts = [opening_tag]
         
         # Process messages chronologically
-        for msg in self.messages:
+        messages = self.messages if not exclude_last else self.messages[:-1]
+        
+        for msg in messages:
             element = msg.to_xml_element()
             
             # Add proper indentation
@@ -115,8 +119,13 @@ class TurnContext:
                 # For reactions, add with base indentation (element already has internal indentation)
                 xml_parts.append(f"  {element}")
         
-        xml_parts.extend(["</turn_log>", "```"])
+        xml_parts.extend([closing_tag])
         return "\n".join(xml_parts)
+
+    def get_last_message_xml(self):
+        if not self.messages:
+            return Exception("No message in current (sub)turn")
+        return self.messages[-1].to_xml_element()
 
 
 @dataclass
