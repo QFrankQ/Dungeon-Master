@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List
 
+from .chat_message import ChatMessage
 
+
+#TODO: processed or not
 class MessageType(Enum):
     """Types of messages stored in turn context."""
     LIVE_MESSAGE = "live_message"        # Active conversation messages
@@ -57,12 +60,12 @@ class TurnMessage:
         """
         if self.message_type == MessageType.LIVE_MESSAGE:
             # Use the speaker field directly
-            return f'<message type="{self.speaker}">{self.content}</message>'
+            return f'<message speaker="{self.speaker}">{self.content}</message>'
             
         elif self.message_type == MessageType.COMPLETED_SUBTURN:
             # Calculate nesting level from turn_origin (count dots)
-            #TODO: lazy way of counting levels, may need more robust implementation later on
-            level = self.turn_origin.count('.')
+            #TODO: Not necessary reaction, could be other types of action.
+            
             return f'<reaction id="{self.turn_origin}" level="{self.turn_level}">\n    {self.content}\n  </reaction>'
             
         else:
