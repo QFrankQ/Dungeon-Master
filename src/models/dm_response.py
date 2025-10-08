@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 #     parameters: Dict[str, Any] = Field(default_factory=dict, description="Parameters for the tool call")
 
 
-class DMResponse(BaseModel):
+class DungeonMasterResponse(BaseModel):
     """
     Simple structured response from the DM agent.
     
@@ -21,7 +21,7 @@ class DMResponse(BaseModel):
     """
     narrative: str = Field(..., description="The game narrative and your message to the active player(s)")
     # tool_calls: Optional[List[ToolCall]] = Field(None, description="Optional list of tool calls to execute")
-    game_step_completed: bool = Field(..., description='''"True" only if current step objectives are met; "False" if step objectives are not met or you're asking the players for more information.''')
+    game_step_completed: bool = Field(..., description='''"True" only if current game step objectives are met; "False" if game step objectives are not met or if you're asking the players for more information.''')
     class Config:
         """Pydantic configuration."""
         json_schema_extra = {
