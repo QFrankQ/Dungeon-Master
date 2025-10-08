@@ -24,9 +24,9 @@ class MessageType(Enum):
 class TurnMessage:
     """
     Individual message in a turn context with metadata for selective filtering.
-    
+
     Supports both live conversation messages and condensed subturn results,
-    allowing the same turn context to serve both DM (full context) and 
+    allowing the same turn context to serve both DM (full context) and
     StateExtractor (current turn only) needs.
     """
     content: str
@@ -35,6 +35,7 @@ class TurnMessage:
     turn_origin: str  # Which turn this message originated from
     turn_level: str
     timestamp: datetime = field(default_factory=datetime.now)
+    processed_for_state_extraction: bool = False  # Track if message has been processed
     
     def __str__(self) -> str:
         """String representation of the message content."""
@@ -47,6 +48,10 @@ class TurnMessage:
     def is_completed_subturn(self) -> bool:
         """Check if this is a condensed subturn result."""
         return self.message_type == MessageType.COMPLETED_SUBTURN
+
+    def mark_as_processed(self) -> None:
+        """Mark this message as processed for state extraction."""
+        self.processed_for_state_extraction = True
     
     def to_xml_element(self) -> str:
         """
