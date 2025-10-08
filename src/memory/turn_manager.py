@@ -26,7 +26,7 @@ context isolation to prevent duplicate state extractions.
 1. **Sibling Subturn Reaction Architecture**
    - Multiple reactions create sibling subturns at the same level (e.g., 2.1, 2.2, 2.3)
    - Turn stack itself serves as the natural queue structure
-   - Sequential processing through GM orchestration with `end_turn_and_get_next()`
+   - Sequential processing through GD orchestration with `end_turn_and_get_next()`
 
 2. **Action Resolution vs Turn Conclusion Separation**
    - `resolve_action()`: Extracts and applies state changes during action resolution
@@ -76,16 +76,16 @@ start_and_queue_turns([
 - Uses child turn messages as supplemental context for understanding
 - Each extractor focuses on its own turn scope to avoid duplicate extractions
 
-#### GM Agent Integration:
+#### GD Agent Integration:
 - Orchestrates reaction queue creation and processing
 - Uses `end_turn_and_get_next()` for seamless transition management
 - Determines processing order and sets step objectives
 
 ### Reaction Queue Processing Flow
 
-1. **Reaction Collection**: GM collects positive reactions from players
+1. **Reaction Collection**: GD collects positive reactions from players
 2. **Queue Creation**: `start_and_queue_turns()` creates sibling subturns
-3. **Sequential Processing**: GM processes each reaction through adjudication
+3. **Sequential Processing**: GD processes each reaction through adjudication
 4. **Queue Transitions**: `end_turn_and_get_next()` manages flow between reactions
 5. **Parent Return**: Automatic return to parent turn when queue is empty
 
@@ -121,8 +121,8 @@ The TurnManager integrates with the broader session architecture:
 - Simple "first in queue" processing model
 - Elegant completion tracking through stack depth
 
-**GM Orchestration**:
-- Clear separation: GM handles flow, DM handles content
+**GD Orchestration**:
+- Clear separation: GD handles flow, DM handles content
 - Consistent tool interface for reaction management
 - Flexible processing order (initiative, timing rules, context)
 
@@ -138,7 +138,7 @@ import asyncio
 from ..models.formatted_game_message import FormattedGameMessage
 from ..models.turn_context import TurnContext, TurnExtractionContext
 from ..models.turn_message import create_live_message
-from .state_extractor_context_builder import StateExtractorContextBuilder
+from ..context.state_extractor_context_builder import StateExtractorContextBuilder
 
 # Optional imports for state extraction and message formatting
 from typing import TYPE_CHECKING
@@ -177,29 +177,26 @@ class TurnManager:
     - get_next_pending_turn(): Get first pending turn in current level queue
 
     Queue Processing Flow:
-    1. GM creates reaction queue via start_and_queue_turns()
+    1. GD creates reaction queue via start_and_queue_turns()
     2. DM processes each reaction through resolve_action()
-    3. GM uses end_turn_and_get_next() for seamless queue transitions
+    3. GD uses end_turn_and_get_next() for seamless queue transitions
     4. Automatic return to parent when queue is empty
 
     Turn nesting level determined by stack depth.
     Applies HistoryManager pattern for message management and filtering.
-    Supports GM orchestration of complex D&D reaction scenarios.
+    Supports GD orchestration of complex D&D reaction scenarios.
     """
     
     def __init__(
-        self, 
-        state_extractor: Optional["StateExtractorAgent"] = None,
+        self,
         turn_condensation_agent: Optional["StructuredTurnSummarizer"] = None
     ):
         """
         Initialize the turn manager.
-        
+
         Args:
-            state_extractor: Optional state extractor for automatic processing
             turn_condensation_agent: Optional agent for turn condensation
         """
-        self.state_extractor = state_extractor
         self.turn_condensation_agent = turn_condensation_agent
         
         # Context builders for different consumers
@@ -319,7 +316,7 @@ class TurnManager:
     def end_turn_and_get_next(self) -> Dict[str, Any]:
         """
         End current turn and get information about next turn to process.
-        Combines end_turn() with queue management for GM orchestration.
+        Combines end_turn() with queue management for GD orchestration.
 
         Returns:
             Dictionary with turn completion info and next turn details
@@ -354,39 +351,26 @@ class TurnManager:
             }
 
     async def resolve_action(
-        self, 
-        action_context: str, 
+        self,
+        action_context: str,
         metadata: Optional[Dict[str, Any]] = None
-    ) -> Optional[Any]:
+    ) -> None:
         """
-        Resolve an action and perform immediate state extraction.
-        This should be called during action resolution, not at turn end,
-        to ensure proper reaction timing and immediate state availability.
-        
+        Add action context to current turn.
+        State extraction is now handled by SessionManager.
+
         Args:
             action_context: Description of the action being resolved
-            metadata: Additional context for state extraction
-        
-        Returns:
-            StateExtractionResult if state_extractor is available, None otherwise
+            metadata: Additional context metadata (unused, kept for backward compatibility)
         """
         if not self.turn_stack or not self.turn_stack[-1]:
             raise ValueError("No active turn to resolve action in")
 
         # Get the current active turn from the deepest level queue
         current_turn = self.turn_stack[-1][0]  # First turn in the current level queue
-        
+
         # Add the action context as a live message to the current turn
         current_turn.add_live_message(action_context, current_turn.turn_id)
-        
-        # Perform state extraction if extractor is available
-        state_result = None
-        if self.state_extractor:
-            state_result = await self._extract_state_changes_from_turn_context(
-                current_turn, metadata or {}
-            )
-        
-        return state_result
     #TODO: update turnId and turn_level properly
     async def end_turn(self) -> Dict[str, Any]:
         """
@@ -501,14 +485,14 @@ class TurnManager:
     
     def add_new_message(self, new_message: str, speaker: str):
         if not self.turn_stack or not self.turn_stack[-1]:
-            raise Exception("empty stack")
+            raise Exception("Empty TurnStack, add_new_message failed")
         current_turn = self.turn_stack[-1][0]  # First turn in current level queue
         current_turn.add_live_message(new_message, speaker)
 
     def create_message_xml(self, content: str, speaker: str) -> str:
         """
         Create XML representation of a message without adding it to any turn context.
-        Useful for passing messages to GM context builder before committing to turn stack.
+        Useful for passing messages to GD context builder before committing to turn stack.
 
         Args:
             content: The message content
@@ -548,107 +532,6 @@ class TurnManager:
         return str(max(0, self.get_turn_level() - 1))  # Stack depth - 1 for 0-based levels
     
     
-    def _prepare_extraction_context(self, turn_context: TurnContext) -> TurnExtractionContext:
-        """
-        Prepare extraction context for StateExtractor.
-        Follows HistoryManager filtering pattern but for turn-specific content.
-        """
-        # Get all messages from this turn context
-        turn_messages = turn_context.get_turn_context_messages()
-        
-        # Get any modifications from child turns
-        parent_modifications = getattr(turn_context, 'child_modifications', [])
-        
-        return TurnExtractionContext(
-            turn_id=turn_context.turn_id,
-            turn_level=turn_context.turn_level,
-            turn_messages=turn_messages,
-            active_character=turn_context.active_character,
-            parent_modifications=parent_modifications,
-            metadata=turn_context.metadata
-        )
-    
-    async def _extract_state_changes(self, context: TurnExtractionContext) -> Optional[Any]:
-        """
-        Extract state changes using the StateExtractor.
-        """
-        if not self.state_extractor:
-            return None
-        
-        try:
-            # Combine all turn messages into a single context string
-            full_context = "\n".join([
-                f"=== TURN {context.turn_id} (Level {context.turn_level}) ===",
-                f"Active Character: {context.active_character or 'Unknown'}",
-                "",
-                "=== TURN MESSAGES ===",
-                *context.turn_messages
-            ])
-            
-            # Add parent modifications if any
-            if context.parent_modifications:
-                full_context += "\n\n=== CARRY-OVER EFFECTS ===\n"
-                full_context += "\n".join(context.parent_modifications)
-            
-            # Use StateExtractor with structured turn context
-            result = await self.state_extractor.extract_state_changes(
-                formatted_turn_context=full_context,
-                game_context={
-                    "turn_id": context.turn_id,
-                    "turn_level": context.turn_level,
-                    "active_character": context.active_character,
-                    **context.metadata
-                }
-            )
-            
-            return result
-            
-        except Exception as e:
-            print(f"Failed to extract state changes for turn {context.turn_id}: {e}")
-            return None
-    
-    async def _extract_state_changes_from_turn_context(
-        self, 
-        current_turn: TurnContext, 
-        additional_context: Dict[str, Any]
-    ) -> Optional[Any]:
-        """
-        Extract state changes using StateExtractorContextBuilder for proper context isolation.
-        
-        Args:
-            current_turn: The turn context to extract state changes from
-            additional_context: Additional context for state extraction
-            
-        Returns:
-            StateExtractionResult if state_extractor is available, None otherwise
-        """
-        if not self.state_extractor:
-            return None
-        
-        try:
-            # Build isolated context using StateExtractorContextBuilder
-            formatted_context = self.state_extractor_context_builder.build_context(
-                current_turn=current_turn,
-                additional_context=additional_context
-            )
-            
-            # Extract state changes with proper context isolation
-            result = await self.state_extractor.extract_state_changes(
-                formatted_turn_context=formatted_context,
-                game_context={
-                    "turn_id": current_turn.turn_id,
-                    "turn_level": current_turn.turn_level,
-                    "active_character": current_turn.active_character,
-                    **additional_context
-                }
-            )
-            
-            return result
-            
-        except Exception as e:
-            print(f"Failed to extract state changes for turn {current_turn.turn_id}: {e}")
-            return None
-    
     def get_turn_stats(self) -> Dict[str, Any]:
         """Get statistics about turn management."""
         # Count total active turns across all levels
@@ -679,6 +562,35 @@ class TurnManager:
         self._current_messages = []
         self._turn_counter = 0
 
+    # Helper methods for GD post-run function calls
+
+    def set_next_step_objective(self, objective: str) -> bool:
+        """
+        Set the next step objective for the current turn (top of stack).
+        Used by GD's post-run function to update the current game step objective.
+
+        Args:
+            objective: The new step objective to set
+
+        Returns:
+            True if objective was set, False if no active turn
+        """
+        current_turn = self.get_current_turn_context()
+        if current_turn:
+            current_turn.current_step_objective = objective
+            return True
+        return False
+
+    def get_current_step_objective(self) -> Optional[str]:
+        """
+        Get the current step objective from the top turn in the stack.
+
+        Returns:
+            The current step objective, or None if no active turn
+        """
+        current_turn = self.get_current_turn_context()
+        return current_turn.current_step_objective if current_turn else None
+
     def get_snapshot(self) -> TurnManagerSnapshot:
         """Create immutable snapshot of current state."""
         current_step_objective = ""
@@ -701,20 +613,17 @@ class TurnManager:
         )
 
 def create_turn_manager(
-    state_extractor: Optional[Any] = None,
     turn_condensation_agent: Optional[Any] = None
 ) -> TurnManager:
     """
     Factory function to create a configured turn manager.
-    
+
     Args:
-        state_extractor: Optional state extractor for automatic processing
         turn_condensation_agent: Optional agent for turn condensation
-    
+
     Returns:
         Configured TurnManager instance
     """
     return TurnManager(
-        state_extractor=state_extractor,
         turn_condensation_agent=turn_condensation_agent
     )
