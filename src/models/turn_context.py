@@ -53,11 +53,35 @@ class TurnContext:
     def get_live_messages_only(self) -> List[str]:
         """
         Get only live conversation messages from this specific turn.
-        Used by StateExtractor to avoid processing condensed subturn results.
+        Used by DM to get full chronological context regardless of processing status.
         """
         return [msg.content for msg in self.messages
                 if msg.message_type == MessageType.LIVE_MESSAGE and
                    msg.turn_origin == self.turn_id]
+
+    def get_unprocessed_live_messages(self) -> List[str]:
+        """
+        Get only unprocessed live conversation messages from this specific turn.
+        Used by StateExtractor to avoid duplicate extractions.
+        """
+        return [msg.content for msg in self.messages
+                if msg.message_type == MessageType.LIVE_MESSAGE and
+                   msg.turn_origin == self.turn_id and
+                   not msg.processed_for_state_extraction]
+
+    def mark_all_messages_as_processed(self) -> int:
+        """
+        Mark all current messages as processed for state extraction.
+
+        Returns:
+            Number of messages that were marked as processed
+        """
+        marked_count = 0
+        for msg in self.messages:
+            if msg.message_type == MessageType.LIVE_MESSAGE and not msg.processed_for_state_extraction:
+                msg.mark_as_processed()
+                marked_count += 1
+        return marked_count
 
     # Legacy compatibility methods 
     def add_message(self, message: FormattedGameMessage) -> None:
