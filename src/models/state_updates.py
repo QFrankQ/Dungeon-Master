@@ -27,6 +27,38 @@ class UpdateType(str, Enum):
     CREATE_CHARACTER = "create_character"
 
 
+class EventType(str, Enum):
+    """Types of state change events that can occur."""
+    COMBAT_STATE_CHANGE = "combat_state"  # HP, conditions, death saves, combat stats
+    RESOURCE_USAGE = "resource_usage"     # Spells, items, inventory, hit dice, abilities
+
+
+class EventDetectionResult(BaseModel):
+    """Result from event detection - indicates what types of changes occurred."""
+    detected_events: List[EventType] = Field(default_factory=list)
+    confidence: float = Field(1.0, ge=0.0, le=1.0)
+    reasoning: Optional[str] = Field(None, description="Why these events were detected")
+
+
+class CombatStateResult(BaseModel):
+    """Result from Combat State Extractor - only combat-critical updates."""
+    character_updates: List["CombatCharacterUpdate"] = Field(
+        default_factory=list,
+        description="Combat updates: hp, condition, death_save, combat_stat only"
+    )
+    combat_info: Dict[str, Any] = Field(default_factory=dict)
+    notes: Optional[str] = None
+
+
+class ResourceResult(BaseModel):
+    """Result from Resource Extractor - resource consumption and character changes."""
+    character_updates: List["ResourceCharacterUpdate"] = Field(
+        default_factory=list,
+        description="Resource updates: spell_slot, inventory, ability, hit_dice only"
+    )
+    new_characters: List["CharacterCreation"] = Field(default_factory=list)
+    notes: Optional[str] = None
+
 
 class HPUpdate(BaseModel):
     """Hit point update information."""
@@ -105,21 +137,78 @@ class CharacterCreation(BaseModel):
 class CharacterUpdate(BaseModel):
     """Complete update information for a single character."""
     character_id: str = Field(..., description="ID of the character to update")
-    character_name: Optional[str] = Field(None, description="Character name (for reference)")
-    
+    # character_name: Optional[str] = Field(None, description="Character name (for reference)")
+
     # Different types of updates
     hp_update: Optional[HPUpdate] = None
     condition_update: Optional[ConditionUpdate] = None
-    # ability_update: Optional[AbilityUpdate] = None
-    # inventory_update: Optional[InventoryUpdate] = None
+    ability_update: Optional[AbilityUpdate] = None
+    inventory_update: Optional[InventoryUpdate] = None
     spell_slot_update: Optional[SpellSlotUpdate] = None
-    # hit_dice_update: Optional[HitDiceUpdate] = None
+    hit_dice_update: Optional[HitDiceUpdate] = None
     death_save_update: Optional[DeathSaveUpdate] = None
-    # combat_stat_update: Optional[CombatStatUpdate] = None
-    
+    combat_stat_update: Optional[CombatStatUpdate] = None
+
     # Metadata
-    reason: Optional[str] = Field(None, description="Reason for the updates")
-    source: Optional[str] = Field(None, description="Source of the changes")
+    # reason: Optional[str] = Field(None, description="Reason for the updates")
+    # source: Optional[str] = Field(None, description="Source of the changes")
+
+
+class CombatCharacterUpdate(BaseModel):
+    """Character update containing only combat-critical changes."""
+    character_id: str = Field(..., description="ID of the character to update")
+
+    # Combat-specific updates only
+    hp_update: Optional[HPUpdate] = None
+    condition_update: Optional[ConditionUpdate] = None
+    death_save_update: Optional[DeathSaveUpdate] = None
+    combat_stat_update: Optional[CombatStatUpdate] = None
+
+    # Metadata
+    # reason: Optional[str] = Field(None, description="Reason for the updates")
+    # source: Optional[str] = Field(None, description="Source of the changes")
+
+    def to_character_update(self) -> CharacterUpdate:
+        """Convert to full CharacterUpdate for final result."""
+        return CharacterUpdate(
+            character_id=self.character_id,
+            # character_name=self.character_name,
+            hp_update=self.hp_update,
+            condition_update=self.condition_update,
+            death_save_update=self.death_save_update,
+            combat_stat_update=self.combat_stat_update,
+            # reason=self.reason,
+            # source=self.source
+        )
+
+
+class ResourceCharacterUpdate(BaseModel):
+    """Character update containing only resource consumption changes."""
+    character_id: str = Field(..., description="ID of the character to update")
+    # character_name: Optional[str] = Field(None, description="Character name (for reference)")
+
+    # Resource-specific updates only
+    spell_slot_update: Optional[SpellSlotUpdate] = None
+    inventory_update: Optional[InventoryUpdate] = None
+    ability_update: Optional[AbilityUpdate] = None
+    hit_dice_update: Optional[HitDiceUpdate] = None
+
+    # Metadata
+    # reason: Optional[str] = Field(None, description="Reason for the updates")
+    # source: Optional[str] = Field(None, description="Source of the changes")
+
+    def to_character_update(self) -> CharacterUpdate:
+        """Convert to full CharacterUpdate for final result."""
+        return CharacterUpdate(
+            character_id=self.character_id,
+            # character_name=self.character_name,
+            spell_slot_update=self.spell_slot_update,
+            inventory_update=self.inventory_update,
+            ability_update=self.ability_update,
+            hit_dice_update=self.hit_dice_update,
+            # reason=self.reason,
+            # source=self.source
+        )
 
 
 class StateExtractionResult(BaseModel):
@@ -142,11 +231,16 @@ class StateExtractionResult(BaseModel):
         description="Combat-related information (round, initiative, etc.)"
     )
     
-    extracted_from: str = Field(..., description="The original narrative text")
+    # extracted_from: str = Field(..., description="The original narrative text")
     
-    confidence: float = Field(1.0, description="Confidence in the extraction (0.0-1.0)")
+    # confidence: float = Field(1.0, description="Confidence in the extraction (0.0-1.0)")
     
     notes: Optional[str] = Field(None, description="Additional notes about the extraction")
+    
+    modifications: List[str] = Field(
+        default_factory=list,
+        description="Cross-turn effects or modifications that carry over to parent turns"
+    )
     
     class Config:
         """Pydantic configuration."""
@@ -174,7 +268,11 @@ class StateExtractionResult(BaseModel):
                     },
                     "extracted_from": "The fireball explodes around Gareth! He takes 8 fire damage and catches fire.",
                     "confidence": 0.95,
-                    "notes": "Clear damage and condition application"
+                    "notes": "Clear damage and condition application",
+                    "modifications": [
+                        "Shield spell blocks 3 damage from Alice's attack",
+                        "Burning condition will deal 1d4 fire damage at start of next turn"
+                    ]
                 }
             ]
         }
