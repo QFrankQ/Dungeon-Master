@@ -4,7 +4,7 @@ from pydantic_ai.providers.google_gla import GoogleGLAProvider
 from pydantic_ai.messages import ModelMessage
 import os
 from agents.prompts import DUNGEON_MASTER_DEFAULT_INSTRUCTIONS
-from agents.dm_response import DMResponse
+from ..models.dm_response import DMResponse
 from typing import List, Optional, Union
 import random
 
