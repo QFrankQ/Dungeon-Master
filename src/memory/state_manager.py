@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 from copy import deepcopy
 
-from ..agents.state_updates import (
+from ..models.state_updates import (
     StateExtractionResult,
     CharacterUpdate,
     CharacterCreation,
