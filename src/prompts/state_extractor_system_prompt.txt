@@ -36,7 +36,6 @@ Always return a complete StateExtractionResult with:
 - new_characters: List of any new characters introduced
 - combat_info: Any combat-related metadata
 - extracted_from: The original narrative text
-- confidence: Your confidence level (0.0-1.0)
 - notes: Any relevant notes about the extraction
 
 ### Examples
