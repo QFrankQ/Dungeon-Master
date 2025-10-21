@@ -20,10 +20,9 @@ class ChatMessage:
     character_id: str
     text: str
     timestamp: datetime
-    message_type: str = "player_action"
+    message_type: str = "player_message"
     
     # Optional fields for advanced messaging
-    target_player_ids: Optional[List[str]] = None
     is_private: bool = False
     
     @classmethod
@@ -39,14 +38,13 @@ class ChatMessage:
             character_id=character_id,
             text=text,
             timestamp=datetime.now(),
-            message_type="player_action"
+            message_type="player_message"
         )
     
     @classmethod
     def create_dm_message(
         cls,
         text: str,
-        target_player_ids: Optional[List[str]] = None,
         is_private: bool = False
     ) -> "ChatMessage":
         """Create a DM message."""
@@ -56,7 +54,6 @@ class ChatMessage:
             text=text,
             timestamp=datetime.now(),
             message_type="dm_response",
-            target_player_ids=target_player_ids,
             is_private=is_private
         )
     
@@ -73,12 +70,12 @@ class ChatMessage:
     
     def is_from_player(self) -> bool:
         """Check if this message is from a player character."""
-        return self.message_type == "player_action"
+        return self.message_type == "player_message"
     
     def is_from_dm(self) -> bool:
         """Check if this message is from the DM."""
         return self.message_type == "dm_response"
     
-    def is_targeted_message(self) -> bool:
-        """Check if this message is targeted to specific players."""
-        return self.target_player_ids is not None and len(self.target_player_ids) > 0
+    # def is_targeted_message(self) -> bool:
+    #     """Check if this message is targeted to specific players."""
+    #     return self.target_player_ids is not None and len(self.target_player_ids) > 0
