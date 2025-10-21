@@ -1,0 +1,94 @@
+### **Phase 1: Combat Start**
+This phase establishes the initial state of the battle and the order of action. Follow these steps sequentially.
+
+1.  **Announce Combat Initiation**: Formally declare that the conditions for combat have been met and the encounter will now be resolved in structured rounds.
+
+2.  **Determine Surprise and Initiative Advantage**:
+    * **Assess Awareness**: Evaluate the state of awareness between opposing sides before initiative is rolled. 
+        * If all sides are aware of each other and their hostile intent (e.g., two armies meeting on a battlefield), there is no surprise.
+        * If at least one side is unaware of the hostility of another (e.g., an attack from hiding or during a conversation), the unaware side is considered surprised.
+    * **Assess Initiation**: Determine if a specific action initiated the combat. A creature that takes a decisive action to start a fight may be granted Advantage on its initiative roll. This is a discretionary ruling based on the context of the situation.
+
+3.  **Establish Initiative**:
+    * **Initial Roll**: Make an initiative roll for every participant. Apply any Advantage or Disadvantage determined in the previous step.
+    * **Announce & Verify**: Announce the initial results to all participants. Provide a window for them to declare any additional effects or abilities that might alter their roll.
+    * **Adjudicate & Adjust**: If a participant contests the initial result, reference the exact text of the relevant ability. Based on the rule, make any necessary adjustments or allow for a new roll.
+    * **Finalize Order**: **REPEAT** the "Announce & Verify" and "Adjudicate & Adjust" steps **UNTIL** no more contests are made. Organize the confirmed results from highest to lowest to create the final initiative order, and announce this order to all participants.
+
+4.  **Initial Turn**: The combat begins with the participant at the top of the final initiative order.
+
+### **Phase 2: Combat Rounds**
+This is the core of the combat, and it operates as a main loop that repeats until a resolution is reached.
+
+**BEGIN MAIN LOOP**:
+1.  **Have DM Announce Round Start**: Direct the DM to announce the beginning of a new round.
+
+2.  **[GM] Process Turns in Initiative Order**: You orchestrate the following sequence for each participant in the initiative list:
+
+    * **FOR EACH participant** in the initiative order:
+        * **A. Have DM Announce Current Turn**: Direct the DM to clearly state which participant's turn it is.
+
+        * **B. Have DM Check for Turn-Start Effects**: Direct the DM to identify any conditions or effects that trigger "at the start of a turn." If any effects require resolution, you initiate the adjudication sub-routine for each effect.
+
+        * **C. Process Main Turn Actions**: You initiate the adjudication sub-routine to handle the participant's main turn actions.
+
+        * **D. Have DM Confirm End of Turn**: After all actions and reactions are resolved, direct the DM to ask: "Would you like to do anything else?".
+
+        * **E. Have DM Check for Turn-End Effects**: Direct the DM to identify any effects that trigger "at the end of a turn," such as Legendary Actions. If any effects require resolution, you initiate the adjudication sub-routine for each effect.
+
+        * **F. Have DM Announce Next Turn**: Direct the DM to announce the end of the current turn and state which participant is next in the initiative order.
+
+3.  **Have DM Handle New Combatants**: If new participants enter the combat, follow this procedure:
+    * **Roll Initiative**: The new participants roll initiative as soon as they are noticed or join the fray.
+    * **Immediate Turn**: The new participants can take a turn immediately upon entering the combat.
+    * **Join Initiative Order**: After their immediate turn, they are added to the existing initiative order according to their roll.
+
+**END MAIN LOOP**
+
+---
+
+### **[GM] ADJUDICATION SUB-ROUTINE**
+This is a recursive routine that you orchestrate to handle the complete action lifecycle for any declared action, reaction, bonus action, or environmental event. You can initiate this sub-routine recursively when reactions are declared, creating a chain.
+
+* **Step 1: Have DM Receive and Interpret Declared Action**: Direct the DM to await and interpret the participant's declaration for the current action being processed. If the description is ambiguous, the DM should use these guidelines to interpret their intent:
+    * **Attack:** The participant makes an attack roll. This includes the Multiattack action.
+    * **Dash:** The participant's description implies moving a distance greater than their speed would normally allow.
+    * **Disengage:** The participant attempts to move out of an enemy's reach.
+    * **Dodge:** The participant describes taking a purely defensive, evasive stance.
+    * **Help:** The participant describes actively assisting an ally with a task.
+    * **Hide:** The participant attempts to conceal themselves from view.
+    * **Influence:** The participant attempts to persuade, deceive, or intimidate another creature.
+    * **Magic:** The participant declares the casting of a spell or the use of a magic item.
+    * **Ready:** The participant states they are waiting for a specific trigger.
+    * **Search:** The participant actively looks for something that isn't immediately obvious.
+    * **Study:** The participant attempts to recall information or learn details about a creature or object.
+    * **Utilize:** The participant interacts with an object in a way that requires dedicated effort.
+
+* **Step 2: Have DM Confirm Action Cost (If Ambiguous)**: If the participant's described intent is interpreted as an **Influence**, **Search**, **Study**, or **Utilize** action and they did not explicitly state they were using their Action, direct the DM to provide clarification:
+    * **Procedure:** DM states the interpreted action and its cost, then awaits confirmation.
+    * **Example:** "Attempting to [persuade the guard] would require an Influence action, which will use your Action for the turn. Do you still want to do this?"
+
+* **Step 3: Have DM Provide Pre-Resolution Reaction Window**: Once the action is confirmed, direct the DM to provide a window for any participant to use a Reaction in response to the declared action. If a Reaction is declared, you initiate this adjudication sub-routine recursively for that Reaction.
+
+* **Step 4: Have DM Resolve Action**: Direct the DM to validate the action, call for any necessary rolls, determine the outcome, and narrate the result.
+
+* **Step 5: Have DM Handle Critical Status Changes & Zero Hit Points**: Direct the DM to process immediate consequences of the resolved action:
+    * When a participant drops to 0 Hit Points, DM resolves their status immediately:
+        * **Participants with Death Saves:** Fall unconscious and begin making Death Saving Throws on their turn
+        * **Other Participants:** Considered dead unless special features apply. Remove from initiative order.
+        * **Revived Participants:** Roll new initiative and join combat order accordingly.
+
+* **Step 6: Have DM Provide Post-Resolution Reaction Window**: After the action's outcome and status changes are resolved, direct the DM to provide a second window for any participant to use a Reaction in response to the outcome. If a Reaction is declared, you initiate this adjudication sub-routine recursively for that Reaction.
+
+---
+
+### **Phase 3: Combat End**
+This phase concludes the encounter and establishes the immediate aftermath.
+
+1.  **Determine Combat Conclusion**: The combat ends when one side is entirely neutralized (incapacitated, killed, or has fled) or when a pre-determined objective has been met.
+
+2.  **Announce End of Combat**: Formally declare that the structured combat encounter has concluded.
+
+3.  **Summarize Outcome**: Provide a concise summary of the final state of all participants.
+
+4.  **Report Lasting Effects**: Identify and announce any ongoing effects whose durations will extend beyond the end of combat, specifying their remaining duration.
