@@ -1,0 +1,45 @@
+```xml
+<turn_log>
+  <message type="player">I want to cast Fireball at the goblin group</message>
+  <message type="dm">What's your spell save DC?</message>
+  <message type="player">DC 15 Dexterity save, using 3rd level slot</message>
+  <message type="dm">Goblins roll saves... Chief got 18, others failed</message>
+  <message type="dm">The chief tries to counter your spell!</message>
+  
+  <reaction id="2.1" character="Goblin Chief" level="1">
+    <action>"Not today, witch!" the chief snarls, weaving desperate Counterspell magic</action>
+    <reaction id="2.1.1" character="Alice" level="2">
+      <action>Alice recognizes the counter-magic and fights back with her own Counterspell (rolled 15)</action>
+      <resolution>Alice's superior magical training overcomes the crude attempt</resolution>
+    </reaction>
+    <resolution>The goblin's spell fizzles as Alice's magic dominates the weave</resolution>
+  </reaction>
+  
+  <message type="player">Yes! Does my Fireball go off?</message>
+  <message type="dm">Your counter succeeds! Fireball explodes for 28 fire damage</message>
+  <message type="dm">The blast terrifies the survivors - they're fleeing!</message>
+
+  <reaction id="2.2" character="Surviving Goblins" level="1">
+    <action>Witnessing their chief's magical failure and comrades' immolation, remaining goblins flee in terror</action>
+    <resolution>Three goblins break formation and sprint for the cave entrance</resolution>
+  </reaction>
+</turn_log>
+```
+```xml
+<turn_log>
+  <message type="player">I carefully open the ancient, iron-bound chest.</message>
+  <message type="dm">You hear a faint click as a hidden mechanism is triggered!</message>
+  
+  <subturn_log id="3.1" cause="trap_sprung">
+    <message type="dm">A poison dart hisses out from the side of the chest! Roll a DC 15 Dexterity save.</message>
+    <message type="player">I'll use my Uncanny Dodge to get advantage on the save. I rolled a 19!</message>
+    <reaction id="3.1.1" character="Bob" level="1">
+      <action>"Look out!" Bob shouts, attempting to deflect the dart with his shield.</action>
+      <resolution>The dart deflects harmlessly, clattering against the stone floor.</resolution>
+    </reaction>
+  </subturn_log>
+  <subturn_end id="3.1"/>
+  
+  <message type="dm">After the commotion, you see that the chest's lid is now open. Inside, you find a pile of gold coins and a small leather pouch.</message>
+</turn_log>
+```
