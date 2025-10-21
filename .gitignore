@@ -18,3 +18,8 @@ wheels/
 .logfire
 .claude
 test_box_example.py
+test_pydantic.py
+test_pydantic2.py
+
+#specstory ignore for now
+.specstory/
