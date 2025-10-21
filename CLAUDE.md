@@ -36,6 +36,13 @@ User Interface (CLI/Web) → SessionManager → DungeonMasterAgent → Gemini AI
   - `session_manager.py`: **Primary interface** - owns DungeonMasterAgent and orchestrates entire session workflow
   - `state_manager.py`: Handles character and game state updates
 
+- **Turn Management System** (`src/memory/`, `src/agents/`, `src/models/`): **Hierarchical combat turn tracking with context isolation**
+  - `turn_manager.py`: **Core turn orchestration** - manages hierarchical turn/sub-turn stack with context isolation for state extraction
+  - `turn_condensation_agent.py`: AI agent that condenses completed turns into structured action-resolution summaries for storytelling
+  - `dm_context_builder.py`: Builds comprehensive chronological context for DM with full turn hierarchy and nested structure
+  - `state_extractor_context_builder.py`: Builds isolated context for state extraction (current turn only) to prevent duplicate extractions
+  - `turn_message.py`: Message types (LIVE_MESSAGE, COMPLETED_SUBTURN) with selective filtering for different consumers
+
 - **Vector Database & Knowledge** (`src/db/`):
   - `combat_rules.json`: 442-line comprehensive D&D 5e combat rules with semantic tags
   - `vector_service.py`: Qdrant integration with Google embeddings (`gemini-embedding-001`)
@@ -107,6 +114,13 @@ uv run python src/db/test_vector_db.py
 uv run pytest
 uv run pytest -v  # verbose output
 uv run pytest path/to/specific_test.py  # single test file
+uv run pytest tests/ -k "memory"  # run memory-related tests
+```
+
+**Test turn management:**
+```bash
+uv run python test_turn_management.py  # comprehensive turn system testing
+uv run python minimal_turn_test.py     # minimal turn functionality test
 ```
 
 ## Key Features & Architecture Patterns
@@ -134,6 +148,14 @@ uv run pytest path/to/specific_test.py  # single test file
 - **External Dependencies**: Receives `message_history` parameter, no internal state management
 - **Factory pattern**: `create_dungeon_master_agent()` creates lightweight agents for SessionManager use
 - **Dual AI models**: Gemini 2.5 Flash for main interactions, Gemini 1.5 Flash for summarization
+
+### Turn Management System (Combat Architecture)
+- **Hierarchical turn tracking**: Stack-based turn/sub-turn management (Level 0=main turns, Level 1+=sub-turns/reactions)
+- **Context isolation**: Each turn maintains isolated context to prevent duplicate state extractions
+- **Action resolution vs turn conclusion separation**: `resolve_action()` handles immediate state updates, `end_turn()` handles cleanup only
+- **Turn condensation**: AI-powered compression of completed turns into structured action-resolution summaries with narrative preservation
+- **Dual context builders**: DM gets full chronological context, StateExtractor gets isolated current-turn context
+- **Message type filtering**: LIVE_MESSAGE vs COMPLETED_SUBTURN with selective filtering for different consumers
 
 ### Vector Search Integration
 - **Qdrant vector database**: Semantic search for D&D combat rules using `gemini-embedding-001`
@@ -179,6 +201,28 @@ state_processing = results["state_processing"] # If state management enabled
 errors = results["errors"]                    # Any processing errors
 ```
 
+### Turn Management Integration Pattern (Combat Sessions)
+```python
+# For combat sessions with turn-based mechanics
+turn_manager = TurnManager(state_extractor, turn_condensation_agent)
+
+# Start a new turn
+turn_id = await turn_manager.start_turn(
+    active_character="Alice",
+    turn_metadata={"initiative": 15, "combat_round": 2}
+)
+
+# Resolve actions during the turn (applies state changes immediately)
+state_result = await turn_manager.resolve_action(
+    action_context="Alice attacks with longsword",
+    metadata={"damage_roll": 8}
+)
+
+# End turn (cleanup and condensation)
+turn_result = await turn_manager.end_turn()
+condensed_summary = turn_result["condensation_result"].condensed_summary
+```
+
 ### Legacy Direct Agent Pattern (For Advanced Use Cases)
 ```python
 # Direct agent usage when you need fine-grained control
@@ -206,6 +250,11 @@ The system uses three key message types for different purposes:
    - `ModelResponse` with `TextPart` for DM responses
    - Serialized using `ModelMessagesTypeAdapter` and `to_jsonable_python()`
 
+4. **TurnMessage** (`src/models/turn_message.py`): Turn-based context management
+   - Contains `content`, `message_type`, `turn_origin`, `timestamp`
+   - Types: `LIVE_MESSAGE` (active conversation) vs `COMPLETED_SUBTURN` (condensed results)
+   - Factory methods: `create_live_message()`, `create_completed_subturn_message()`
+
 ### Key Architectural Decisions
 
 - **Session-Centric Design**: SessionManager serves as the primary interface, owning and orchestrating all other components including the DM agent
@@ -214,6 +263,9 @@ The system uses three key message types for different purposes:
 - **History vs Context Separation**: Character status is contextual information (provided fresh each turn) but never stored in history (which only contains conversational content)
 - **Content-Based Token Counting**: Token estimation reflects only the content actually stored in filtered history, not full conversation including tool calls
 - **Unified Interface**: SessionManager provides consistent API regardless of underlying agent configuration or output format
+- **Turn-Based Context Isolation**: StateExtractor sees only current turn context to prevent duplicate extractions, while DM sees full chronological context
+- **Action Resolution Timing**: State changes applied during action resolution (proper D&D timing) rather than at turn end
+- **Progressive Turn Condensation**: Completed turns condensed into structured summaries for efficient context management and narrative preservation
 
 ## Development Workflow Notes
 
