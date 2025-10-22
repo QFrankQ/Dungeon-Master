@@ -17,11 +17,12 @@ from pathlib import Path
 from pydantic_ai import Agent
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
+from dotenv import load_dotenv
+load_dotenv()
 from ..memory.turn_manager import TurnManager
 # from ..db.vector_service import VectorService
 from ..models.dm_response import DungeonMasterResponse
 import os
-
 import asyncio
 
 #TODO: gemini-2.5-flash defaults with thinking ability, may be turned off

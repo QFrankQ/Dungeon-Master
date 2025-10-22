@@ -17,6 +17,8 @@ from pathlib import Path
 from pydantic_ai import Agent
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
+from dotenv import load_dotenv
+load_dotenv()
 from ..models.gd_response import GameflowDirectorResponse
 from ..memory.turn_manager import TurnManager, TurnManagerSnapshot
 # from ..db.vector_service import VectorService
