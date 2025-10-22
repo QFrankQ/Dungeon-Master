@@ -14,13 +14,13 @@ from ..agents.state_extraction_orchestrator import (
     StateExtractionOrchestrator,
     create_state_extraction_orchestrator
 )
+from ..agents.dungeon_master import DungeonMasterAgent, create_dungeon_master_agent
 from .state_manager import StateManager, create_state_manager
-from .session_tools import SessionToolRegistry, create_default_tool_registry
-from .session_tools import StateExtractionTool
+# from .session_tools import SessionToolRegistry, create_default_tool_registry
+# from .session_tools import StateExtractionTool
 from .turn_manager import TurnManager, create_turn_manager
 from .player_character_registry import PlayerCharacterRegistry, create_player_character_registry
-from ..agents.gameflow_director import GameflowDirectorAgent
-from ..models.turn_message import TurnMessage, MessageType
+from ..agents.gameflow_director import GameflowDirectorAgent, create_gameflow_director
 from ..models.gd_response import GameflowDirectorResponse
 from ..context.gd_context_builder import GDContextBuilder
 from ..context.dm_context_builder import DMContextBuilder
@@ -30,7 +30,6 @@ from ..models.state_updates import StateExtractionResult
 # Forward reference to avoid circular import - will import in factory function
 from typing import TYPE_CHECKING
 
-from models import dm_response
 if TYPE_CHECKING:
     from ..agents.dungeon_master import DungeonMasterAgent
 
@@ -53,7 +52,7 @@ class SessionManager:
         state_extraction_orchestrator: Optional[StateExtractionOrchestrator] = None,
         state_manager: Optional[StateManager] = None,
         enable_state_management: bool = True,
-        tool_registry: Optional[SessionToolRegistry] = None,
+        # tool_registry: Optional[SessionToolRegistry] = None,
         turn_manager: Optional[TurnManager] = None,
         enable_turn_management: bool = False,
         player_character_registry: Optional[PlayerCharacterRegistry] = None
@@ -93,7 +92,7 @@ class SessionManager:
         self.player_character_registry: PlayerCharacterRegistry = player_character_registry or create_player_character_registry()
         
         # Initialize tool registry
-        self.tool_registry = tool_registry or create_default_tool_registry()
+        # self.tool_registry = tool_registry or create_default_tool_registry()
 
         # Initialize context builders
         self.gd_context_builder = GDContextBuilder()
@@ -101,9 +100,9 @@ class SessionManager:
         self.state_extractor_context_builder = StateExtractorContextBuilder
 
         # Register default tools if components are available
-        if self.state_extraction_orchestrator and self.state_manager:
-            state_tool = StateExtractionTool(self.state_extraction_orchestrator, self.state_manager)
-            self.tool_registry.register_tool(state_tool)
+        # if self.state_extraction_orchestrator and self.state_manager:
+        #     state_tool = StateExtractionTool(self.state_extraction_orchestrator, self.state_manager)
+        #     self.tool_registry.register_tool(state_tool)
         
         # Session state
         self.session_context: Dict[str, Any] = {}
@@ -570,7 +569,7 @@ class SessionManager:
 def create_session_manager(
     enable_state_management: bool = True,
     character_data_path: str = "src/characters/",
-    tool_registry: Optional[SessionToolRegistry] = None,
+    # tool_registry: Optional[SessionToolRegistry] = None,
     agent_instructions: Optional[str] = None,
     use_structured_output: bool = True,
     dungeon_master_agent: Optional["DungeonMasterAgent"] = None,
@@ -593,9 +592,6 @@ def create_session_manager(
     Returns:
         Configured SessionManager instance with DM agent
     """
-    # Import here to avoid circular imports
-    from ..agents.agents import create_dungeon_master_agent
-    
     # Create or use provided DM agent
     if dungeon_master_agent is None:
         dungeon_master_agent = create_dungeon_master_agent(
@@ -604,7 +600,7 @@ def create_session_manager(
         )
     
     # Create other components
-    state_extractor = create_state_extractor_agent()
+    state_extractor = create_state_extraction_orchestrator()
     state_manager = create_state_manager(character_data_path)
     
     return SessionManager(
@@ -612,7 +608,7 @@ def create_session_manager(
         state_extractor=state_extractor,
         state_manager=state_manager,
         enable_state_management=enable_state_management,
-        tool_registry=tool_registry,
+        # tool_registry=tool_registry,
         turn_manager=turn_manager,
         enable_turn_management=enable_turn_management
     )
