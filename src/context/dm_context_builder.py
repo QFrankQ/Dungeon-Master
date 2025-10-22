@@ -134,5 +134,65 @@ class DMContextBuilder:
                     context_parts.append(f"{indent}{line}")
                 else:
                     context_parts.append("")
-        
+
+        return "\n".join(context_parts)
+
+    # ===== DEMO METHOD (Simplified for demo purposes) =====
+
+    def build_demo_context(
+        self,
+        turn_manager_snapshots: TurnManagerSnapshot,
+        new_message_entries: Optional[List[Dict[str, Any]]] = None
+    ) -> str:
+        """
+        DEMO VERSION: Build simplified DM context without game state, rules, etc.
+
+        Differences from original:
+        - No game state information
+        - No rule lookups
+        - Only includes: step objective, turn logs, and new messages
+        - Simplified for demo purposes
+
+        Args:
+            turn_manager_snapshots: Current turn manager state snapshot
+            new_message_entries: Optional list of message entry dictionaries with keys:
+                - 'player_message': ChatMessage object or string
+                - 'player_id': Player's ID
+                - 'character_id': Character name/ID
+
+        Returns:
+            Simplified context string with turn logs and new messages only
+        """
+        context_parts = []
+        completed_turns = turn_manager_snapshots.completed_turns
+
+        # Add current step objective
+        context_parts.append("<step_objective>")
+        context_parts.append(turn_manager_snapshots.current_step_objective or "Begin the adventure")
+        context_parts.append("</step_objective>")
+        context_parts.append("")
+
+        # Add recent completed turns history (if available)
+        if completed_turns:
+            context_parts.append("<history_turns>")
+            for turn in completed_turns[-3:]:  # Last 3 completed turns
+                context_parts.append(turn.get_turn_summary())
+            context_parts.append("</history_turns>")
+            context_parts.append("")
+
+        # Add current turn context
+        context_parts.append("<current_turn>")
+        context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level))
+        context_parts.append("</current_turn>")
+        context_parts.append("")
+
+        # Build new messages (if provided as parameter)
+        if new_message_entries:
+            context_parts.append("<new_messages>")
+            for message_entry in new_message_entries:
+                xml_message = self._convert_message_entry_to_xml(message_entry)
+                context_parts.append(xml_message)
+            context_parts.append("</new_messages>")
+            context_parts.append("")
+
         return "\n".join(context_parts)
