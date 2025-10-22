@@ -15,17 +15,15 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 
 from pydantic_ai import Agent
-from pydantic_ai.agent import _system_prompt
-from pydantic_ai.models.gemini import GeminiModel
-
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
 from ..models.gd_response import GameflowDirectorResponse
 from ..memory.turn_manager import TurnManager, TurnManagerSnapshot
-from ..db.vector_service import VectorService
+# from ..db.vector_service import VectorService
 from ..models.turn_message import TurnMessage
-from ..models.dm_response import DMResponse
+# from ..models.dm_response import DMResponse
 import os
-from pydantic_ai.models.gemini import GeminiModel
-from pydantic_ai.providers.google_gla import GoogleGLAProvider
+
 import asyncio
 
 #TODO: gemini-2.5-flash defaults with thinking ability, may be turned off
@@ -42,7 +40,7 @@ class GameflowDirectorAgent:
     def __init__(
         self,
         turn_manager: Optional[TurnManager] = None,
-        vector_service: Optional[VectorService] = None,
+        # vector_service: Optional[VectorService] = None,
         model_name: str = "gemini-2.0-flash-exp"
     ):
         """
@@ -56,14 +54,14 @@ class GameflowDirectorAgent:
         # Initialize components
         # self.flow_tracker = create_game_flow_tracker()
         self.turn_manager = turn_manager
-        self.vector_service = vector_service
+        # self.vector_service = vector_service
         # Load combat arbiter script
         self.combat_arbiter_script = self._load_combat_arbiter_script()
         
         # Initialize PydanticAI agent
-        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-        self.model = GeminiModel(
-            MODEL_NAME, provider=GoogleGLAProvider(api_key=GEMINI_API_KEY)
+        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+        self.model = GoogleModel(
+            MODEL_NAME, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
         )
         self.agent = self._create_agent()
         
@@ -209,7 +207,7 @@ You orchestrate combat flow by **setting the right step objectives** and **manag
 
 def create_gameflow_director(
     turn_manager: Optional[TurnManager] = None,
-    vector_service: Optional[VectorService] = None,
+    # vector_service: Optional[VectorService] = None,
     model_name: str = "gemini-2.0-flash-exp"
 ) -> GameflowDirectorAgent:
     """
@@ -225,6 +223,6 @@ def create_gameflow_director(
     """
     return GameflowDirectorAgent(
         turn_manager=turn_manager,
-        vector_service=vector_service,
+        # vector_service=vector_service,
         model_name=model_name
     )
