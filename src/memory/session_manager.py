@@ -439,6 +439,133 @@ class SessionManager:
             return False
         return self.turn_manager.is_in_turn()
 
+    # ===== DEMO METHODS (Simplified for demo purposes) =====
+
+    async def demo_process_player_input(
+        self,
+        new_messages: List[ChatMessage],
+        mock_next_objective: Optional[str] = None
+    ) -> List[str]:
+        """
+        DEMO VERSION: Simplified process_player_input without GD and state management.
+
+        Differences from original:
+        - No GD agent invocation (uses mock objective instead)
+        - No state extraction or updates
+        - Simplified context building (turn logs + new messages only)
+        - Re-runs DM with new objective when step completes
+        - Returns simple list of narrative responses
+
+        Args:
+            new_messages: List of player chat messages
+            mock_next_objective: Optional mock objective for when step completes
+
+        Returns:
+            List of narrative response strings
+        """
+        if not self.dungeon_master_agent:
+            raise ValueError("No DungeonMasterAgent configured.")
+
+        # === PHASE 1: INPUT PROCESSING ===
+        new_messages_holder = []
+        for player_message in new_messages:
+            character_name = self.player_character_registry.get_character_id_by_player_id(player_message.character_id)
+            message_entry = {
+                'player_message': player_message,
+                'player_id': player_message.character_id,
+                'character_id': character_name
+            }
+            new_messages_holder.append(message_entry)
+
+        # Get turn manager snapshot
+        turn_manager_snapshot = self.turn_manager.get_snapshot()
+
+        # === PHASE 2: DM PROCESSING ===
+        # Build simplified DM context (without game state, rules, etc)
+        dungeon_master_context = self.dm_context_builder.build_demo_context(
+            turn_manager_snapshots=turn_manager_snapshot,
+            new_message_entries=new_messages_holder
+        )
+
+        # Run DM agent and get response
+        dungeon_master_response: DungeonMasterResponse = await self.dungeon_master_agent.process_message(dungeon_master_context)
+
+        # === PHASE 3: PROCESS DM RESPONSE ===
+        response_queue: List[str] = []
+        response_queue.append(dungeon_master_response.narrative)
+
+        # Add DM narrative to message holder
+        dungeon_master_narrative_entry = {
+            'player_message': dungeon_master_response.narrative,
+            'player_id': None,
+            'character_id': "DM"
+        }
+        new_messages_holder.append(dungeon_master_narrative_entry)
+
+        # === PHASE 4: CHECK FOR STEP COMPLETION (SIMPLIFIED WITH MOCK GD) ===
+        if not dungeon_master_response.game_step_completed:
+            # Add messages to turn stack
+            for message_entry in new_messages_holder:
+                message, speaker = message_entry["player_message"], message_entry["character_id"]
+                if isinstance(message, ChatMessage):
+                    self.turn_manager.add_new_message(new_message=message.text, speaker=speaker)
+                else:
+                    self.turn_manager.add_new_message(new_message=message, speaker=speaker)
+        else:
+            # WHILE loop for step completion (matching original structure)
+            while dungeon_master_response.game_step_completed:
+                # Add messages to turn stack BEFORE mock GD processing
+                for message_entry in new_messages_holder:
+                    message, speaker = message_entry["player_message"], message_entry["character_id"]
+                    if isinstance(message, ChatMessage):
+                        self.turn_manager.add_new_message(new_message=message.text, speaker=speaker)
+                    else:
+                        self.turn_manager.add_new_message(new_message=message, speaker=speaker)
+
+                # MOCK GD: Simply set next objective (no actual GD agent call)
+                if mock_next_objective:
+                    self.turn_manager.set_next_step_objective(mock_next_objective)
+                    print(f"\n[DEMO MOCK GD] Step completed. Next objective: {mock_next_objective}")
+                else:
+                    # Default mock objective
+                    default_objective = "Receive and process the next player action"
+                    self.turn_manager.set_next_step_objective(default_objective)
+                    print(f"\n[DEMO MOCK GD] Step completed. Next objective: {default_objective}")
+
+                # Clear new_messages_holder for next DM run
+                new_messages_holder = []
+
+                # RE-RUN DM with new objective
+                turn_manager_snapshot = self.turn_manager.get_snapshot()
+                dungeon_master_context = self.dm_context_builder.build_demo_context(
+                    turn_manager_snapshots=turn_manager_snapshot,
+                    new_message_entries=[]  # Empty since messages already added to turn
+                )
+                dungeon_master_response = await self.dungeon_master_agent.process_message(dungeon_master_context)
+
+                # Add new DM response to queue
+                response_queue.append(dungeon_master_response.narrative)
+
+                # Add new DM narrative to message holder and turn
+                dungeon_master_narrative_entry = {
+                    'player_message': dungeon_master_response.narrative,
+                    'player_id': None,
+                    'character_id': "DM"
+                }
+                new_messages_holder.append(dungeon_master_narrative_entry)
+
+                # Continue loop if still signaling completion
+
+        return response_queue
+
+    def demo_process_player_input_sync(
+        self,
+        new_messages: List[ChatMessage],
+        mock_next_objective: Optional[str] = None
+    ) -> List[str]:
+        """Synchronous version of demo_process_player_input."""
+        return asyncio.run(self.demo_process_player_input(new_messages, mock_next_objective))
+
 
 def create_session_manager(
     enable_state_management: bool = True,
