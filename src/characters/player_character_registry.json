@@ -1,0 +1,9 @@
+{
+  "player_to_character": {
+    "demo_player": "Hero"
+  },
+  "character_to_player": {
+    "Hero": "demo_player"
+  },
+  "last_updated": "2025-10-23T15:40:41.896836"
+}
