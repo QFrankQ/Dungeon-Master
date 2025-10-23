@@ -39,7 +39,7 @@ class DungeonMasterAgent:
         self,
         turn_manager: Optional[TurnManager] = None,
         # vector_service: Optional[VectorService] = None,
-        model_name: str = "gemini-2.0-flash-exp"
+        model_name: str = MODEL_NAME
     ):
         """
         Initialize the Dungeon Master LLM Agent.
@@ -56,7 +56,7 @@ class DungeonMasterAgent:
         # Initialize PydanticAI agent
         GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
         self.model = GoogleModel(
-            MODEL_NAME, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
+            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
         )
         self.agent = self._create_agent()
 
@@ -74,20 +74,22 @@ class DungeonMasterAgent:
     async def process_message(
         self,
         context: str
-    ) -> DungeonMasterResponse:
+    ):
         """
-        Process a pre-built context and return Dungeon Master response.
+        Process a pre-built context and return Dungeon Master AgentRunResult.
 
         Args:
             context: Pre-built context string from external context builder
 
         Returns:
-            DungeonMasterResponse with narrative and step completion status
+            AgentRunResult containing:
+                - output: DungeonMasterResponse with narrative and step completion status
+                - usage(): Method to get token and request usage
         """
         # Get response from LLM agent using pre-built context
         result = await self.agent.run(context)
 
-        return result.output
+        return result
     
     def process_message_sync(
         self,
@@ -112,7 +114,7 @@ class DungeonMasterAgent:
 def create_dungeon_master_agent(
     turn_manager: Optional[TurnManager] = None,
     # vector_service: Optional[VectorService] = None,
-    model_name: str = "gemini-2.0-flash-exp"
+    model_name: str = MODEL_NAME
 ) -> DungeonMasterAgent:
     """
     Factory function to create a configured Dungeon Master Agent.
