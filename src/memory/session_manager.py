@@ -78,10 +78,10 @@ class SessionManager:
         self.dungeon_master_agent: DungeonMasterAgent = dungeon_master_agent
         
         # Initialize components
-        self.state_extraction_orchestrator = (
-            state_extraction_orchestrator or create_state_extraction_orchestrator()
-        )
-        self.state_manager = state_manager or create_state_manager()
+        # self.state_extraction_orchestrator = (
+        #     state_extraction_orchestrator or create_state_extraction_orchestrator()
+        # )
+        # self.state_manager = state_manager or create_state_manager()
 
         # Initialize turn manager (optional)
         self.turn_manager = turn_manager
@@ -107,6 +107,9 @@ class SessionManager:
         # Session state
         self.session_context: Dict[str, Any] = {}
         self.recent_narratives: list = []
+
+        # Demo-specific: track current step in mock combat flow
+        self._demo_step_index = 0
         
     async def process_player_input(
         self,
@@ -440,11 +443,26 @@ class SessionManager:
 
     # ===== DEMO METHODS (Simplified for demo purposes) =====
 
+    # Mock combat game steps based on combat_flow.txt
+    # These represent a typical combat turn action lifecycle
+    _DEMO_COMBAT_STEPS = [
+        "Greet the player and describe the initial combat scene. DO NOT ask for initiative yet. DO NOT advance past scene description.",
+        "Call for initiative rolls from all participants. Wait for the player to provide their initiative roll. DO NOT proceed until you have the roll. Once you have all the rolls, announce the initiative order then PROCEED to the next step.",
+        "Receive and interpret the player's declared action. If the action is ambiguous, ask clarifying questions. DO NOT resolve the action yet.",
+        "Provide pre-resolution reaction window: Ask if anyone wants to use reactions BEFORE the action resolves. Resolve any declared reactions before proceeding.",
+        "Resolve the declared action: Request any necessary rolls (attack, damage, etc) and provide narrative outcome once rolls are complete.",
+        "Handle critical status changes: Check for zero hit points, unconsciousness, or death. IF any are detected, describe the outcomes, OTHERWISE proceed.",
+        "Provide post-resolution reaction window: Ask if anyone wants to use reactions AFTER the action. Resolve any declared reactions before proceeding.",
+        "Ask the active participant if they want to do anything else on their turn (bonus action, movement, item interaction). WAIT for their response. Resolve any additional actions they declare then PROCEED.",
+        "Check for turn-end effects: Apply any ongoing damage, conditions, or trigger Legendary Actions if applicable. OTHERWISE proceed to the next step.",
+        "Announce whose turn is next in initiative order and prompt them for their intended action."
+    ]
+
     async def demo_process_player_input(
         self,
         new_messages: List[ChatMessage],
         mock_next_objective: Optional[str] = None
-    ) -> List[str]:
+    ) -> Dict[str, Any]:
         """
         DEMO VERSION: Simplified process_player_input without GD and state management.
 
@@ -453,14 +471,16 @@ class SessionManager:
         - No state extraction or updates
         - Simplified context building (turn logs + new messages only)
         - Re-runs DM with new objective when step completes
-        - Returns simple list of narrative responses
+        - Returns responses with usage tracking
 
         Args:
             new_messages: List of player chat messages
             mock_next_objective: Optional mock objective for when step completes
 
         Returns:
-            List of narrative response strings
+            Dictionary with:
+                - "responses": List of narrative response strings
+                - "usage": Dict with token and request counts
         """
         if not self.dungeon_master_agent:
             raise ValueError("No DungeonMasterAgent configured.")
@@ -468,17 +488,16 @@ class SessionManager:
         # === PHASE 1: INPUT PROCESSING ===
         new_messages_holder = []
         for player_message in new_messages:
-            character_name = self.player_character_registry.get_character_id_by_player_id(player_message.character_id)
+            character_name = self.player_character_registry.get_character_id_by_player_id(player_message.player_id)
             message_entry = {
                 'player_message': player_message,
-                'player_id': player_message.character_id,
+                'player_id': player_message.player_id,
                 'character_id': character_name
             }
             new_messages_holder.append(message_entry)
 
         # Get turn manager snapshot
         turn_manager_snapshot = self.turn_manager.get_snapshot()
-
         # === PHASE 2: DM PROCESSING ===
         # Build simplified DM context (without game state, rules, etc)
         dungeon_master_context = self.dm_context_builder.build_demo_context(
@@ -486,13 +505,20 @@ class SessionManager:
             new_message_entries=new_messages_holder
         )
 
-        # Run DM agent and get response
-        dungeon_master_response: DungeonMasterResponse = await self.dungeon_master_agent.process_message(dungeon_master_context)
+        # Run DM agent and get result (with usage tracking)
+        dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context)
+        dungeon_master_response: DungeonMasterResponse = dm_result.output
+
+        # Track usage from this run
+        run_usage = dm_result.usage()
+        total_input_tokens = run_usage.input_tokens if run_usage else 0
+        total_output_tokens = run_usage.output_tokens if run_usage else 0
+        total_requests = run_usage.requests if run_usage else 0
 
         # === PHASE 3: PROCESS DM RESPONSE ===
         response_queue: List[str] = []
         response_queue.append(dungeon_master_response.narrative)
-
+        # response_queue.append(f"[USAGE] Input Tokens: {run_usage.input_tokens}, Output Tokens: {run_usage.output_tokens}, Requests: {run_usage.requests}")
         # Add DM narrative to message holder
         dungeon_master_narrative_entry = {
             'player_message': dungeon_master_response.narrative,
@@ -500,7 +526,6 @@ class SessionManager:
             'character_id': "DM"
         }
         new_messages_holder.append(dungeon_master_narrative_entry)
-
         # === PHASE 4: CHECK FOR STEP COMPLETION (SIMPLIFIED WITH MOCK GD) ===
         if not dungeon_master_response.game_step_completed:
             # Add messages to turn stack
@@ -521,16 +546,18 @@ class SessionManager:
                     else:
                         self.turn_manager.add_new_message(new_message=message, speaker=speaker)
 
-                # MOCK GD: Simply set next objective (no actual GD agent call)
+                # MOCK GD: Simply set next objective from combat steps list
                 if mock_next_objective:
-                    self.turn_manager.set_next_step_objective(mock_next_objective)
-                    print(f"\n[DEMO MOCK GD] Step completed. Next objective: {mock_next_objective}")
+                    # Allow override if explicitly provided
+                    next_objective = mock_next_objective
                 else:
-                    # Default mock objective
-                    default_objective = "Receive and process the next player action"
-                    self.turn_manager.set_next_step_objective(default_objective)
-                    print(f"\n[DEMO MOCK GD] Step completed. Next objective: {default_objective}")
+                    # Cycle through demo combat steps
+                    self._demo_step_index = (self._demo_step_index + 1) % len(self._DEMO_COMBAT_STEPS)
+                    next_objective = self._DEMO_COMBAT_STEPS[self._demo_step_index]
 
+                self.turn_manager.set_next_step_objective(next_objective)
+                response_queue.append(f"\n[DEMO MOCK GD] Step completed. Next objective: {next_objective}")
+                
                 # Clear new_messages_holder for next DM run
                 new_messages_holder = []
 
@@ -540,11 +567,19 @@ class SessionManager:
                     turn_manager_snapshots=turn_manager_snapshot,
                     new_message_entries=[]  # Empty since messages already added to turn
                 )
-                dungeon_master_response = await self.dungeon_master_agent.process_message(dungeon_master_context)
+                dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context)
+                dungeon_master_response = dm_result.output
+
+                # Track usage from re-run
+                run_usage = dm_result.usage()
+                if run_usage:
+                    total_input_tokens += run_usage.input_tokens
+                    total_output_tokens += run_usage.output_tokens
+                    total_requests += run_usage.requests
 
                 # Add new DM response to queue
                 response_queue.append(dungeon_master_response.narrative)
-
+                # response_queue.append(f"[USAGE] Input Tokens: {run_usage.input_tokens}, Output Tokens: {run_usage.output_tokens}, Requests: {run_usage.requests}")
                 # Add new DM narrative to message holder and turn
                 dungeon_master_narrative_entry = {
                     'player_message': dungeon_master_response.narrative,
@@ -555,13 +590,21 @@ class SessionManager:
 
                 # Continue loop if still signaling completion
 
-        return response_queue
+        return {
+            "responses": response_queue,
+            "usage": {
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens,
+                "total_tokens": total_input_tokens + total_output_tokens,
+                "requests": total_requests
+            }
+        }
 
     def demo_process_player_input_sync(
         self,
         new_messages: List[ChatMessage],
         mock_next_objective: Optional[str] = None
-    ) -> List[str]:
+    ) -> Dict[str, Any]:
         """Synchronous version of demo_process_player_input."""
         return asyncio.run(self.demo_process_player_input(new_messages, mock_next_objective))
 
@@ -600,8 +643,9 @@ def create_session_manager(
         )
     
     # Create other components
-    state_extractor = create_state_extraction_orchestrator()
-    state_manager = create_state_manager(character_data_path)
+    if enable_state_management:
+        state_extractor = create_state_extraction_orchestrator()
+        state_manager = create_state_manager(character_data_path)
     
     return SessionManager(
         dungeon_master_agent=dungeon_master_agent,
