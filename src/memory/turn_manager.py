@@ -482,12 +482,53 @@ class TurnManager:
     def end_turn_sync(self) -> Dict[str, Any]:
         """Synchronous version of end_turn."""
         return asyncio.run(self.end_turn())
-    
+
+    # TODO: Should be deprecated in favor of add_messages, keep for now for backward compatibility
     def add_new_message(self, new_message: str, speaker: str):
         if not self.turn_stack or not self.turn_stack[-1]:
             raise Exception("Empty TurnStack, add_new_message failed")
         current_turn = self.turn_stack[-1][0]  # First turn in current level queue
         current_turn.add_live_message(new_message, speaker)
+
+    def add_messages(self, messages: List[Dict[str, str]]) -> None:
+        """
+        Add one or more messages to current turn with automatic batching.
+
+        - If len == 1: Adds as individual TurnMessage
+        - If len > 1: Adds as MessageGroup (batched together)
+
+        This provides a unified interface that encapsulates TurnMessage creation
+        and automatically handles single vs batch semantics.
+
+        Args:
+            messages: List of {"content": str, "speaker": str} dicts
+
+        Raises:
+            ValueError: If no active turn or messages list is empty
+        """
+        if not messages:
+            raise ValueError("Cannot add empty messages list")
+
+        current_turn = self.get_current_turn_context()
+        if not current_turn:
+            raise ValueError("No active turn to add messages to")
+
+        if len(messages) == 1:
+            # Single message - add directly as individual TurnMessage
+            msg = messages[0]
+            current_turn.add_live_message(msg["content"], msg["speaker"])
+        else:
+            # Multiple messages - create as MessageGroup for batch semantics
+            turn_messages = []
+            for msg in messages:
+                turn_msg = create_live_message(
+                    content=msg["content"],
+                    turn_origin=current_turn.turn_id,
+                    turn_level=str(current_turn.turn_level),
+                    speaker=msg["speaker"]
+                )
+                turn_messages.append(turn_msg)
+            current_turn.add_message_group(turn_messages)
 
     def create_message_xml(self, content: str, speaker: str) -> str:
         """
