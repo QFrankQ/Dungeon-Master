@@ -26,7 +26,6 @@ from ..context.gd_context_builder import GDContextBuilder
 from ..context.dm_context_builder import DMContextBuilder
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
 from ..models.state_updates import StateExtractionResult
-from ..models.turn_message import MessageGroup
 
 # Forward reference to avoid circular import - will import in factory function
 from typing import TYPE_CHECKING
@@ -525,17 +524,8 @@ class SessionManager:
         response_queue: List[str] = []
         response_queue.append(dungeon_master_response.narrative)
 
-        # Mark the message(s) as responded to (DM has now responded to it)
-        #TODO: can we do mark as processed in batch in TurnManager?
-        if current_turn.messages and isinstance(current_turn.messages[-1], MessageGroup):
-            # The last item should be the MessageGroup we just added
-            current_turn.messages[-1].mark_as_processed()
-
-        current_turn = self.turn_manager.get_current_turn_context()
-        if current_turn.messages:
-            last_item = current_turn.messages[-1]
-            # Mark as responded whether it's a MessageGroup or individual TurnMessage
-            last_item.mark_as_responded()
+        # Mark the player message(s) as responded to (DM has now responded to it)
+        self.turn_manager.mark_new_messages_as_responded()
 
         # Add DM narrative using unified TurnManager interface
         self.turn_manager.add_messages([{"content": dungeon_master_response.narrative, "speaker": "DM"}])
