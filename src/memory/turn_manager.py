@@ -530,7 +530,7 @@ class TurnManager:
                 turn_messages.append(turn_msg)
             current_turn.add_message_group(turn_messages)
 
-    def mark_last_messages_as_responded(self) -> None:
+    def mark_new_messages_as_responded(self) -> None:
         """
         Mark the most recently added message(s) as responded to by the DM.
 
