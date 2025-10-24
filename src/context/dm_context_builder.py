@@ -101,16 +101,17 @@ class DMContextBuilder:
         # Format as XML message with character context
         return f'<message speaker="{character_name}">{player_message.text}</message>'
     
-    def build_xml_context(self, active_turns_by_level: List[TurnContext]) -> str:
+    def build_xml_context(self, active_turns_by_level: List[TurnContext], exclude_new_messages: bool = False) -> str:
         """
         Build XML context for Dungeon Master with nested turn structure.
 
         Uses each TurnContext's to_xml_context method to build properly nested
-        XML with appropriate indentation for each turn level. Excludes the last
-        message from the deepest-level turn as it represents the new message.
+        XML with appropriate indentation for each turn level.
 
         Args:
             active_turns_by_level: First TurnContext from each level (provided by snapshot)
+            exclude_new_messages: Whether to exclude new messages
+                (they will be shown separately in <new_messages>)
 
         Returns:
             XML string with nested turn/subturn structure and proper indentation
@@ -121,14 +122,13 @@ class DMContextBuilder:
         context_parts = []
 
         for turn_context in active_turns_by_level:
-            # Get XML context from the turn (no need to exclude messages since
-            # new messages are passed separately as parameters)
-            turn_xml = turn_context.to_xml_context(exclude_last=False)
-            
+            # Get XML context from the turn
+            turn_xml = turn_context.to_xml_context(exclude_new_messages=exclude_new_messages)
+
             # Apply indentation based on turn level for nested structure
             indent = "  " * turn_context.turn_level
             xml_lines = turn_xml.split('\n')
-            
+
             for line in xml_lines:
                 if line.strip():  # Only indent non-empty lines
                     context_parts.append(f"{indent}{line}")
@@ -142,7 +142,7 @@ class DMContextBuilder:
     def build_demo_context(
         self,
         turn_manager_snapshots: TurnManagerSnapshot,
-        new_message_entries: Optional[List[Dict[str, Any]]] = None
+        # new_message_entries: Optional[List[Dict[str, Any]]] = None
     ) -> str:
         """
         DEMO VERSION: Build simplified DM context without game state, rules, etc.
@@ -151,14 +151,12 @@ class DMContextBuilder:
         - No game state information
         - No rule lookups
         - Only includes: step objective, turn logs, and new messages
-        - Simplified for demo purposes
+        - Automatically highlights unprocessed MessageGroups as "new"
 
         Args:
             turn_manager_snapshots: Current turn manager state snapshot
-            new_message_entries: Optional list of message entry dictionaries with keys:
-                - 'player_message': ChatMessage object or string
-                - 'player_id': Player's ID
-                - 'character_id': Character name/ID
+            new_message_entries: Optional list of message entry dictionaries (legacy support)
+                If provided, uses this instead of extracting from MessageGroups
 
         Returns:
             Simplified context string with turn logs and new messages only
@@ -180,19 +178,24 @@ class DMContextBuilder:
             context_parts.append("</history_turns>")
             context_parts.append("")
 
-        # Add current turn context
+        # Add current turn context (with processed messages and unprocessed groups hidden)
         context_parts.append("<current_turn>")
-        context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level))
+        context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level, exclude_unprocessed=True))
         context_parts.append("</current_turn>")
         context_parts.append("")
 
-        # Build new messages (if provided as parameter)
-        if new_message_entries:
-            context_parts.append("<new_messages>")
-            for message_entry in new_message_entries:
-                xml_message = self._convert_message_entry_to_xml(message_entry)
-                context_parts.append(xml_message)
-            context_parts.append("</new_messages>")
-            context_parts.append("")
+        # Highlight new messages
+        if turn_manager_snapshots.active_turns_by_level:
+            current_turn = turn_manager_snapshots.active_turns_by_level[-1]  # Deepest level is current
+
+            # Collect new messages - both TurnMessage and MessageGroup have is_new_message attribute
+            new_message_items = [item for item in current_turn.messages if item.is_new_message]
+
+            if new_message_items:
+                context_parts.append("<new_messages>")
+                for item in new_message_items:
+                    context_parts.append(item.to_xml_element())
+                context_parts.append("</new_messages>")
+                context_parts.append("")
 
         return "\n".join(context_parts)
