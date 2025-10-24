@@ -26,6 +26,7 @@ from ..context.gd_context_builder import GDContextBuilder
 from ..context.dm_context_builder import DMContextBuilder
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
 from ..models.state_updates import StateExtractionResult
+from ..models.turn_message import MessageGroup
 
 # Forward reference to avoid circular import - will import in factory function
 from typing import TYPE_CHECKING
@@ -486,23 +487,28 @@ class SessionManager:
             raise ValueError("No DungeonMasterAgent configured.")
 
         # === PHASE 1: INPUT PROCESSING ===
-        new_messages_holder = []
+        # Convert ChatMessages to simple dict format for unified interface
+        message_dicts = []
         for player_message in new_messages:
             character_name = self.player_character_registry.get_character_id_by_player_id(player_message.player_id)
-            message_entry = {
-                'player_message': player_message,
-                'player_id': player_message.player_id,
-                'character_id': character_name
-            }
-            new_messages_holder.append(message_entry)
+            message_dicts.append({
+                "content": player_message.text,
+                "speaker": character_name
+            })
 
-        # Get turn manager snapshot
-        turn_manager_snapshot = self.turn_manager.get_snapshot()
+        # Add messages to current turn using unified interface
+        # Automatically handles single vs batch (MessageGroup) based on count
+        if message_dicts:
+            self.turn_manager.add_messages(message_dicts)
+
         # === PHASE 2: DM PROCESSING ===
-        # Build simplified DM context (without game state, rules, etc)
+        # Get turn manager snapshot (includes the unprocessed MessageGroup)
+        turn_manager_snapshot = self.turn_manager.get_snapshot()
+
+        # Build simplified DM context (will automatically highlight unprocessed groups)
         dungeon_master_context = self.dm_context_builder.build_demo_context(
             turn_manager_snapshots=turn_manager_snapshot,
-            new_message_entries=new_messages_holder
+            new_message_entries=None  # No longer needed - groups detected automatically
         )
 
         # Run DM agent and get result (with usage tracking)
@@ -518,34 +524,29 @@ class SessionManager:
         # === PHASE 3: PROCESS DM RESPONSE ===
         response_queue: List[str] = []
         response_queue.append(dungeon_master_response.narrative)
-        # response_queue.append(f"[USAGE] Input Tokens: {run_usage.input_tokens}, Output Tokens: {run_usage.output_tokens}, Requests: {run_usage.requests}")
-        # Add DM narrative to message holder
-        dungeon_master_narrative_entry = {
-            'player_message': dungeon_master_response.narrative,
-            'player_id': None,
-            'character_id': "DM"
-        }
-        new_messages_holder.append(dungeon_master_narrative_entry)
+
+        # Mark the message(s) as responded to (DM has now responded to it)
+        #TODO: can we do mark as processed in batch in TurnManager?
+        if current_turn.messages and isinstance(current_turn.messages[-1], MessageGroup):
+            # The last item should be the MessageGroup we just added
+            current_turn.messages[-1].mark_as_processed()
+
+        current_turn = self.turn_manager.get_current_turn_context()
+        if current_turn.messages:
+            last_item = current_turn.messages[-1]
+            # Mark as responded whether it's a MessageGroup or individual TurnMessage
+            last_item.mark_as_responded()
+
+        # Add DM narrative using unified TurnManager interface
+        self.turn_manager.add_messages([{"content": dungeon_master_response.narrative, "speaker": "DM"}])
+
         # === PHASE 4: CHECK FOR STEP COMPLETION (SIMPLIFIED WITH MOCK GD) ===
         if not dungeon_master_response.game_step_completed:
-            # Add messages to turn stack
-            for message_entry in new_messages_holder:
-                message, speaker = message_entry["player_message"], message_entry["character_id"]
-                if isinstance(message, ChatMessage):
-                    self.turn_manager.add_new_message(new_message=message.text, speaker=speaker)
-                else:
-                    self.turn_manager.add_new_message(new_message=message, speaker=speaker)
+            # No step completion - done processing
+            pass
         else:
             # WHILE loop for step completion (matching original structure)
             while dungeon_master_response.game_step_completed:
-                # Add messages to turn stack BEFORE mock GD processing
-                for message_entry in new_messages_holder:
-                    message, speaker = message_entry["player_message"], message_entry["character_id"]
-                    if isinstance(message, ChatMessage):
-                        self.turn_manager.add_new_message(new_message=message.text, speaker=speaker)
-                    else:
-                        self.turn_manager.add_new_message(new_message=message, speaker=speaker)
-
                 # MOCK GD: Simply set next objective from combat steps list
                 if mock_next_objective:
                     # Allow override if explicitly provided
@@ -557,15 +558,12 @@ class SessionManager:
 
                 self.turn_manager.set_next_step_objective(next_objective)
                 response_queue.append(f"\n[DEMO MOCK GD] Step completed. Next objective: {next_objective}")
-                
-                # Clear new_messages_holder for next DM run
-                new_messages_holder = []
 
-                # RE-RUN DM with new objective
+                # RE-RUN DM with new objective (all messages already in turn)
                 turn_manager_snapshot = self.turn_manager.get_snapshot()
                 dungeon_master_context = self.dm_context_builder.build_demo_context(
                     turn_manager_snapshots=turn_manager_snapshot,
-                    new_message_entries=[]  # Empty since messages already added to turn
+                    new_message_entries=None  # All messages already added
                 )
                 dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context)
                 dungeon_master_response = dm_result.output
@@ -579,14 +577,9 @@ class SessionManager:
 
                 # Add new DM response to queue
                 response_queue.append(dungeon_master_response.narrative)
-                # response_queue.append(f"[USAGE] Input Tokens: {run_usage.input_tokens}, Output Tokens: {run_usage.output_tokens}, Requests: {run_usage.requests}")
-                # Add new DM narrative to message holder and turn
-                dungeon_master_narrative_entry = {
-                    'player_message': dungeon_master_response.narrative,
-                    'player_id': None,
-                    'character_id': "DM"
-                }
-                new_messages_holder.append(dungeon_master_narrative_entry)
+
+                # Add new DM narrative using unified TurnManager interface
+                self.turn_manager.add_messages([{"content": dungeon_master_response.narrative, "speaker": "DM"}])
 
                 # Continue loop if still signaling completion
 
