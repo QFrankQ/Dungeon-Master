@@ -137,7 +137,7 @@ import asyncio
 
 from ..models.formatted_game_message import FormattedGameMessage
 from ..models.turn_context import TurnContext, TurnExtractionContext
-from ..models.turn_message import create_live_message
+from ..models.turn_message import create_live_message, create_message_group
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
 
 # Optional imports for state extraction and message formatting
@@ -490,7 +490,7 @@ class TurnManager:
         current_turn = self.turn_stack[-1][0]  # First turn in current level queue
         current_turn.add_live_message(new_message, speaker)
 
-    def add_messages(self, messages: List[Dict[str, str]]) -> None:
+    def add_messages(self, messages: List[Dict[str, str]], is_new: bool = True) -> None:
         """
         Add one or more messages to current turn with automatic batching.
 
@@ -502,6 +502,9 @@ class TurnManager:
 
         Args:
             messages: List of {"content": str, "speaker": str} dicts
+            is_new: Whether these messages should be marked as new (default True).
+                   Set to False for DM responses to prevent them appearing as
+                   "new messages" in the next DM run.
 
         Raises:
             ValueError: If no active turn or messages list is empty
@@ -516,7 +519,14 @@ class TurnManager:
         if len(messages) == 1:
             # Single message - add directly as individual TurnMessage
             msg = messages[0]
-            current_turn.add_live_message(msg["content"], msg["speaker"])
+            turn_msg = create_live_message(
+                content=msg["content"],
+                turn_origin=current_turn.turn_id,
+                turn_level=str(current_turn.turn_level),
+                speaker=msg["speaker"],
+                is_new_message=is_new
+            )
+            current_turn.messages.append(turn_msg)
         else:
             # Multiple messages - create as MessageGroup for batch semantics
             turn_messages = []
@@ -525,10 +535,15 @@ class TurnManager:
                     content=msg["content"],
                     turn_origin=current_turn.turn_id,
                     turn_level=str(current_turn.turn_level),
-                    speaker=msg["speaker"]
+                    speaker=msg["speaker"],
+                    is_new_message=is_new
                 )
                 turn_messages.append(turn_msg)
-            current_turn.add_message_group(turn_messages)
+
+            # Create group and set is_new_message flag
+            message_group = create_message_group(turn_messages)
+            message_group.is_new_message = is_new
+            current_turn.messages.append(message_group)
 
     def mark_new_messages_as_responded(self) -> None:
         """

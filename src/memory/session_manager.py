@@ -528,7 +528,11 @@ class SessionManager:
         self.turn_manager.mark_new_messages_as_responded()
 
         # Add DM narrative using unified TurnManager interface
-        self.turn_manager.add_messages([{"content": dungeon_master_response.narrative, "speaker": "DM"}])
+        # Use is_new=False so DM response doesn't appear as "new" in next run
+        self.turn_manager.add_messages(
+            [{"content": dungeon_master_response.narrative, "speaker": "DM"}],
+            is_new=False
+        )
 
         # === PHASE 4: CHECK FOR STEP COMPLETION (SIMPLIFIED WITH MOCK GD) ===
         if not dungeon_master_response.game_step_completed:
@@ -569,7 +573,11 @@ class SessionManager:
                 response_queue.append(dungeon_master_response.narrative)
 
                 # Add new DM narrative using unified TurnManager interface
-                self.turn_manager.add_messages([{"content": dungeon_master_response.narrative, "speaker": "DM"}])
+                # Use is_new=False so DM response doesn't appear as "new" in next run
+                self.turn_manager.add_messages(
+                    [{"content": dungeon_master_response.narrative, "speaker": "DM"}],
+                    is_new=False
+                )
 
                 # Continue loop if still signaling completion
 

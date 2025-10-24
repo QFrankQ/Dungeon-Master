@@ -82,15 +82,23 @@ class TurnMessage:
             # Fallback for unknown message types
             return f'<unknown>{self.content}</unknown>'
 
-def create_live_message(content: str, turn_origin: str, turn_level: str, speaker: str = "player") -> TurnMessage:
+def create_live_message(
+    content: str,
+    turn_origin: str,
+    turn_level: str,
+    speaker: str = "player",
+    is_new_message: bool = True
+) -> TurnMessage:
     """
     Factory function to create a live conversation message.
-    
+
     Args:
         content: The message content
         turn_origin: ID of the turn this message belongs to
+        turn_level: Level of the turn (0=main, 1+=subturn)
         speaker: Speaker type ("player" or "dm")
-        
+        is_new_message: Whether this message should be marked as new (default True)
+
     Returns:
         TurnMessage configured for live conversation
     """
@@ -99,7 +107,8 @@ def create_live_message(content: str, turn_origin: str, turn_level: str, speaker
         speaker=speaker,
         message_type=MessageType.LIVE_MESSAGE,
         turn_origin=turn_origin,
-        turn_level = turn_level
+        turn_level=turn_level,
+        is_new_message=is_new_message
     )
 
 
