@@ -8,7 +8,7 @@ that supports selective filtering for different consumers (DM vs StateExtractor)
 from enum import Enum
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List
+from typing import List, Union
 
 from .chat_message import ChatMessage
 
@@ -101,11 +101,11 @@ def create_live_message(content: str, turn_origin: str, turn_level: str, speaker
 def create_completed_subturn_message(condensed_content: str, subturn_id: str, subturn_level: str) -> TurnMessage:
     """
     Factory function to create a condensed subturn result message.
-    
+
     Args:
         condensed_content: The condensed subturn action-resolution structure
         subturn_id: ID of the completed subturn
-        
+
     Returns:
         TurnMessage configured for condensed subturn result
     """
@@ -116,3 +116,71 @@ def create_completed_subturn_message(condensed_content: str, subturn_id: str, su
         turn_origin=subturn_id,
         turn_level = subturn_level
     )
+
+
+@dataclass
+class MessageGroup:
+    """
+    Groups multiple TurnMessages that were input simultaneously.
+
+    Used for tracking batches of messages (e.g., multiple reactions declared at once)
+    and highlighting them as "new" to the DM without duplication in context.
+
+    This allows TurnContext.messages to be Union[TurnMessage, MessageGroup],
+    where MessageGroup is treated like a single unit but contains multiple messages.
+    """
+    messages: List[TurnMessage]
+    timestamp: datetime = field(default_factory=datetime.now)
+    is_processed: bool = False
+    message_type: MessageType = field(init=False)  # Inferred from contained messages
+
+    def __post_init__(self):
+        """Validate and infer message type from contained messages."""
+        if not self.messages:
+            raise ValueError("MessageGroup must contain at least one message")
+
+        # Infer message_type from the first message (all messages in group should be same type)
+        self.message_type = self.messages[0].message_type
+
+    def mark_as_processed(self) -> None:
+        """Mark this group and all contained messages as processed."""
+        self.is_processed = True
+        for message in self.messages:
+            message.mark_as_processed()
+
+    def to_xml_element(self) -> str:
+        """
+        Convert this MessageGroup to an XML element string.
+
+        Returns a simple wrapper containing all messages:
+        <message_group>
+          <message speaker="...">...</message>
+          <message speaker="...">...</message>
+        </message_group>
+
+        Returns:
+            XML string representation of this message group
+        """
+        xml_parts = ["<message_group>"]
+        for message in self.messages:
+            # Indent each message
+            xml_parts.append(f"  {message.to_xml_element()}")
+        xml_parts.append("</message_group>")
+        return "\n".join(xml_parts)
+
+    def __str__(self) -> str:
+        """String representation showing all messages."""
+        return f"MessageGroup({len(self.messages)} messages)"
+
+
+def create_message_group(messages: List[TurnMessage]) -> MessageGroup:
+    """
+    Factory function to create a message group.
+
+    Args:
+        messages: List of TurnMessage objects to group together
+
+    Returns:
+        MessageGroup containing the messages
+    """
+    return MessageGroup(messages=messages)
