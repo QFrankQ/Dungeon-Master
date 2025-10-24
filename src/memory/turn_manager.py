@@ -530,6 +530,27 @@ class TurnManager:
                 turn_messages.append(turn_msg)
             current_turn.add_message_group(turn_messages)
 
+    def mark_last_messages_as_responded(self) -> None:
+        """
+        Mark the most recently added message(s) as responded to by the DM.
+
+        Works for both individual TurnMessage and MessageGroup.
+        This should be called after the DM generates a response to player input.
+
+        Raises:
+            ValueError: If no active turn or no messages in turn
+        """
+        current_turn = self.get_current_turn_context()
+        if not current_turn:
+            raise ValueError("No active turn to mark messages in")
+
+        if not current_turn.messages:
+            raise ValueError("No messages in current turn to mark as responded")
+
+        # Mark the last item (whether TurnMessage or MessageGroup)
+        last_item = current_turn.messages[-1]
+        last_item.mark_as_responded()
+
     def create_message_xml(self, content: str, speaker: str) -> str:
         """
         Create XML representation of a message without adding it to any turn context.
