@@ -35,7 +35,8 @@ class TurnMessage:
     turn_origin: str  # Which turn this message originated from
     turn_level: str
     timestamp: datetime = field(default_factory=datetime.now)
-    processed_for_state_extraction: bool = False  # Track if message has been processed
+    processed_for_state_extraction: bool = False  # Track if StateExtractor has processed this
+    is_new_message: bool = True  # Track if DM has responded to this message yet
     
     def __str__(self) -> str:
         """String representation of the message content."""
@@ -52,6 +53,10 @@ class TurnMessage:
     def mark_as_processed(self) -> None:
         """Mark this message as processed for state extraction."""
         self.processed_for_state_extraction = True
+
+    def mark_as_responded(self) -> None:
+        """Mark this message as no longer new (DM has responded to it)."""
+        self.is_new_message = False
     
     def to_xml_element(self) -> str:
         """
@@ -131,7 +136,7 @@ class MessageGroup:
     """
     messages: List[TurnMessage]
     timestamp: datetime = field(default_factory=datetime.now)
-    is_processed: bool = False
+    is_new_message: bool = True  # Track if DM has responded to this group yet
     message_type: MessageType = field(init=False)  # Inferred from contained messages
 
     def __post_init__(self):
@@ -143,10 +148,15 @@ class MessageGroup:
         self.message_type = self.messages[0].message_type
 
     def mark_as_processed(self) -> None:
-        """Mark this group and all contained messages as processed."""
-        self.is_processed = True
+        """Mark this group and all contained messages as processed for state extraction."""
         for message in self.messages:
             message.mark_as_processed()
+
+    def mark_as_responded(self) -> None:
+        """Mark this group and all contained messages as no longer new (DM has responded)."""
+        self.is_new_message = False
+        for message in self.messages:
+            message.mark_as_responded()
 
     def to_xml_element(self) -> str:
         """
