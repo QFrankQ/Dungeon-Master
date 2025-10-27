@@ -13,14 +13,14 @@ from .turn_message import TurnMessage, MessageType, MessageGroup, create_live_me
 from .formatted_game_message import FormattedGameMessage
 
 
-@dataclass 
+@dataclass
 class TurnContext:
     """
     Context for a single turn or sub-turn in the turn stack.
-    
+
     Contains messages with selective filtering capabilities to serve both
     DM (full chronological context) and StateExtractor (current turn only) needs.
-    
+
     Uses TurnMessage system to distinguish between live conversation messages
     and condensed subturn results for proper context isolation.
     """
@@ -32,14 +32,18 @@ class TurnContext:
     # Enhanced message management with selective filtering
     # Supports both individual messages and grouped messages
     messages: List[Union[TurnMessage, MessageGroup]] = field(default_factory=list)
-    
+
     # Legacy message storage for backward compatibility
     _formatted_messages: List[FormattedGameMessage] = field(default_factory=list)
-    
+
     # Turn metadata
     start_time: datetime = field(default_factory=datetime.now)
     end_time: Optional[datetime] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    # Step progression tracking (for automatic step advancement)
+    step_list: Optional[List[str]] = None  # List of step objectives for this turn
+    current_step_index: int = 0  # Current position in step_list
     
     def add_live_message(self, content: str, speaker: str) -> None:
         """Add a live conversation message to this turn's context."""
@@ -199,6 +203,35 @@ class TurnContext:
         if not self.messages:
             return Exception("No message in current (sub)turn")
         return self.messages[-1].to_xml_element()
+
+    def advance_step(self) -> bool:
+        """
+        Advance to the next step in this turn's step list.
+
+        Returns:
+            True if more steps remain, False if turn is complete
+
+        Raises:
+            ValueError: If step_list is not set (turn doesn't use step progression)
+        """
+        if self.step_list is None:
+            raise ValueError(f"Turn {self.turn_id} does not have a step list")
+
+        self.current_step_index += 1
+
+        # Update current_step_objective if more steps remain
+        if self.current_step_index < len(self.step_list):
+            self.current_step_objective = self.step_list[self.current_step_index]
+            return True
+        else:
+            # Turn complete - no more steps
+            return False
+
+    def get_current_step_objective(self) -> Optional[str]:
+        """Get the current step objective."""
+        if self.step_list and self.current_step_index < len(self.step_list):
+            return self.step_list[self.current_step_index]
+        return self.current_step_objective  # Fallback to manual objective
 
 
 @dataclass
