@@ -15,7 +15,8 @@ from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
 from dotenv import load_dotenv
 load_dotenv()
-from ..memory.turn_manager import TurnContext
+from ..models.turn_context import TurnContext
+from ..context.structured_summarizer_context_builder import create_structured_summarizer_context_builder
 
 
 class StructuredTurnSummary(BaseModel):
@@ -56,6 +57,7 @@ class StructuredTurnSummarizer:
             instructions=self.get_system_prompt(),
             output_type=StructuredTurnSummary
         )
+        self.context_builder = create_structured_summarizer_context_builder()
         
     def get_system_prompt(self):
         # Load DM system prompt from file
@@ -85,25 +87,25 @@ class StructuredTurnSummarizer:
             TurnCondensationResult with structured summary
         """
         try:
-            # Prepare the condensation prompt using chronological ordering
-            prompt = self._prepare_condensation_prompt(
-                turn_context, additional_context
+            # Prepare the condensation prompt using the context builder
+            prompt = self.context_builder.build_prompt(
+                turn_context,
+                additional_instructions=self._format_additional_context(additional_context)
             )
-            
+
             # Run the condensation agent
             result = await self.agent.run(prompt)
-            
+
             # Return the structured result
             return result.output if hasattr(result, 'output') else result
-            
+
         except Exception as e:
             # Return fallback result on failure
             return StructuredTurnSummary(
-                condensed_summary=f"[Turn {turn_context.turn_id} - {turn_context.active_character or 'Unknown'} (Level {turn_context.turn_level})]\nFailed to condense: {str(e)}\n[Turn {turn_context.turn_id} End]",
-                turn_id=turn_context.turn_id,
-                turn_level=turn_context.turn_level,
-                confidence=0.0,
-                notes=f"Condensation failed: {str(e)}"
+                structured_summary=f"<turn id=\"{turn_context.turn_id}\" level=\"{turn_context.turn_level}\">\n"
+                                  f"  <action>Failed to condense: {str(e)}</action>\n"
+                                  f"  <resolution>Turn processing encountered an error</resolution>\n"
+                                  f"</turn>"
             )
     
     def condense_turn_sync(
@@ -117,89 +119,33 @@ class StructuredTurnSummarizer:
             self.condense_turn(turn_context, additional_context)
         )
     
-    def _prepare_condensation_prompt(
-        self,
-        turn_context: TurnContext,
-        additional_context: Optional[dict] = None
-    ) -> str:
+    def _format_additional_context(self, additional_context: Optional[dict] = None) -> Optional[str]:
         """
-        Prepare the condensation prompt for the agent using chronological message ordering.
-        
+        Format additional context dictionary into instruction string.
+
         Args:
-            turn_context: The complete turn context to be condensed
-            additional_context: Optional additional context
-        
+            additional_context: Optional additional context dictionary
+
         Returns:
-            Formatted prompt string for the condensation agent with chronological ordering
+            Formatted string with additional context, or None if no context provided
         """
-        prompt_parts = [
-            f"Condense the following turn context into a structured action-resolution summary:",
-            "",
-            f"TURN INFO:",
-            f"Turn ID: {turn_context.turn_id}",
-            f"Turn Level: {turn_context.turn_level}",
-            f"Active Character: {turn_context.active_character or 'Unknown'}",
-            ""
-        ]
-        
-        # Add additional context if provided
-        if additional_context:
-            prompt_parts.extend([
-                "ADDITIONAL CONTEXT:",
-                f"Combat round: {additional_context.get('combat_round', 'N/A')}",
-                f"Initiative: {additional_context.get('current_initiative', 'N/A')}",
-                ""
-            ])
-        
-        # Add messages in chronological order with visual distinction markers
-        all_messages = turn_context.get_all_messages_chronological()
-        if all_messages:
-            prompt_parts.extend([
-                "TURN MESSAGES (CHRONOLOGICAL ORDER):",
-                ""
-            ])
-            
-            current_section = None
-            for message in all_messages:
-                # Find the corresponding TurnMessage object to check its type
-                message_obj = next((m for m in turn_context.messages if m.content == message), None)
-                
-                if message_obj and message_obj.is_live_message():
-                    # Switch to live messages section if needed
-                    if current_section != "live":
-                        if current_section is not None:
-                            prompt_parts.append("")  # Add spacing between sections
-                        prompt_parts.append("=== LIVE MESSAGES START ===")
-                        current_section = "live"
-                    prompt_parts.append(message)
-                    
-                elif message_obj and message_obj.is_completed_subturn():
-                    # Switch to condensed subturns section if needed
-                    if current_section != "condensed":
-                        if current_section is not None:
-                            prompt_parts.append("")  # Add spacing between sections
-                        prompt_parts.append("=== CONDENSED SUBTURNS START ===")
-                        current_section = "condensed"
-                    # Add with 4-space indentation for visual distinction
-                    for line in message.split('\n'):
-                        prompt_parts.append(f"    {line}")
-                
-            prompt_parts.append("")  # Final spacing after messages
-        else:
-            prompt_parts.extend([
-                "TURN MESSAGES:",
-                "No messages in this turn",
-                ""
-            ])
-        
-        prompt_parts.extend([
-            "Create a structured summary following the format guidelines.",
-            "Preserve chronological order and narrative flavor while capturing mechanical significance.",
-            "Use proper indentation (2 spaces per level) for nested subturns.",
-            "Maintain dramatic tension and character voice in the condensed narrative."
-        ])
-        
-        return "\n".join(prompt_parts)
+        if not additional_context:
+            return None
+
+        context_parts = []
+
+        if 'combat_round' in additional_context:
+            context_parts.append(f"Combat round: {additional_context['combat_round']}")
+
+        if 'current_initiative' in additional_context:
+            context_parts.append(f"Initiative: {additional_context['current_initiative']}")
+
+        # Add any other context keys
+        for key, value in additional_context.items():
+            if key not in ['combat_round', 'current_initiative']:
+                context_parts.append(f"{key}: {value}")
+
+        return "\n".join(context_parts) if context_parts else None
 
 
 def create_turn_condensation_agent(model_name: str = "gemini-1.5-flash") -> StructuredTurnSummarizer:
