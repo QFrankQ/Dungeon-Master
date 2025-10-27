@@ -485,6 +485,10 @@ class SessionManager:
         if not self.dungeon_master_agent:
             raise ValueError("No DungeonMasterAgent configured.")
 
+        # === PHASE 0: BEGIN TURN PROCESSING ===
+        # Set processing turn to current stack top
+        self.turn_manager.update_processing_turn_to_current()
+
         # === PHASE 1: INPUT PROCESSING ===
         # Convert ChatMessages to simple dict format for unified interface
         message_dicts = []
@@ -534,26 +538,32 @@ class SessionManager:
             is_new=False
         )
 
-        # === PHASE 4: CHECK FOR STEP COMPLETION (SIMPLIFIED WITH MOCK GD) ===
+        # === PHASE 4: CHECK FOR STEP COMPLETION ===
         if not dungeon_master_response.game_step_completed:
             # No step completion - done processing
             pass
         else:
-            # WHILE loop for step completion (matching original structure)
+            # WHILE loop for step completion
+            # Processes multiple steps in same turn OR switches to subturns
             while dungeon_master_response.game_step_completed:
-                # MOCK GD: Simply set next objective from combat steps list
-                if mock_next_objective:
-                    # Allow override if explicitly provided
-                    next_objective = mock_next_objective
-                else:
-                    # Cycle through demo combat steps
-                    self._demo_step_index = (self._demo_step_index + 1) % len(self._DEMO_COMBAT_STEPS)
-                    next_objective = self._DEMO_COMBAT_STEPS[self._demo_step_index]
+                # Advance the processing turn's step
+                # (This is the turn that was being processed when DM ran, even if tools created subturns)
+                more_steps = self.turn_manager.advance_processing_turn_step()
 
-                self.turn_manager.set_next_step_objective(next_objective)
-                response_queue.append(f"\n[DEMO MOCK GD] Step completed. Next objective: {next_objective}")
+                if not more_steps:
+                    # Processing turn is complete - end it and get next
+                    end_result = self.turn_manager.end_turn_and_get_next()
 
-                # RE-RUN DM with new objective (all messages already in turn)
+                    if not (end_result.get("next_pending") or end_result.get("return_to_parent")):
+                        # All turns complete - exit loop
+                        #TODO: not necessarily break
+                        break
+
+                # Update processing turn to current stack top
+                # This handles: subturns created, turn ended, returned to parent
+                self.turn_manager.update_processing_turn_to_current()
+
+                # RE-RUN DM with updated processing turn
                 turn_manager_snapshot = self.turn_manager.get_snapshot()
                 dungeon_master_context = self.dm_context_builder.build_demo_context(
                     turn_manager_snapshots=turn_manager_snapshot,
@@ -579,7 +589,7 @@ class SessionManager:
                     is_new=False
                 )
 
-                # Continue loop if still signaling completion
+                # Continue loop if DM still signals step completion
 
         return {
             "responses": response_queue,
