@@ -187,14 +187,9 @@ class TurnContext:
                        if not (isinstance(msg, MessageGroup) and msg.is_new_message)]
 
         for msg in messages:
-            element = msg.to_xml_element()
-
-            # Add proper indentation
-            if msg.message_type == MessageType.LIVE_MESSAGE:
-                xml_parts.append(f"  {element}")
-            else:
-                # For reactions, add with base indentation (element already has internal indentation)
-                xml_parts.append(f"  {element}")
+            # Use to_xml_element with base_indent for proper indentation
+            element = msg.to_xml_element(base_indent=2)
+            xml_parts.append(element)
 
         xml_parts.extend([closing_tag])
         return "\n".join(xml_parts)

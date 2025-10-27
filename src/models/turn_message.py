@@ -58,29 +58,39 @@ class TurnMessage:
         """Mark this message as no longer new (DM has responded to it)."""
         self.is_new_message = False
     
-    def to_xml_element(self) -> str:
+    def to_xml_element(self, base_indent: int = 0) -> str:
         """
-        Convert this TurnMessage to an XML element string.
-        
-        For LIVE_MESSAGE: Creates <message type="player/dm">content</message>
+        Convert this TurnMessage to an XML element string with proper indentation.
+
+        For LIVE_MESSAGE: Creates <message speaker="...">content</message>
         For COMPLETED_SUBTURN: Creates <reaction id="..." level="...">content</reaction>
-        
+
+        Args:
+            base_indent: Number of spaces for base indentation
+
         Returns:
-            XML string representation of this message
+            XML string representation of this message with proper indentation
         """
+        indent = " " * base_indent
+
         if self.message_type == MessageType.LIVE_MESSAGE:
-            # Use the speaker field directly
-            return f'<message speaker="{self.speaker}">{self.content}</message>'
-            
+            # Simple single-line message
+            return f'{indent}<message speaker="{self.speaker}">{self.content}</message>'
+
         elif self.message_type == MessageType.COMPLETED_SUBTURN:
-            # Calculate nesting level from turn_origin (count dots)
-            #TODO: Not necessary reaction, could be other types of action.
-            
-            return f'<reaction id="{self.turn_origin}" level="{self.turn_level}">\n    {self.content}\n  </reaction>'
-            
+            # Multi-line reaction - indent each line of content properly
+            content_lines = self.content.split('\n')
+            indented_content = '\n'.join(f'{indent}  {line}' for line in content_lines)
+
+            return (
+                f'{indent}<reaction id="{self.turn_origin}" level="{self.turn_level}">\n'
+                f'{indented_content}\n'
+                f'{indent}</reaction>'
+            )
+
         else:
             # Fallback for unknown message types
-            return f'<unknown>{self.content}</unknown>'
+            return f'{indent}<unknown>{self.content}</unknown>'
 
 def create_live_message(
     content: str,
@@ -167,9 +177,9 @@ class MessageGroup:
         for message in self.messages:
             message.mark_as_responded()
 
-    def to_xml_element(self) -> str:
+    def to_xml_element(self, base_indent: int = 0) -> str:
         """
-        Convert this MessageGroup to an XML element string.
+        Convert this MessageGroup to an XML element string with proper indentation.
 
         Returns a simple wrapper containing all messages:
         <message_group>
@@ -177,14 +187,18 @@ class MessageGroup:
           <message speaker="...">...</message>
         </message_group>
 
+        Args:
+            base_indent: Number of spaces for base indentation
+
         Returns:
             XML string representation of this message group
         """
-        xml_parts = ["<message_group>"]
+        indent = " " * base_indent
+        xml_parts = [f"{indent}<message_group>"]
         for message in self.messages:
-            # Indent each message
-            xml_parts.append(f"  {message.to_xml_element()}")
-        xml_parts.append("</message_group>")
+            # Pass base_indent + 2 to nested messages for proper indentation
+            xml_parts.append(message.to_xml_element(base_indent + 2))
+        xml_parts.append(f"{indent}</message_group>")
         return "\n".join(xml_parts)
 
     def __str__(self) -> str:
