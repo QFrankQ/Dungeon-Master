@@ -6,11 +6,15 @@ and produces nested action-resolution structure with proper chronological
 flow and indentation for embedding in parent turn contexts.
 """
 
+import os
 from typing import Optional
+from anyio import Path
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-import google.genai as genai
-
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
+from dotenv import load_dotenv
+load_dotenv()
 from ..memory.turn_manager import TurnContext
 
 
@@ -28,86 +32,7 @@ class StructuredTurnSummary(BaseModel):
     # notes: Optional[str] = Field(None, description="Additional notes about the condensation")
 
 
-TURN_CONDENSATION_INSTRUCTIONS = """
-You are a specialized agent that condenses D&D turn context into a single, structured XML summary. Your task is to act as a data processor and a narrator, unifying disjointed chat messages and pre-processed events into a compelling, chronological narrative.
 
-## I. Input Format
-
-You will receive a single, chronological XML log of a complete turn, enclosed within a `<turn_log>` tag. This log contains two types of elements:
-
-1.  **<message> tags**: Raw, chronological chat messages from the game (e.g., Player actions, DM descriptions, dice rolls). Your job is to condense these into a narrative.
-2.  **<reaction> tags**: Pre-processed, structured events (subturns) that should not be re-condensed. You must integrate these directly into the final output.
-
-## II. Output Format
-
-Your final output must be a single, complete XML block, enclosed in a `<turn>` tag.
-
--   **Root Tag**: `<turn id="{turn_id}" character="{character_name}" level="{level}">`
--   **Structure**: The narrative must follow this strict chronological order:
-    1.  Main `<action>` (from player messages)
-    2.  Pre-Resolution `<reaction>` elements (from input)
-    3.  Main `<resolution>` (the final outcome)
-    4.  Post-Resolution `<reaction>` elements (from input)
-
-## III. Core Principles
-
-1.  **Unification**: Condense all `<message>` elements into a single, cohesive narrative.
-2.  **Preservation**: Integrate all `<reaction>` elements from the input directly into the output without modification or re-summarization.
-3.  **Narrative Richness**: Weave in vivid descriptions, character voice, and dice rolls from the `<message>` tags to create a compelling story.
-4.  **Causality**: The `<reaction>` elements must be placed correctly in the timeline to show how they affect or are caused by the main action.
-5.  **Attribute Extraction**: Infer the `id`, `character`, and `level` for the root `<turn>` tag from the input messages. The `id` should be the first number in the chronological sequence (e.g., "2" for a turn starting with `id="2.1"`).
-
-## IV. Comprehensive Example
-
-**BEFORE CONDENSATION (Input Log):**
-```xml
-<turn_log>
-  <message type="player">I want to cast Fireball at the goblin group</message>
-  <message type="dm">What's your spell save DC?</message>
-  <message type="player">DC 15 Dexterity save, using 3rd level slot</message>
-  <message type="dm">Goblins roll saves... Chief got 18, others failed</message>
-  <message type="dm">The chief tries to counter your spell!</message>
-  
-  <reaction id="2.1" character="Goblin Chief" level="1">
-    <action>"Not today, witch!" the chief snarls, weaving desperate Counterspell magic</action>
-    <reaction id="2.1.1" character="Alice" level="2">
-      <action>Alice recognizes the counter-magic and fights back with her own Counterspell (rolled 15)</action>
-      <resolution>Alice's superior magical training overcomes the crude attempt</resolution>
-    </reaction>
-    <resolution>The goblin's spell fizzles as Alice's magic dominates the weave</resolution>
-  </reaction>
-  
-  <message type="player">Yes! Does my Fireball go off?</message>
-  <message type="dm">Your counter succeeds! Fireball explodes for 28 fire damage</message>
-  <message type="dm">The blast terrifies the survivors - they're fleeing!</message>
-
-  <reaction id="2.2" character="Surviving Goblins" level="1">
-    <action>Witnessing their chief's magical failure and comrades' immolation, remaining goblins flee in terror</action>
-    <resolution>Three goblins break formation and sprint for the cave entrance</resolution>
-  </reaction>
-</turn_log>
-```
-
-**AFTER CONDENSATION (Your Output):**
-```xml
-<turn id="2" character="Alice the Wizard" level="0">
-  <action>Alice channels arcane power, hurling a crackling Fireball at the goblin pack (DC 15 Dex save, 3rd level slot)</action>
-  <reaction id="2.1" character="Goblin Chief" level="1">
-    <action>"Not today, witch!" the chief snarls, weaving desperate Counterspell magic</action>
-    <reaction id="2.1.1" character="Alice" level="2">
-      <action>Alice recognizes the counter-magic and fights back with her own Counterspell (rolled 15)</action>
-      <resolution>Alice's superior magical training overcomes the crude attempt</resolution>
-    </reaction>
-    <resolution>The goblin's spell fizzles as Alice's magic dominates the weave</resolution>
-  </reaction>
-  <resolution>The Fireball erupts in spectacular flames, engulfing the screaming goblins (28 fire damage)</resolution>
-  <reaction id="2.2" character="Surviving Goblins" level="1">
-    <action>Witnessing their chief's magical failure and comrades' immolation, remaining goblins flee in terror</action>
-    <resolution>Three goblins break formation and sprint for the cave entrance</resolution>
-  </reaction>
-</turn>
-```
-"""
 
 
 class StructuredTurnSummarizer:
@@ -121,13 +46,28 @@ class StructuredTurnSummarizer:
     
     def __init__(self, model_name: str = "gemini-1.5-flash"):
         """Initialize the turn condensation agent."""
-        self.model = genai.GenerativeModel(model_name)
+        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+        self.model = GoogleModel(
+            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
+        )
         self.agent = Agent(
             self.model,
             name="Turn Condensation Agent",
-            instructions=TURN_CONDENSATION_INSTRUCTIONS,
+            instructions=self.get_system_prompt(),
             output_type=StructuredTurnSummary
         )
+        
+    def get_system_prompt(self):
+        # Load DM system prompt from file
+        prompts_dir = Path(__file__).parent.parent / "prompts"
+        prompt_file = prompts_dir / "structured_turn_summarizer_prompt.txt"
+
+        try:
+            with open(prompt_file, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            # Fallback prompt if file not found
+            return """You are a Structured Turn Summarizer for a D&D game. Generate nested action-resolution summaries in chronological order."""
     
     async def condense_turn(
         self,
