@@ -198,25 +198,30 @@ class TurnManager:
             turn_condensation_agent: Optional agent for turn condensation
         """
         self.turn_condensation_agent = turn_condensation_agent
-        
+
         # Context builders for different consumers
         self.state_extractor_context_builder = StateExtractorContextBuilder()
-        
+
         # Turn stack - each level contains a queue of TurnContext objects
         # Structure: List[List[TurnContext]] where each inner list is a queue at that level
         self.turn_stack: List[List[TurnContext]] = []
-        
+
         # Message formatter for processing messages (following HistoryManager pattern)
         self.message_formatter = None  # Lazy loaded when needed
-        
+
         # Storage for current FormattedGameMessage objects (similar to HistoryManager)
         self._current_messages: List[FormattedGameMessage] = []
-        
+
         # Completed turns history (for debugging/audit)
         self.completed_turns: List[TurnContext] = []
-        
+
         # Turn counter for unique IDs
         self._turn_counter = 0
+
+        # Processing turn reference - tracks which turn is being processed by DM
+        # This is set at the start of each processing call and used to advance
+        # the correct turn's step even if tools create subturns during processing
+        self._processing_turn: Optional[TurnContext] = None
     
     def _get_message_formatter(self):
         """Lazy load MessageFormatter when needed."""
@@ -565,6 +570,53 @@ class TurnManager:
         # Mark the last item (whether TurnMessage or MessageGroup)
         last_item = current_turn.messages[-1]
         last_item.mark_as_responded()
+
+    def get_processing_turn(self) -> Optional[TurnContext]:
+        """Get the turn currently being processed."""
+        return self._processing_turn
+
+    def update_processing_turn_to_current(self) -> TurnContext:
+        """
+        Update the processing turn reference to the current turn on top of stack.
+
+        This should be called:
+        - At the start of each processing cycle to establish which turn is being processed
+        - After tools create subturns during DM execution to switch to the subturn
+        - After ending a turn to switch to the next turn in the queue
+
+        The reference is preserved even if the stack changes, allowing us to
+        advance the correct turn's step when DM signals completion.
+
+        Returns:
+            The new processing turn (current turn on stack)
+
+        Raises:
+            ValueError: If no active turn exists
+        """
+        current_turn = self.get_current_turn_context()
+        if not current_turn:
+            raise ValueError("No active turn to update processing reference to")
+
+        self._processing_turn = current_turn
+        return self._processing_turn
+
+    def advance_processing_turn_step(self) -> bool:
+        """
+        Advance the step of the turn currently being processed.
+
+        This advances the step index regardless of whether the processing turn
+        is still on top of the stack (it may not be if tools created subturns).
+
+        Returns:
+            True if more steps remain in the turn, False if turn is complete
+
+        Raises:
+            ValueError: If no turn is currently being processed
+        """
+        if not self._processing_turn:
+            raise ValueError("No turn is currently being processed")
+
+        return self._processing_turn.advance_step()
 
     def create_message_xml(self, content: str, speaker: str) -> str:
         """
