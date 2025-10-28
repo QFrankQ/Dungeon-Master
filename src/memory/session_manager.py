@@ -511,7 +511,7 @@ class SessionManager:
         # Build simplified DM context (will automatically highlight unprocessed groups)
         dungeon_master_context = self.dm_context_builder.build_demo_context(
             turn_manager_snapshots=turn_manager_snapshot,
-            new_message_entries=None  # No longer needed - groups detected automatically
+            # new_message_entries=None  # No longer needed - groups detected automatically
         )
 
         # Run DM agent and get result (with usage tracking)
@@ -546,10 +546,11 @@ class SessionManager:
             # WHILE loop for step completion
             # Processes multiple steps in same turn OR switches to subturns
             while dungeon_master_response.game_step_completed:
+                response_queue.append("\n[DM has indicated step completion - advancing turn step...]\n")
                 # Advance the processing turn's step
                 # (This is the turn that was being processed when DM ran, even if tools created subturns)
                 more_steps = self.turn_manager.advance_processing_turn_step()
-
+                response_queue.append(f"[New step objective: {self.turn_manager.get_current_step_objective()}]\n")
                 if not more_steps:
                     # Processing turn is complete - end it and get next
                     end_result = self.turn_manager.end_turn_and_get_next()
@@ -567,7 +568,7 @@ class SessionManager:
                 turn_manager_snapshot = self.turn_manager.get_snapshot()
                 dungeon_master_context = self.dm_context_builder.build_demo_context(
                     turn_manager_snapshots=turn_manager_snapshot,
-                    new_message_entries=None  # All messages already added
+                    # new_message_entries=None  # All messages already added
                 )
                 dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context)
                 dungeon_master_response = dm_result.output
