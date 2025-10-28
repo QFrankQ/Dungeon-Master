@@ -139,6 +139,7 @@ from ..models.formatted_game_message import FormattedGameMessage
 from ..models.turn_context import TurnContext, TurnExtractionContext
 from ..models.turn_message import create_live_message, create_message_group
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
+from ..prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS
 
 # Optional imports for state extraction and message formatting
 from typing import TYPE_CHECKING
@@ -210,7 +211,7 @@ class TurnManager:
         self.message_formatter = None  # Lazy loaded when needed
 
         # Storage for current FormattedGameMessage objects (similar to HistoryManager)
-        self._current_messages: List[FormattedGameMessage] = []
+        # self._current_messages: List[FormattedGameMessage] = []
 
         # Completed turns history (for debugging/audit)
         self.completed_turns: List[TurnContext] = []
@@ -230,15 +231,17 @@ class TurnManager:
             self.message_formatter = MessageFormatter()
         return self.message_formatter
     
+    #TODO: using prepare_tools keyword argument in agent calls to control when this tool is available
     def start_and_queue_turns(
         self,
         actions: List[Dict[str, str]],
-        new_step_objective: str,
-        initiative_order: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Start one or more turns as an action queue with hierarchical turn ID generation.
+
+        Automatically determines the appropriate step list based on turn level:
+        - Level 0 (main turn): Uses DEMO_MAIN_ACTION_STEPS
+        - Level 1+ (sub-turn/reaction): Uses DEMO_REACTION_STEPS
 
         For single action: actions = [{"speaker": "Alice", "content": "I attack the orc"}]
         For reactions: actions = [{"speaker": "Bob", "content": "I cast Counterspell"},
@@ -246,9 +249,6 @@ class TurnManager:
 
         Args:
             actions: List of {"speaker": str, "content": str} actions to queue
-            new_step_objective: objective of the first step in new turns
-            initiative_order: Current initiative order
-            metadata: Additional turn metadata
 
         Returns:
             Dictionary with:
@@ -260,6 +260,10 @@ class TurnManager:
 
         turn_level = len(self.turn_stack)  # Stack depth determines nesting level
         created_turn_ids = []
+
+        # Automatically determine game_step_list based on turn level
+        # Level 0 = main action, Level 1+ = reaction
+        game_step_list = DEMO_MAIN_ACTION_STEPS if turn_level == 0 else DEMO_REACTION_STEPS
 
         # Get parent ID for subturns
         parent_id = None
@@ -282,10 +286,11 @@ class TurnManager:
             turn_context = TurnContext(
                 turn_id=turn_id,
                 turn_level=turn_level,
-                current_step_objective=new_step_objective,
+                current_step_objective=game_step_list[0],
                 active_character=action["speaker"],
-                initiative_order=initiative_order,
-                metadata=metadata or {}
+                # initiative_order=initiative_order,
+                game_step_list=game_step_list,
+                current_step_index=0
             )
 
             # Add the action as initial message
@@ -436,7 +441,7 @@ class TurnManager:
             self.completed_turns.append(completed_turn)
         
         # Clear current messages after processing
-        self._current_messages = []
+        # self._current_messages = []
         
         return {
             "turn_id": completed_turn.turn_id,
@@ -688,7 +693,7 @@ class TurnManager:
         """Clear all turn history and reset counters."""
         self.turn_stack = []
         self.completed_turns = []
-        self._current_messages = []
+        # self._current_messages = []
         self._turn_counter = 0
 
     # Helper methods for GD post-run function calls
