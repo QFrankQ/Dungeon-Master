@@ -42,8 +42,8 @@ class TurnContext:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     # Step progression tracking (for automatic step advancement)
-    step_list: Optional[List[str]] = None  # List of step objectives for this turn
-    current_step_index: int = 0  # Current position in step_list
+    game_step_list: Optional[List[str]] = None  # List of step objectives for this turn
+    current_step_index: int = 0  # Current position in game_step_list
     
     def add_live_message(self, content: str, speaker: str) -> None:
         """Add a live conversation message to this turn's context."""
@@ -207,16 +207,16 @@ class TurnContext:
             True if more steps remain, False if turn is complete
 
         Raises:
-            ValueError: If step_list is not set (turn doesn't use step progression)
+            ValueError: If game_step_list is not set (turn doesn't use step progression)
         """
-        if self.step_list is None:
+        if self.game_step_list is None:
             raise ValueError(f"Turn {self.turn_id} does not have a step list")
 
         self.current_step_index += 1
 
         # Update current_step_objective if more steps remain
-        if self.current_step_index < len(self.step_list):
-            self.current_step_objective = self.step_list[self.current_step_index]
+        if self.current_step_index < len(self.game_step_list):
+            self.current_step_objective = self.game_step_list[self.current_step_index]
             return True
         else:
             # Turn complete - no more steps
@@ -224,8 +224,8 @@ class TurnContext:
 
     def get_current_step_objective(self) -> Optional[str]:
         """Get the current step objective."""
-        if self.step_list and self.current_step_index < len(self.step_list):
-            return self.step_list[self.current_step_index]
+        if self.game_step_list and self.current_step_index < len(self.game_step_list):
+            return self.game_step_list[self.current_step_index]
         return self.current_step_objective  # Fallback to manual objective
 
 
