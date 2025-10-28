@@ -8,6 +8,8 @@ Uses simplified demo methods that bypass GD agent and state management for demo 
 import asyncio
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
+from pathlib import Path
+from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS
 
 # Defer heavy imports (agents, vector services, cloud SDKs) until runtime so
 # importing this module doesn't trigger long SDK initializations.
@@ -121,11 +123,13 @@ class DemoTerminal:
             )
 
         # Start first turn with default objective
-        initial_objective = "Greet the player and set the initial enemy scene for combat"
+        # Use the first step from DEMO_MAIN_ACTION_STEPS as the initial objective
         self.session_manager.turn_manager.start_and_queue_turns(
             actions=[{"speaker": self.current_character_name, "content": "I'm ready to begin the adventure!"}],
-            new_step_objective=initial_objective
+            new_step_objective=DEMO_MAIN_ACTION_STEPS[0],
+            game_step_list=DEMO_MAIN_ACTION_STEPS
         )
+        initial_objective = DEMO_MAIN_ACTION_STEPS[0]
 
         print(f"[SYSTEM] Session initialized. Current objective: {initial_objective}")
         print(f"[SYSTEM] Playing as: {self.current_character_name}")
@@ -300,11 +304,27 @@ class DemoTerminal:
         # Build context using the demo context builder
         context = self.session_manager.dm_context_builder.build_demo_context(
             turn_manager_snapshots=turn_manager_snapshot,
-            new_message_entries=None  # Don't include new messages, just show current state
+            # new_message_entries=None  # Don't include new messages, just show current state
         )
+
+        # Estimate token counts (rough approximation: 1 token ≈ 4 chars)
+        context_tokens = len(context) // 4
+
+        # Read system prompt and estimate its tokens
+        prompt_path = Path(__file__).parent / "src" / "prompts" / "dungeon_master_system_prompt.txt"
+        with open(prompt_path, 'r') as f:
+            system_prompt = f.read()
+        system_prompt_tokens = len(system_prompt) // 4
+
+        total_tokens = context_tokens + system_prompt_tokens
 
         # Display the context
         print(context)
+        print("=" * 70)
+        print(f"\nToken Estimates (rough: 1 token ≈ 4 chars):")
+        print(f"  Context: ~{context_tokens:,} tokens ({len(context):,} chars)")
+        print(f"  System Prompt: ~{system_prompt_tokens:,} tokens ({len(system_prompt):,} chars)")
+        print(f"  Total: ~{total_tokens:,} tokens")
         print("=" * 70)
 
     def switch_character(self, character_key: str):
