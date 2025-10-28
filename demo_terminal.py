@@ -124,10 +124,10 @@ class DemoTerminal:
 
         # Start first turn with default objective
         # Use the first step from DEMO_MAIN_ACTION_STEPS as the initial objective
+        # Note: game_step_list is automatically determined by turn_level (0 = main action, 1+ = reaction)
         self.session_manager.turn_manager.start_and_queue_turns(
             actions=[{"speaker": self.current_character_name, "content": "I'm ready to begin the adventure!"}],
-            new_step_objective=DEMO_MAIN_ACTION_STEPS[0],
-            game_step_list=DEMO_MAIN_ACTION_STEPS
+            new_step_objective=DEMO_MAIN_ACTION_STEPS[0]
         )
         initial_objective = DEMO_MAIN_ACTION_STEPS[0]
 
@@ -370,11 +370,15 @@ def create_demo_session_manager(dm_model_name=None) -> 'SessionManager':
     from src.memory.turn_manager import create_turn_manager
     from src.memory.player_character_registry import create_player_character_registry
     print("Finished imports for demo session manager.")
-    # Create DM agent
-    dm_agent = create_dungeon_master_agent(model_name=dm_model_name)
 
-    # Create turn manager (without condensation for demo)
+    # Create turn manager first (without condensation for demo)
     turn_manager = create_turn_manager(turn_condensation_agent=None)
+
+    # Create DM agent with turn_manager.start_and_queue_turns as a tool
+    dm_agent = create_dungeon_master_agent(
+        model_name=dm_model_name,
+        tools=[turn_manager.start_and_queue_turns]
+    )
 
     # Create player character registry
     player_registry = create_player_character_registry()
