@@ -180,7 +180,7 @@ class DMContextBuilder:
 
         # Add current turn context (with processed messages and unprocessed groups hidden)
         context_parts.append("<current_turn>")
-        context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level, exclude_unprocessed=True))
+        context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level, exclude_new_messages=True))
         context_parts.append("</current_turn>")
         context_parts.append("")
 
