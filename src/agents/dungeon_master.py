@@ -11,17 +11,18 @@ The Dungeon Master Agent is an LLM agent responsible for:
 Integrates with existing TurnManager and SessionManager architecture.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Callable
 from pathlib import Path
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
 from dotenv import load_dotenv
 load_dotenv()
-from ..memory.turn_manager import TurnManager
+# from ..memory.turn_manager import TurnManager
 # from ..db.vector_service import VectorService
 from ..models.dm_response import DungeonMasterResponse
+# from ..memory.turn_manager import
 import os
 import asyncio
 
@@ -37,22 +38,22 @@ class DungeonMasterAgent:
     
     def __init__(
         self,
-        turn_manager: Optional[TurnManager] = None,
         # vector_service: Optional[VectorService] = None,
-        model_name: str = MODEL_NAME
+        model_name: str = MODEL_NAME,
+        tools: Optional[List[Callable]] = None
     ):
         """
         Initialize the Dungeon Master LLM Agent.
 
         Args:
-            turn_manager: Turn manager for combat turn coordination
             vector_service: Vector service for rule lookups
             model_name: Gemini model to use for the agent
+            tools: Optional list of tool functions to provide to the agent
         """
         # Initialize components
-        self.turn_manager = turn_manager
         # self.vector_service = vector_service
-        
+        self.tools = tools or []
+
         # Initialize PydanticAI agent
         GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
         self.model = GoogleModel(
@@ -60,14 +61,14 @@ class DungeonMasterAgent:
         )
         self.agent = self._create_agent()
 
-    #TODO: add function tools
     def _create_agent(self) -> Agent[DungeonMasterResponse]:
         """Create the PydanticAI agent with system prompt and tools."""
-        # Create agent with system prompt
+        # Create agent with system prompt and tools
         agent = Agent(
             model=self.model,
             output_type=DungeonMasterResponse,
-            instructions=self.get_system_prompt()
+            instructions=self.get_system_prompt(),
+            tools=self.tools
         )
         return agent
     
@@ -112,23 +113,23 @@ class DungeonMasterAgent:
                      manage NPCs, and adjudicate rules. Signal step completion when objectives are met."""
 
 def create_dungeon_master_agent(
-    turn_manager: Optional[TurnManager] = None,
     # vector_service: Optional[VectorService] = None,
-    model_name: str = MODEL_NAME
+    model_name: str = MODEL_NAME,
+    tools: Optional[List[Callable]] = None
 ) -> DungeonMasterAgent:
     """
     Factory function to create a configured Dungeon Master Agent.
 
     Args:
-        turn_manager: Turn manager for combat coordination
         vector_service: Vector service for rule lookups
         model_name: Gemini model name to use
+        tools: Optional list of tool functions to provide to the agent
 
     Returns:
         Configured DungeonMasterAgent instance
     """
     return DungeonMasterAgent(
-        turn_manager=turn_manager,
         # vector_service=vector_service,
-        model_name=model_name
+        model_name=model_name,
+        tools=tools
     )
