@@ -45,7 +45,7 @@ class StructuredTurnSummarizer:
     in parent turn contexts.
     """
     
-    def __init__(self, model_name: str = "gemini-1.5-flash"):
+    def __init__(self, model_name: str = "gemini-2.0-flash"):
         """Initialize the turn condensation agent."""
         GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
         self.model = GoogleModel(
@@ -148,7 +148,7 @@ class StructuredTurnSummarizer:
         return "\n".join(context_parts) if context_parts else None
 
 
-def create_turn_condensation_agent(model_name: str = "gemini-1.5-flash") -> StructuredTurnSummarizer:
+def create_turn_condensation_agent(model_name: str = "gemini-2.0-flash") -> StructuredTurnSummarizer:
     """
     Factory function to create a turn condensation agent.
     

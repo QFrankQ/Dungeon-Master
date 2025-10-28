@@ -35,7 +35,7 @@ def memory_config(temp_summary_file):
         min_tokens=500,
         max_summary_ratio=0.3,
         summary_file=temp_summary_file,
-        summarizer_model="gemini-1.5-flash",
+        summarizer_model="gemini-2.0-flash",
         enable_memory=True,
         enable_summarization=True
     )

@@ -21,7 +21,7 @@ class MemoryConfig:
     summary_file: str = "message_trace/conversation_summary.json"
     
     # Summarization model
-    summarizer_model: str = "gemini-1.5-flash"
+    summarizer_model: str = "gemini-2.0-flash"
     
     # Enable/disable features
     enable_memory: bool = True
@@ -35,7 +35,7 @@ class MemoryConfig:
             min_tokens=int(os.getenv('DM_MIN_TOKENS', '5000')),
             max_summary_ratio=float(os.getenv('DM_MAX_SUMMARY_RATIO', '0.3')),
             summary_file=os.getenv('DM_SUMMARY_FILE', 'message_trace/conversation_summary.json'),
-            summarizer_model=os.getenv('DM_SUMMARIZER_MODEL', 'gemini-1.5-flash'),
+            summarizer_model=os.getenv('DM_SUMMARIZER_MODEL', 'gemini-2.0-flash'),
             enable_memory=os.getenv('DM_ENABLE_MEMORY', 'true').lower() == 'true',
             enable_summarization=os.getenv('DM_ENABLE_SUMMARIZATION', 'true').lower() == 'true'
         )

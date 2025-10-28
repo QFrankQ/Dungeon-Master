@@ -26,7 +26,7 @@ class StateExtractorAgent:
     actually making the changes.
     """
 
-    def __init__(self, model_name: str = "gemini-1.5-flash"):
+    def __init__(self, model_name: str = "gemini-2.0-flash"):
         """
         Initialize the state extraction agent.
 

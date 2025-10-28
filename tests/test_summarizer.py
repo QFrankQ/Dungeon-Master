@@ -25,7 +25,7 @@ class TestConversationSummarizer:
             summarizer = ConversationSummarizer()
             
             mock_model.assert_called_once_with(
-                "gemini-1.5-flash",
+                "gemini-2.0-flash",
                 provider=mock_provider.return_value
             )
             mock_agent.assert_called_once()
@@ -175,7 +175,7 @@ class TestCreateSummarizerFactory:
         with patch('memory.summarizer.ConversationSummarizer') as mock_class:
             result = create_summarizer()
             
-            mock_class.assert_called_once_with("gemini-1.5-flash")
+            mock_class.assert_called_once_with("gemini-2.0-flash")
             assert result == mock_class.return_value
     
     def test_create_summarizer_custom_model(self, mock_gemini_env):

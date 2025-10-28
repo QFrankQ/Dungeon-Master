@@ -18,7 +18,7 @@ class TestMemoryConfig:
         assert config.min_tokens == 5000
         assert config.max_summary_ratio == 0.3
         assert config.summary_file == "message_trace/conversation_summary.json"
-        assert config.summarizer_model == "gemini-1.5-flash"
+        assert config.summarizer_model == "gemini-2.0-flash"
         assert config.enable_memory is True
         assert config.enable_summarization is True
     
@@ -100,7 +100,7 @@ class TestMemoryConfigFromEnv:
         assert config.min_tokens == 5000
         assert config.max_summary_ratio == 0.3
         assert config.summary_file == "message_trace/conversation_summary.json"
-        assert config.summarizer_model == "gemini-1.5-flash"
+        assert config.summarizer_model == "gemini-2.0-flash"
         assert config.enable_memory is True
         assert config.enable_summarization is True
     

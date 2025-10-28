@@ -16,7 +16,7 @@ class ConversationSummarizer:
     Uses a smaller model for cost efficiency.
     """
     
-    def __init__(self, model_name: str = "gemini-1.5-flash"):
+    def __init__(self, model_name: str = "gemini-2.0-flash"):
         """Initialize with a cost-effective model for summarization."""
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         if not gemini_api_key:
@@ -83,6 +83,6 @@ class ConversationSummarizer:
     
 
 
-def create_summarizer(model_name: str = "gemini-1.5-flash") -> ConversationSummarizer:
+def create_summarizer(model_name: str = "gemini-2.0-flash") -> ConversationSummarizer:
     """Factory function to create a conversation summarizer."""
     return ConversationSummarizer(model_name)
