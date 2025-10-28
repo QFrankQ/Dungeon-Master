@@ -145,7 +145,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..services.message_formatter import MessageFormatter
     from ..agents.state_extractor import StateExtractorAgent
-    from ..agents.structured_summarizer import StructuredTurnSummarizer
+    from ..agents.structured_summarizer import StructuredTurnSummarizer, StructuredTurnSummary
 
 @dataclass(frozen=True)
 class TurnManagerSnapshot:
@@ -406,7 +406,7 @@ class TurnManager:
         if self.turn_condensation_agent:
             try:
                 # Condense the turn using TurnContext directly with chronological ordering
-                condensation_result = await self.turn_condensation_agent.condense_turn(
+                condensation_result: StructuredTurnSummary = await self.turn_condensation_agent.condense_turn(
                     turn_context=completed_turn,
                     additional_context=completed_turn.metadata
                 )
