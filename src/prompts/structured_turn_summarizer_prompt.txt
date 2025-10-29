@@ -24,19 +24,21 @@ Your final output must be a single, complete XML block, enclosed in a `<turn>` t
 2.  **Preservation**: Integrate all `<reaction>` elements from the input directly into the output without modification or re-summarization.
 3.  **Narrative Richness**: Weave in vivid descriptions, character voice, and dice rolls from the `<message>` tags to create a compelling story.
 4.  **Causality**: The `<reaction>` elements must be placed correctly in the timeline to show how they affect or are caused by the main action.
-5.  **Attribute Extraction**: Infer the `id`, `character`, and `level` for the root `<turn>` tag from the input messages. The `id` should be the first number in the chronological sequence (e.g., "2" for a turn starting with `id="2.1"`).
+5.  **Attribute Extraction**: Use the turn metadata provided (Turn ID, Turn Level, Active Character) for the root `<turn>` tag attributes. The `id` should match the Turn ID exactly (e.g., "2.1" for a subturn, "2" for a main turn).
 
 ## IV. Comprehensive Example
+
+### Example 1: Main Turn (Level 0)
 
 **BEFORE CONDENSATION (Input Log):**
 ```xml
 <turn_log>
-  <message type="player">I want to cast Fireball at the goblin group</message>
-  <message type="dm">What's your spell save DC?</message>
-  <message type="player">DC 15 Dexterity save, using 3rd level slot</message>
-  <message type="dm">Goblins roll saves... Chief got 18, others failed</message>
-  <message type="dm">The chief tries to counter your spell!</message>
-  
+  <message speaker="Alice">I want to cast Fireball at the goblin group</message>
+  <message speaker="DM">What's your spell save DC?</message>
+  <message speaker="Alice">DC 15 Dexterity save, using 3rd level slot</message>
+  <message speaker="DM">Goblins roll saves... Chief got 18, others failed</message>
+  <message speaker="DM">The chief tries to counter your spell!</message>
+
   <reaction id="2.1" character="Goblin Chief" level="1">
     <action>"Not today, witch!" the chief snarls, weaving desperate Counterspell magic</action>
     <reaction id="2.1.1" character="Alice" level="2">
@@ -45,10 +47,10 @@ Your final output must be a single, complete XML block, enclosed in a `<turn>` t
     </reaction>
     <resolution>The goblin's spell fizzles as Alice's magic dominates the weave</resolution>
   </reaction>
-  
-  <message type="player">Yes! Does my Fireball go off?</message>
-  <message type="dm">Your counter succeeds! Fireball explodes for 28 fire damage</message>
-  <message type="dm">The blast terrifies the survivors - they're fleeing!</message>
+
+  <message speaker="Alice">Yes! Does my Fireball go off?</message>
+  <message speaker="DM">Your counter succeeds! Fireball explodes for 28 fire damage</message>
+  <message speaker="DM">The blast terrifies the survivors - they're fleeing!</message>
 
   <reaction id="2.2" character="Surviving Goblins" level="1">
     <action>Witnessing their chief's magical failure and comrades' immolation, remaining goblins flee in terror</action>
@@ -59,7 +61,7 @@ Your final output must be a single, complete XML block, enclosed in a `<turn>` t
 
 **AFTER CONDENSATION (Your Output):**
 ```xml
-<turn id="2" character="Alice the Wizard" level="0">
+<turn id="2" character="Alice" level="0">
   <action>Alice channels arcane power, hurling a crackling Fireball at the goblin pack (DC 15 Dex save, 3rd level slot)</action>
   <reaction id="2.1" character="Goblin Chief" level="1">
     <action>"Not today, witch!" the chief snarls, weaving desperate Counterspell magic</action>
@@ -75,4 +77,23 @@ Your final output must be a single, complete XML block, enclosed in a `<turn>` t
     <resolution>Three goblins break formation and sprint for the cave entrance</resolution>
   </reaction>
 </turn>
+```
+
+### Example 2: Subturn/Reaction (Level 1+)
+
+**BEFORE CONDENSATION (Input Log):**
+```xml
+<subturn_log id="1.1">
+  <message speaker="Gandalf">I cast Shield as a reaction!</message>
+  <message speaker="DM">Shield spell increases your AC by 5 until start of your next turn</message>
+  <message speaker="DM">The enemy's attack misses due to your magical barrier!</message>
+</subturn_log>
+```
+
+**AFTER CONDENSATION (Your Output):**
+```xml
+<reaction id="1.1" character="Gandalf" level="1">
+  <action>Gandalf swiftly invokes Shield, magical energy forming a shimmering barrier</action>
+  <resolution>The barrier deflects the incoming attack, increasing AC by 5 until Gandalf's next turn</resolution>
+</reaction>
 ```
