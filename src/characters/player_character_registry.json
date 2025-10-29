@@ -1,9 +1,16 @@
 {
   "player_to_character": {
-    "demo_player": "Hero"
+    "demo_player": "Hero",
+    "player1": "Hero",
+    "player2": "Gandalf",
+    "player3": "Shadowblade",
+    "player4": "Healix"
   },
   "character_to_player": {
-    "Hero": "demo_player"
+    "Hero": "player1",
+    "Gandalf": "player2",
+    "Shadowblade": "player3",
+    "Healix": "player4"
   },
-  "last_updated": "2025-10-23T15:40:41.896836"
+  "last_updated": "2025-10-29T16:22:40.052930"
 }
