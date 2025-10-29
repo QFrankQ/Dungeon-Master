@@ -134,12 +134,26 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
 import asyncio
+from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field
 
 from ..models.formatted_game_message import FormattedGameMessage
 from ..models.turn_context import TurnContext, TurnExtractionContext
 from ..models.turn_message import create_live_message, create_message_group
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
 from ..prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS
+
+
+class ActionDeclaration(BaseModel):
+    """
+    Pydantic model for action declarations in turn management.
+
+    Used as input parameter for start_and_queue_turns tool.
+    Must be a Pydantic model (not Dict) for Gemini tool compatibility,
+    as Gemini doesn't support additionalProperties in function schemas.
+    """
+    speaker: str = Field(..., description="Name of the character performing the action")
+    content: str = Field(..., description="The action declaration text (e.g., 'I cast Counterspell!')")
 
 # Optional imports for state extraction and message formatting
 from typing import TYPE_CHECKING
@@ -234,7 +248,7 @@ class TurnManager:
     #TODO: using prepare_tools keyword argument in agent calls to control when this tool is available
     def start_and_queue_turns(
         self,
-        actions: List[Dict[str, str]],
+        actions: List[ActionDeclaration]
     ) -> Dict[str, Any]:
         """
         Start one or more turns as an action queue with hierarchical turn ID generation.
@@ -243,12 +257,11 @@ class TurnManager:
         - Level 0 (main turn): Uses DEMO_MAIN_ACTION_STEPS
         - Level 1+ (sub-turn/reaction): Uses DEMO_REACTION_STEPS
 
-        For single action: actions = [{"speaker": "Alice", "content": "I attack the orc"}]
-        For reactions: actions = [{"speaker": "Bob", "content": "I cast Counterspell"},
-                                 {"speaker": "Carol", "content": "I use Shield"}]
-
         Args:
-            actions: List of {"speaker": str, "content": str} actions to queue
+            actions: List of ActionDeclaration objects with speaker and content fields
+                Example: [ActionDeclaration(speaker="Alice", content="I attack the orc")]
+                For reactions: [ActionDeclaration(speaker="Bob", content="I cast Counterspell"),
+                               ActionDeclaration(speaker="Carol", content="I use Shield")]
 
         Returns:
             Dictionary with:
@@ -287,14 +300,14 @@ class TurnManager:
                 turn_id=turn_id,
                 turn_level=turn_level,
                 current_step_objective=game_step_list[0],
-                active_character=action["speaker"],
+                active_character=action.speaker,
                 # initiative_order=initiative_order,
                 game_step_list=game_step_list,
                 current_step_index=0
             )
 
             # Add the action as initial message
-            turn_context.add_live_message(action["content"], action["speaker"])
+            turn_context.add_live_message(action.content, action.speaker)
 
             # Add to the appropriate queue level
             if len(self.turn_stack) == turn_level:
