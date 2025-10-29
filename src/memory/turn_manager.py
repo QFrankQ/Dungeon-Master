@@ -278,11 +278,10 @@ class TurnManager:
         # Level 0 = main action, Level 1+ = reaction
         game_step_list = DEMO_MAIN_ACTION_STEPS if turn_level == 0 else DEMO_REACTION_STEPS
 
-        # Get parent ID for subturns
-        parent_id = None
+        # Get parent turn for subturns
+        parent_turn = None
         if turn_level > 0:
             parent_turn = self.turn_stack[-1][0]
-            parent_id = parent_turn.turn_id
 
         # Create each action as a turn in the queue
         for i, action in enumerate(actions):
@@ -293,7 +292,9 @@ class TurnManager:
                 turn_id = str(self._turn_counter)
             else:
                 # Sub-turn - use parent.number format
-                turn_id = f"{parent_id}.{i + 1}"
+                # Increment parent's child_count to get next sequential number
+                parent_turn.child_count += 1
+                turn_id = f"{parent_turn.turn_id}.{parent_turn.child_count}"
 
             # Create turn context
             turn_context = TurnContext(
@@ -445,6 +446,7 @@ class TurnManager:
         Returns:
             Dictionary with turn completion and condensation results
         """
+        print("[SYSTEM] Ending current turn...")
         if not self.turn_stack or not self.turn_stack[-1]:
             raise ValueError("No active turn to end")
 
@@ -612,18 +614,25 @@ class TurnManager:
         Works for both individual TurnMessage and MessageGroup.
         This should be called after the DM generates a response to player input.
 
-        Raises:
-            ValueError: If no active turn or no messages in turn
-        """
-        current_turn = self.get_current_turn_context()
-        if not current_turn:
-            raise ValueError("No active turn to mark messages in")
+        Uses the processing turn (the turn that was being processed when DM started)
+        rather than the current turn, to handle cases where the DM created subturns
+        during processing via tool calls like start_and_queue_turns.
 
-        if not current_turn.messages:
-            raise ValueError("No messages in current turn to mark as responded")
+        Raises:
+            ValueError: If no processing turn or no messages in turn
+        """
+        # Use processing turn instead of current turn
+        # This ensures we mark messages in the turn that was being processed,
+        # even if tools created subturns that are now on top of the stack
+        processing_turn = self.get_processing_turn()
+        if not processing_turn:
+            raise ValueError("No processing turn to mark messages in")
+
+        if not processing_turn.messages:
+            raise ValueError("No messages in processing turn to mark as responded")
 
         # Mark the last item (whether TurnMessage or MessageGroup)
-        last_item = current_turn.messages[-1]
+        last_item = processing_turn.messages[-1]
         last_item.mark_as_responded()
 
     def get_processing_turn(self) -> Optional[TurnContext]:
