@@ -11,32 +11,36 @@ These objectives guide the DM through proper combat flow without an actual GD ag
 # Main action steps (Steps A-F from combat_flow.txt)
 # Used for processing a participant's full turn
 DEMO_MAIN_ACTION_STEPS = [
+    
+    "Greet the player and describe the initial combat scene. Set the stage for combat.",
+    
     # Step A: Announce Current Turn
-    "Announce whose turn it is and check for any turn-start effects. If no turn-start effects apply, simply announce the turn. DO NOT ask for action yet.",
+    # "Announce whose turn it is and check for any turn-start effects. If no turn-start effects apply, simply announce the turn. DO NOT ask for action yet.",
+    "Call for initiative rolls from all participants. Wait for the player to provide their initiative roll. DO NOT proceed until you have the roll. Once you have all the rolls, announce the initiative order then PROCEED to the next step.",
 
     # Step C: Process Main Turn Actions - Adjudication Step 1
     "Receive and interpret the participant's declared action. Use action interpretation guidelines (Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize). Confirm what action they are taking. DO NOT confirm action cost yet. DO NOT resolve the action yet.",
 
     # Step C: Process Main Turn Actions - Adjudication Step 2
-    "If the action is Influence, Search, Study, or Utilize, confirm the action cost (using their Action). Ask: 'This will use your Action for the turn. Do you still want to do this?' Otherwise, acknowledge and proceed. DO NOT provide reaction window yet.",
+    # "If the action is Influence, Search, Study, or Utilize, confirm the action cost (using their Action). Ask: 'This will use your Action for the turn. Do you still want to do this?' Otherwise, acknowledge and proceed. DO NOT provide reaction window yet.",
 
     # Step C: Process Main Turn Actions - Adjudication Step 3
-    "Provide pre-resolution reaction window: Ask if anyone wants to use a Reaction BEFORE the action resolves. Wait for response. If a reaction is declared, process it using the reaction steps. DO NOT resolve the main action yet.",
+    "Provide pre-resolution reaction window: Ask if anyone wants to use a Reaction BEFORE the action resolves. Wait for response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s) with the reaction declaration(s). DO NOT resolve the main action yet.",
 
     # Step C: Process Main Turn Actions - Adjudication Step 4
     "Resolve the declared action: Validate the action, call for necessary rolls, determine outcome, and narrate the result. DO NOT check for status changes yet.",
 
     # Step C: Process Main Turn Actions - Adjudication Step 5
-    "Handle critical status changes and zero hit points: Check if anyone dropped to 0 HP. For PCs, they fall unconscious and begin death saves. For NPCs, they are dead. Narrate the consequences. DO NOT provide reaction window yet.",
+    # "Handle critical status changes and zero hit points: Check if anyone dropped to 0 HP. For PCs, they fall unconscious and begin death saves. For NPCs, they are dead. Narrate the consequences. DO NOT provide reaction window yet.",
 
     # Step C: Process Main Turn Actions - Adjudication Step 6
-    "Provide post-resolution reaction window: Ask if anyone wants to use a Reaction AFTER the action's outcome. Wait for response. If a reaction is declared, process it using the reaction steps. DO NOT ask about other actions yet.",
+    "Provide post-resolution reaction window: Ask if anyone wants to use a Reaction AFTER the action's outcome. Wait for response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s) with the reaction declaration(s). DO NOT ask about other actions yet.",
 
     # Step D: Confirm End of Turn
     "Ask the active participant: 'Would you like to do anything else on your turn?' (bonus action, movement, item interaction). Wait for response. If they declare another action, process it. Otherwise proceed. DO NOT check turn-end effects yet.",
 
     # Step E: Check for Turn-End Effects
-    "Check for turn-end effects: Apply ongoing damage, conditions, or trigger Legendary Actions if applicable. If none apply, acknowledge and proceed. DO NOT announce next turn yet.",
+    # "Check for turn-end effects: Apply ongoing damage, conditions, or trigger Legendary Actions if applicable. If none apply, acknowledge and proceed. DO NOT announce next turn yet.",
 
     # Step F: Announce Next Turn
     "Announce the end of current participant's turn and state which participant is next in initiative order. Prompt them for their intended action."
@@ -52,7 +56,7 @@ DEMO_REACTION_STEPS = [
     "Confirm this uses their Reaction for this round. Verify they have a Reaction available (haven't used it this round). If valid, proceed. If not, inform them and ask for a different choice. DO NOT provide reaction window yet.",
 
     # Adjudication Step 3: Pre-Resolution Reaction Window (Recursive)
-    "Provide pre-resolution reaction window: Ask if anyone ELSE wants to use a Reaction in response to this reaction before it resolves. Wait for response. This can trigger another reaction chain. DO NOT resolve the reaction yet.",
+    "Provide pre-resolution reaction window: Ask if anyone ELSE wants to use a Reaction in response to this reaction before it resolves. Wait for response. If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s). DO NOT resolve the reaction yet.",
 
     # Adjudication Step 4: Resolve Reaction
     "Resolve the declared reaction: Validate, call for necessary rolls, determine outcome, and narrate how the reaction affects the triggering action or its outcome. DO NOT check for status changes yet.",
@@ -61,12 +65,12 @@ DEMO_REACTION_STEPS = [
     "Handle critical status changes from the reaction: Check if the reaction caused anyone to drop to 0 HP. Apply consequences immediately (unconscious/death). DO NOT provide reaction window yet.",
 
     # Adjudication Step 6: Post-Resolution Reaction Window (Recursive)
-    "Provide post-resolution reaction window: Ask if anyone wants to use a Reaction in response to this reaction's outcome. Wait for response. This can trigger another reaction chain."
+    "Provide post-resolution reaction window: Ask if anyone wants to use a Reaction in response to this reaction's outcome. Wait for response. If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s)."
 ]
 
 # Initial setup steps (before main combat loop)
 DEMO_SETUP_STEPS = [
-    "Greet the players and describe the initial combat scene. Set the stage for combat. DO NOT call for initiative yet.",
+    "Greet the players and describe the initial combat scene. Set the stage for combat.",
 
     # "Call for initiative rolls from all participants. Wait for players to provide their initiative rolls. DO NOT proceed until all rolls are received.",
 
