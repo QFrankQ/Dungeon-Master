@@ -130,6 +130,11 @@ class DemoTerminal:
         )
         initial_objective = DEMO_MAIN_ACTION_STEPS[0]
 
+        # Mark the initialization message as responded so it doesn't appear as "new"
+        # Set processing turn reference first, then mark as responded
+        self.session_manager.turn_manager.update_processing_turn_to_current()
+        self.session_manager.turn_manager.mark_new_messages_as_responded()
+        
         print(f"[SYSTEM] Session initialized. Current objective: {initial_objective}")
         print(f"[SYSTEM] Playing as: {self.current_character_name}")
         print("\n[DM] Welcome, brave adventurer! Your journey begins...")
@@ -368,10 +373,14 @@ def create_demo_session_manager(dm_model_name=None) -> 'SessionManager':
     from src.memory.session_manager import SessionManager
     from src.memory.turn_manager import create_turn_manager
     from src.memory.player_character_registry import create_player_character_registry
+    from src.agents.structured_summarizer import create_turn_condensation_agent
     print("Finished imports for demo session manager.")
 
-    # Create turn manager first (without condensation for demo)
-    turn_manager = create_turn_manager(turn_condensation_agent=None)
+    # Create turn condensation agent for automatic reaction summarization
+    turn_condensation_agent = create_turn_condensation_agent()
+
+    # Create turn manager with condensation agent
+    turn_manager = create_turn_manager(turn_condensation_agent=turn_condensation_agent)
 
     # Create DM agent with turn_manager.start_and_queue_turns as a tool
     dm_agent = create_dungeon_master_agent(
