@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from pathlib import Path
 from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS
-
+from src.memory.turn_manager import ActionDeclaration
 # Defer heavy imports (agents, vector services, cloud SDKs) until runtime so
 # importing this module doesn't trigger long SDK initializations.
 if TYPE_CHECKING:
@@ -126,8 +126,7 @@ class DemoTerminal:
         # Use the first step from DEMO_MAIN_ACTION_STEPS as the initial objective
         # Note: game_step_list is automatically determined by turn_level (0 = main action, 1+ = reaction)
         self.session_manager.turn_manager.start_and_queue_turns(
-            actions=[{"speaker": self.current_character_name, "content": "I'm ready to begin the adventure!"}],
-            new_step_objective=DEMO_MAIN_ACTION_STEPS[0]
+            actions=[ActionDeclaration(speaker=self.current_character_name, content="I'm ready to begin the adventure!")]
         )
         initial_objective = DEMO_MAIN_ACTION_STEPS[0]
 
