@@ -336,9 +336,46 @@ class TurnManager:
         current_level_queue = self.turn_stack[-1]
         return current_level_queue[0] if current_level_queue else None
 
+    async def end_turn_and_get_next_async(self) -> Dict[str, Any]:
+        """
+        Async version: End current turn and get information about next turn to process.
+        Combines end_turn() with queue management for GD orchestration.
+
+        Returns:
+            Dictionary with turn completion info and next turn details
+        """
+        # Capture current level info BEFORE ending turn
+        current_level_queue = self.turn_stack[-1] if self.turn_stack else []
+        remaining_turns_after_current = len(current_level_queue) - 1  # Minus the one we're about to complete
+
+        # End the current turn (this pops the completed turn and possibly the entire level)
+        end_result = await self.end_turn()
+
+        # Check if there were more turns at the original level
+        if remaining_turns_after_current > 0:
+            # More turns to process at the same level - level still exists
+            next_turn = self.get_next_pending_turn()
+            return {
+                **end_result,
+                "next_pending": {
+                    "subturn_id": next_turn.turn_id,
+                    "speaker": next_turn.active_character,
+                    "step_needed": next_turn.current_step_objective
+                }
+            }
+        else:
+            # No more turns at that level - check if we returned to parent
+            has_parent = len(self.turn_stack) > 0
+            return {
+                **end_result,
+                "next_pending": None,
+                "return_to_parent": has_parent,
+                "parent_context": "Continue with parent turn resolution" if has_parent else None
+            }
+
     def end_turn_and_get_next(self) -> Dict[str, Any]:
         """
-        End current turn and get information about next turn to process.
+        Synchronous version: End current turn and get information about next turn to process.
         Combines end_turn() with queue management for GD orchestration.
 
         Returns:
@@ -435,7 +472,7 @@ class TurnManager:
                     if parent_level_queue:  # Parent queue is not empty
                         parent_turn = parent_level_queue[0]  # Current active parent turn
                         parent_turn.add_completed_subturn(
-                            condensation_result.condensed_summary,
+                            condensation_result.structured_summary,
                             completed_turn.turn_id
                         )
                     
