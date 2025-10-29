@@ -138,7 +138,8 @@ def create_completed_subturn_message(condensed_content: str, subturn_id: str, su
         speaker="system",  # Completed subturns are system-generated
         message_type=MessageType.COMPLETED_SUBTURN,
         turn_origin=subturn_id,
-        turn_level = subturn_level
+        turn_level = subturn_level,
+        is_new_message=False  # Completed subturns are not "new" messages
     )
 
 
