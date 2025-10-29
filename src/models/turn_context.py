@@ -44,6 +44,9 @@ class TurnContext:
     # Step progression tracking (for automatic step advancement)
     game_step_list: Optional[List[str]] = None  # List of step objectives for this turn
     current_step_index: int = 0  # Current position in game_step_list
+
+    # Child turn tracking (for sequential subturn ID generation)
+    child_count: int = 0  # Number of child turns created for this turn
     
     def add_live_message(self, content: str, speaker: str) -> None:
         """Add a live conversation message to this turn's context."""
