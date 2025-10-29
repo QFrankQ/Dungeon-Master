@@ -553,7 +553,7 @@ class SessionManager:
                 response_queue.append(f"[New step objective: {self.turn_manager.get_current_step_objective()}]\n")
                 if not more_steps:
                     # Processing turn is complete - end it and get next
-                    end_result = self.turn_manager.end_turn_and_get_next()
+                    end_result = await self.turn_manager.end_turn_and_get_next_async()
 
                     if not (end_result.get("next_pending") or end_result.get("return_to_parent")):
                         # All turns complete - exit loop
