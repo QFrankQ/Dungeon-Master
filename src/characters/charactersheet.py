@@ -194,8 +194,7 @@ class Character(BaseModel):
         """
         Add temporary HP. Temporary HP doesn't stack - take the higher value.
         """
-        if amount > self.hit_points.temporary_hp:
-            self.hit_points.temporary_hp = amount
+        self.hit_points.temporary_hp = max(self.hit_points.temporary_hp, amount)
 
     # ==================== Rest Management ====================
 
