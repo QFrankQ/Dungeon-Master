@@ -283,13 +283,107 @@ class StateCommandExecutor:
 
     def _handle_condition(self, command: ConditionCommand, character: Character) -> CommandExecutionResult:
         """Handle condition add/remove commands."""
-        # TODO: Implement condition handling
-        return CommandExecutionResult(
-            success=False,
-            command_type=command.type,
-            character_id=command.character_id,
-            message="Condition handler not yet implemented"
-        )
+        condition_name = command.condition.value.capitalize()  # "poisoned" -> "Poisoned"
+        action = command.action
+
+        if action == "add":
+            # Check if condition already exists
+            existing = next((e for e in character.active_effects if e.name == condition_name), None)
+            if existing:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Condition '{condition_name}' already active on character",
+                    details={
+                        "condition": condition_name,
+                        "existing_source": existing.source,
+                        "existing_duration": f"{existing.duration_remaining} {existing.duration_type.value}"
+                    }
+                )
+
+            # Validate duration fields for add action
+            if command.duration_type is None:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message="duration_type is required when adding a condition"
+                )
+
+            duration = command.duration if command.duration is not None else 0
+
+            # Create and add the condition effect
+            effect = Effect(
+                name=condition_name,
+                effect_type="condition",
+                duration_type=command.duration_type,
+                duration_remaining=duration,
+                source=f"{condition_name} condition",  # Default source, can be enhanced later
+                modifiers={}  # Conditions don't have stat modifiers (buffs do)
+            )
+
+            character.add_effect(effect)
+
+            # Build duration description
+            if command.duration_type == DurationType.PERMANENT:
+                duration_str = "permanent"
+            elif command.duration_type == DurationType.CONCENTRATION:
+                duration_str = f"concentration, {duration} rounds"
+            else:
+                duration_str = f"{duration} {command.duration_type.value}"
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Added condition '{condition_name}' ({duration_str})",
+                details={
+                    "condition": condition_name,
+                    "action": "add",
+                    "duration_type": command.duration_type.value,
+                    "duration": duration,
+                    "active_conditions": character.conditions
+                }
+            )
+
+        elif action == "remove":
+            # Check if condition exists
+            existing = next((e for e in character.active_effects if e.name == condition_name), None)
+            if not existing:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Condition '{condition_name}' not found on character",
+                    details={
+                        "condition": condition_name,
+                        "active_conditions": character.conditions
+                    }
+                )
+
+            character.remove_effect(condition_name)
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Removed condition '{condition_name}'",
+                details={
+                    "condition": condition_name,
+                    "action": "remove",
+                    "active_conditions": character.conditions
+                }
+            )
+
+        else:
+            # This should never happen due to Literal type, but include for safety
+            return CommandExecutionResult(
+                success=False,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Invalid action '{action}' (must be 'add' or 'remove')"
+            )
 
     def _handle_buff(self, command: BuffCommand, character: Character) -> CommandExecutionResult:
         """Handle buff/debuff add/remove commands."""
@@ -303,13 +397,120 @@ class StateCommandExecutor:
 
     def _handle_spell_slot(self, command: SpellSlotCommand, character: Character) -> CommandExecutionResult:
         """Handle spell slot use/restore commands."""
-        # TODO: Implement spell slot handling
-        return CommandExecutionResult(
-            success=False,
-            command_type=command.type,
-            character_id=command.character_id,
-            message="Spell slot handler not yet implemented"
-        )
+        # Check if character has spellcasting
+        if character.spellcasting is None:
+            return CommandExecutionResult(
+                success=False,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Character '{command.character_id}' does not have spellcasting"
+            )
+
+        level = command.level
+        action = command.action
+        spellcasting = character.spellcasting
+
+        # Check if character has spell slots at this level
+        total_slots = spellcasting.spell_slots.get(level, 0)
+        if total_slots == 0:
+            return CommandExecutionResult(
+                success=False,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Character has no level {level} spell slots"
+            )
+
+        if action == "use":
+            # Use a spell slot
+            remaining_before = spellcasting.get_remaining_slots(level)
+            success = spellcasting.use_spell_slot(level)
+
+            if not success:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"No level {level} spell slots available",
+                    details={
+                        "level": level,
+                        "remaining_slots": 0,
+                        "total_slots": total_slots,
+                        "spell_name": command.spell_name
+                    }
+                )
+
+            remaining_after = spellcasting.get_remaining_slots(level)
+            spell_info = f" ({command.spell_name})" if command.spell_name else ""
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Used level {level} spell slot{spell_info} ({remaining_after}/{total_slots} remaining)",
+                details={
+                    "level": level,
+                    "spell_name": command.spell_name,
+                    "remaining_slots": remaining_after,
+                    "total_slots": total_slots,
+                    "action": "use"
+                }
+            )
+
+        elif action == "restore":
+            # Restore spell slots (partial restoration)
+            count = command.count
+            expended_before = spellcasting.spell_slots_expended.get(level, 0)
+
+            if expended_before == 0:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"No level {level} spell slots to restore (all slots available)",
+                    details={
+                        "level": level,
+                        "remaining_slots": total_slots,
+                        "total_slots": total_slots
+                    }
+                )
+
+            # Restore count slots, but don't restore more than expended
+            actual_restored = min(count, expended_before)
+            new_expended = expended_before - actual_restored
+
+            # Update the expended count
+            if new_expended == 0:
+                # Fully restored at this level, remove from dict
+                if level in spellcasting.spell_slots_expended:
+                    del spellcasting.spell_slots_expended[level]
+            else:
+                spellcasting.spell_slots_expended[level] = new_expended
+
+            remaining_after = spellcasting.get_remaining_slots(level)
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Restored {actual_restored} level {level} spell slot{'s' if actual_restored != 1 else ''} ({remaining_after}/{total_slots} available)",
+                details={
+                    "level": level,
+                    "requested_count": count,
+                    "actual_restored": actual_restored,
+                    "remaining_slots": remaining_after,
+                    "total_slots": total_slots,
+                    "action": "restore"
+                }
+            )
+
+        else:
+            # This should never happen due to Literal type, but include for safety
+            return CommandExecutionResult(
+                success=False,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Invalid action '{action}' (must be 'use' or 'restore')"
+            )
 
     def _handle_hit_dice(self, command: HitDiceCommand, character: Character) -> CommandExecutionResult:
         """Handle hit dice use/restore commands."""
