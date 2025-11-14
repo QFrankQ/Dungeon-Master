@@ -34,11 +34,11 @@ class Condition(str, Enum):
     STUNNED = "stunned"
     UNCONSCIOUS = "unconscious"
     
-    # Additional common conditions
-    CONCENTRATING = "concentrating"
-    DYING = "dying"
-    STABLE = "stable"
-    DEAD = "dead"
+    # TODO: Additional common conditions
+    # CONCENTRATING = "concentrating"
+    # DYING = "dying"
+    # STABLE = "stable"
+    # DEAD = "dead"
 
 
 class DamageType(str, Enum):
