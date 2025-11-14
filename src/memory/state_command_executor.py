@@ -615,13 +615,118 @@ class StateCommandExecutor:
 
     def _handle_death_save(self, command: DeathSaveCommand, character: Character) -> CommandExecutionResult:
         """Handle death save recording commands."""
-        # TODO: Implement death save handling
-        return CommandExecutionResult(
-            success=False,
-            command_type=command.type,
-            character_id=command.character_id,
-            message="Death save handler not yet implemented"
-        )
+        result = command.result
+        count = command.count
+        death_saves = character.death_saves
+
+        if result == "success":
+            # Record successful death save(s)
+            previous_successes = death_saves.successes
+            previous_failures = death_saves.failures
+
+            # Add successes (capped at 3 by validator)
+            death_saves.successes = min(3, previous_successes + count)
+            actual_added = death_saves.successes - previous_successes
+
+            # Check if stable
+            if death_saves.is_stable:
+                return CommandExecutionResult(
+                    success=True,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Death save succeeded! Character is now stable (3 successes)",
+                    details={
+                        "result": "success",
+                        "count_added": actual_added,
+                        "successes": death_saves.successes,
+                        "failures": death_saves.failures,
+                        "is_stable": True
+                    }
+                )
+            else:
+                return CommandExecutionResult(
+                    success=True,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Death save succeeded ({death_saves.successes}/3 successes, {death_saves.failures}/3 failures)",
+                    details={
+                        "result": "success",
+                        "count_added": actual_added,
+                        "successes": death_saves.successes,
+                        "failures": death_saves.failures,
+                        "is_stable": False
+                    }
+                )
+
+        elif result == "failure":
+            # Record failed death save(s)
+            previous_successes = death_saves.successes
+            previous_failures = death_saves.failures
+
+            # Add failures (capped at 3 by validator)
+            death_saves.failures = min(3, previous_failures + count)
+            actual_added = death_saves.failures - previous_failures
+
+            # Check if dead
+            if death_saves.is_dead:
+                return CommandExecutionResult(
+                    success=True,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Death save failed! Character has died (3 failures)",
+                    details={
+                        "result": "failure",
+                        "count_added": actual_added,
+                        "successes": death_saves.successes,
+                        "failures": death_saves.failures,
+                        "is_dead": True
+                    }
+                )
+            else:
+                return CommandExecutionResult(
+                    success=True,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Death save failed ({death_saves.successes}/3 successes, {death_saves.failures}/3 failures)",
+                    details={
+                        "result": "failure",
+                        "count_added": actual_added,
+                        "successes": death_saves.successes,
+                        "failures": death_saves.failures,
+                        "is_dead": False
+                    }
+                )
+
+        elif result == "reset":
+            # Reset death saves (e.g., when healed or stabilized)
+            previous_successes = death_saves.successes
+            previous_failures = death_saves.failures
+
+            death_saves.successes = 0
+            death_saves.failures = 0
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message="Death saves reset (character stabilized or healed)",
+                details={
+                    "result": "reset",
+                    "previous_successes": previous_successes,
+                    "previous_failures": previous_failures,
+                    "successes": 0,
+                    "failures": 0
+                }
+            )
+
+        else:
+            # This should never happen due to Literal type, but include for safety
+            return CommandExecutionResult(
+                success=False,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Invalid result '{result}' (must be 'success', 'failure', or 'reset')"
+            )
 
     def _handle_rest(self, command: RestCommand, character: Character) -> CommandExecutionResult:
         """Handle short/long rest commands."""
