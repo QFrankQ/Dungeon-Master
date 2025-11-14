@@ -14,7 +14,7 @@ Total: 11 commands divided across 4 specialist agents
 from typing import List, Optional, Dict, Literal, Union
 from pydantic import BaseModel, Field
 
-from ..characters.dnd_enums import DamageType
+from ..characters.dnd_enums import DamageType, Condition
 from ..characters.character_components import DurationType
 
 
@@ -47,10 +47,8 @@ class ConditionCommand(BaseModel):
     type: Literal["condition"] = "condition"
     character_id: str
     action: Literal["add", "remove"]
-    condition: str = Field(...,
-        description="D&D 5e condition name (use exact enum value)")
-    # Note: Using str instead of Condition enum to reduce schema bloat
-    # Validation happens in executor against Condition enum
+    condition: Condition = Field(...,
+        description="D&D 5e condition - validated at command creation")
 
     # Only for action="add"
     duration_type: Optional[DurationType] = Field(None, description="Duration tracking (for add only)")
@@ -63,8 +61,7 @@ class ConditionCommand(BaseModel):
                  "condition": "poisoned", "duration_type": "rounds", "duration": 3},
                 {"type": "condition", "character_id": "aragorn", "action": "remove",
                  "condition": "poisoned"}
-            ],
-            "description": "Valid conditions: blinded, charmed, deafened, frightened, grappled, incapacitated, invisible, paralyzed, petrified, poisoned, prone, restrained, stunned, unconscious, exhaustion"
+            ]
         }
 
 
