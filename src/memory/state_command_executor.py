@@ -514,13 +514,94 @@ class StateCommandExecutor:
 
     def _handle_hit_dice(self, command: HitDiceCommand, character: Character) -> CommandExecutionResult:
         """Handle hit dice use/restore commands."""
-        # TODO: Implement hit dice handling
-        return CommandExecutionResult(
-            success=False,
-            command_type=command.type,
-            character_id=command.character_id,
-            message="Hit dice handler not yet implemented"
-        )
+        action = command.action
+        count = command.count
+        hit_dice = character.hit_dice
+
+        total_dice = hit_dice.total
+        used_dice = hit_dice.used
+        available_dice = total_dice - used_dice
+
+        if action == "use":
+            # Use (spend) hit dice
+            if available_dice == 0:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message="No hit dice available to use",
+                    details={
+                        "total_dice": total_dice,
+                        "used_dice": used_dice,
+                        "available_dice": 0
+                    }
+                )
+
+            # Can't use more than available
+            actual_used = min(count, available_dice)
+            hit_dice.used += actual_used
+            new_available = total_dice - hit_dice.used
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Used {actual_used} hit dice ({new_available}/{total_dice} remaining)",
+                details={
+                    "requested_count": count,
+                    "actual_used": actual_used,
+                    "previous_used": used_dice,
+                    "new_used": hit_dice.used,
+                    "available_dice": new_available,
+                    "total_dice": total_dice,
+                    "action": "use"
+                }
+            )
+
+        elif action == "restore":
+            # Restore hit dice
+            if used_dice == 0:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message="No hit dice to restore (all dice available)",
+                    details={
+                        "total_dice": total_dice,
+                        "used_dice": 0,
+                        "available_dice": total_dice
+                    }
+                )
+
+            # Can't restore more than used
+            actual_restored = min(count, used_dice)
+            hit_dice.used = max(0, used_dice - actual_restored)
+            new_available = total_dice - hit_dice.used
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Restored {actual_restored} hit dice ({new_available}/{total_dice} available)",
+                details={
+                    "requested_count": count,
+                    "actual_restored": actual_restored,
+                    "previous_used": used_dice,
+                    "new_used": hit_dice.used,
+                    "available_dice": new_available,
+                    "total_dice": total_dice,
+                    "action": "restore"
+                }
+            )
+
+        else:
+            # This should never happen due to Literal type, but include for safety
+            return CommandExecutionResult(
+                success=False,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Invalid action '{action}' (must be 'use' or 'restore')"
+            )
 
     def _handle_item(self, command: ItemCommand, character: Character) -> CommandExecutionResult:
         """Handle item use/add/remove commands."""
