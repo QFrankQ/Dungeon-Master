@@ -23,3 +23,6 @@ test_pydantic2.py
 
 #specstory ignore for now
 .specstory/
+
+# LanceDB vector database
+lancedb/
