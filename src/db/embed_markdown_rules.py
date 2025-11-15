@@ -24,7 +24,7 @@ def main():
     print("="*70)
 
     # Configuration
-    rules_dir = Path("/home/kenshin/Dungeon-Master/rules")
+    rules_dir = Path("/home/kenshin/Dungeon-Master/src/db/rules")
     db_path = "/home/kenshin/Dungeon-Master/lancedb"
     table_name = "dnd_rules"
     model_name = "all-MiniLM-L6-v2"  # Fast, lightweight, 384 dimensions
