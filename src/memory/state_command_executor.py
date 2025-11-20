@@ -16,7 +16,7 @@ from ..characters.character_components import Effect, DurationType
 from ..models.state_commands_optimized import (
     HPChangeCommand,
     ConditionCommand,
-    BuffCommand,
+    EffectCommand,
     SpellSlotCommand,
     HitDiceCommand,
     ItemCommand,
@@ -84,7 +84,7 @@ class StateCommandExecutor:
         self._handlers: Dict[str, Callable] = {
             "hp_change": self._handle_hp_change,
             "condition": self._handle_condition,
-            "buff": self._handle_buff,
+            "effect": self._handle_effect,
             "spell_slot": self._handle_spell_slot,
             "hit_dice": self._handle_hit_dice,
             "item": self._handle_item,
@@ -319,8 +319,9 @@ class StateCommandExecutor:
                 effect_type="condition",
                 duration_type=command.duration_type,
                 duration_remaining=duration,
-                source=f"{condition_name} condition",  # Default source, can be enhanced later
-                modifiers={}  # Conditions don't have stat modifiers (buffs do)
+                source=f"{condition_name} condition",
+                description=f"Affected by {condition_name} condition",
+                summary=condition_name
             )
 
             character.add_effect(effect)
@@ -385,15 +386,125 @@ class StateCommandExecutor:
                 message=f"Invalid action '{action}' (must be 'add' or 'remove')"
             )
 
-    def _handle_buff(self, command: BuffCommand, character: Character) -> CommandExecutionResult:
-        """Handle buff/debuff add/remove commands."""
-        # TODO: Implement buff handling
-        return CommandExecutionResult(
-            success=False,
-            command_type=command.type,
-            character_id=command.character_id,
-            message="Buff handler not yet implemented"
-        )
+    def _handle_effect(self, command: EffectCommand, character: Character) -> CommandExecutionResult:
+        """Handle effect add/remove commands (text-based buffs, debuffs, spell effects)."""
+        effect_name = command.effect_name
+        action = command.action
+
+        if action == "add":
+            # Check if effect already exists
+            existing = next((e for e in character.active_effects if e.name == effect_name), None)
+            if existing:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Effect '{effect_name}' already active on character",
+                    details={
+                        "effect_name": effect_name,
+                        "existing_source": existing.source,
+                        "existing_duration": f"{existing.duration_remaining} {existing.duration_type.value}"
+                    }
+                )
+
+            # Validate required fields for add action
+            if command.duration_type is None:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message="duration_type is required when adding an effect"
+                )
+
+            if command.description is None:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message="description is required when adding an effect"
+                )
+
+            duration = command.duration if command.duration is not None else 0
+            effect_type = command.effect_type or "buff"
+
+            # Create text-based effect
+            effect = Effect(
+                name=effect_name,
+                effect_type=effect_type,
+                duration_type=command.duration_type,
+                duration_remaining=duration,
+                source=f"{effect_name} ({effect_type})",
+                description=command.description,
+                summary=command.summary
+            )
+
+            character.add_effect(effect)
+
+            # Build duration description
+            if command.duration_type == DurationType.PERMANENT:
+                duration_str = "permanent"
+            elif command.duration_type == DurationType.CONCENTRATION:
+                duration_str = f"concentration, {duration} rounds"
+            else:
+                duration_str = f"{duration} {command.duration_type.value}"
+
+            # Use summary if available, otherwise use description
+            display_text = command.summary if command.summary else command.description
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Added {effect_type} '{effect_name}' ({duration_str}): {display_text}",
+                details={
+                    "effect_name": effect_name,
+                    "effect_type": effect_type,
+                    "action": "add",
+                    "duration_type": command.duration_type.value,
+                    "duration": duration,
+                    "description": command.description,
+                    "summary": command.summary,
+                    "active_effects": [e.name for e in character.active_effects]
+                }
+            )
+
+        elif action == "remove":
+            # Check if effect exists
+            existing = next((e for e in character.active_effects if e.name == effect_name), None)
+            if not existing:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Effect '{effect_name}' not found on character",
+                    details={
+                        "effect_name": effect_name,
+                        "active_effects": [e.name for e in character.active_effects]
+                    }
+                )
+
+            character.remove_effect(effect_name)
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Removed effect '{effect_name}'",
+                details={
+                    "effect_name": effect_name,
+                    "action": "remove",
+                    "active_effects": [e.name for e in character.active_effects]
+                }
+            )
+
+        else:
+            # This should never happen due to Literal type, but include for safety
+            return CommandExecutionResult(
+                success=False,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Invalid action '{action}' (must be 'add' or 'remove')"
+            )
 
     def _handle_spell_slot(self, command: SpellSlotCommand, character: Character) -> CommandExecutionResult:
         """Handle spell slot use/restore commands."""
