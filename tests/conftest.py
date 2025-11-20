@@ -12,7 +12,7 @@ from unittest.mock import Mock, AsyncMock
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, UserPromptPart, TextPart, Usage
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, UserPromptPart, TextPart, RequestUsage
 from memory.config import MemoryConfig
 
 
@@ -45,7 +45,7 @@ def memory_config(temp_summary_file):
 def mock_usage():
     """Create a mock Usage object for testing."""
     def create_usage(request_tokens=50, response_tokens=100, total_tokens=150):
-        return Usage(
+        return RequestUsage(
             request_tokens=request_tokens,
             response_tokens=response_tokens,
             total_tokens=total_tokens
@@ -66,7 +66,7 @@ def mock_model_response():
     """Create a mock ModelResponse for testing."""
     def create_response(content="Test assistant response", usage=None):
         if usage is None:
-            usage = Usage(request_tokens=50, response_tokens=100, total_tokens=150)
+            usage = RequestUsage(request_tokens=50, response_tokens=100, total_tokens=150)
         return ModelResponse(parts=[TextPart(content=content)], usage=usage)
     return create_response
 
@@ -105,7 +105,7 @@ def mock_summarizer_func(mock_model_response):
     async def mock_summarize(messages: List[ModelMessage]) -> List[ModelMessage]:
         # Return a mock summary message
         summary_content = f"Summary of {len(messages)} messages"
-        usage = Usage(request_tokens=100, response_tokens=50, total_tokens=150)
+        usage = RequestUsage(request_tokens=100, response_tokens=50, total_tokens=150)
         return [mock_model_response(summary_content, usage)]
     
     return mock_summarize
@@ -161,7 +161,7 @@ class MockConversationSummarizer:
         summary_text = f"Mock summary of {len(messages_to_summarize)} messages"
         mock_response = Mock()
         mock_response.parts = [Mock(content=summary_text)]
-        mock_response.usage = Usage(request_tokens=50, response_tokens=25, total_tokens=75)
+        mock_response.usage = RequestUsage(request_tokens=50, response_tokens=25, total_tokens=75)
         
         return [mock_response]
 
