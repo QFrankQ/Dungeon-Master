@@ -12,7 +12,7 @@ Total: 11 commands divided across 4 specialist agents
 """
 
 from typing import List, Optional, Dict, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..characters.dnd_enums import DamageType, Condition
 from ..characters.character_components import DurationType
@@ -29,18 +29,19 @@ class HPChangeCommand(BaseModel):
     is_temporary: bool = Field(False, description="True if granting temporary HP")
     damage_type: Optional[DamageType] = Field(None, description="Type of damage (only for damage)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {"type": "hp_change", "character_id": "aragorn", "change": -8, "damage_type": "slashing"},
                 {"type": "hp_change", "character_id": "gandalf", "change": 12},
                 {"type": "hp_change", "character_id": "legolas", "change": 5, "is_temporary": True}
             ]
         }
+    )
 
 
-# ==================== Effect Commands (2 unified commands) ====================
-# Used by: EFFECT_AGENT
+# ==================== Effect Commands (5 specialized commands) ====================
+# Used by: EFFECT_AGENT (Tier 1) and ADVANCED_BUFF_AGENT (Tier 2)
 
 class ConditionCommand(BaseModel):
     """Add or remove a D&D condition."""
@@ -54,8 +55,8 @@ class ConditionCommand(BaseModel):
     duration_type: Optional[DurationType] = Field(None, description="Duration tracking (for add only)")
     duration: Optional[int] = Field(None, description="Duration amount (for add only)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {"type": "condition", "character_id": "aragorn", "action": "add",
                  "condition": "poisoned", "duration_type": "rounds", "duration": 3},
@@ -63,33 +64,81 @@ class ConditionCommand(BaseModel):
                  "condition": "poisoned"}
             ]
         }
+    )
 
 
-class BuffCommand(BaseModel):
-    """Add or remove a buff/debuff with stat modifiers."""
-    type: Literal["buff"] = "buff"
+class EffectCommand(BaseModel):
+    """Add or remove any temporary effect (buff, debuff, etc.)."""
+    type: Literal["effect"] = "effect"
     character_id: str
     action: Literal["add", "remove"]
-    buff_name: str = Field(...,
-        examples=["Bless", "Haste", "Slow", "Enlarge", "Bardic Inspiration"],
-        description="Buff/debuff name")
+    effect_name: str = Field(...,
+        examples=["Bless", "Haste", "Hunter's Mark", "Fire Resistance", "Bardic Inspiration"],
+        description="Name of the effect")
 
     # Only for action="add"
     duration_type: Optional[DurationType] = Field(None, description="Duration tracking (for add only)")
     duration: Optional[int] = Field(None, description="Duration amount (for add only)")
-    modifiers: Dict[str, int] = Field(default_factory=dict,
-        description="Stat modifiers like {'attack_rolls': 4} (for add only)")
+    description: Optional[str] = Field(None,
+        description="Full text description of what the effect does (for add only)")
+    summary: Optional[str] = Field(None,
+        description="Brief summary for compact display (for add only)")
+    effect_type: Optional[str] = Field("buff",
+        description="Type: 'buff', 'debuff', 'spell' (for add only)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
-                {"type": "buff", "character_id": "gimli", "action": "add",
-                 "buff_name": "Bless", "duration_type": "concentration", "duration": 10,
-                 "modifiers": {"attack_rolls": 4, "saving_throws": 4}},
-                {"type": "buff", "character_id": "gimli", "action": "remove",
-                 "buff_name": "Bless"}
+                {
+                    "type": "effect",
+                    "character_id": "gimli",
+                    "action": "add",
+                    "effect_name": "Bless",
+                    "duration_type": "concentration",
+                    "duration": 10,
+                    "description": "Grants +1d4 to attack rolls and saving throws",
+                    "summary": "+1d4 attacks/saves",
+                    "effect_type": "buff"
+                },
+                {
+                    "type": "effect",
+                    "character_id": "aragorn",
+                    "action": "add",
+                    "effect_name": "Haste",
+                    "duration_type": "concentration",
+                    "duration": 10,
+                    "description": "+2 AC, advantage on Dexterity saving throws, doubled speed, extra action each turn",
+                    "summary": "+2 AC, adv Dex saves, 2x speed"
+                },
+                {
+                    "type": "effect",
+                    "character_id": "legolas",
+                    "action": "add",
+                    "effect_name": "Hunter's Mark",
+                    "duration_type": "concentration",
+                    "duration": 60,
+                    "description": "Deal an extra 1d6 damage when you hit the marked target with a weapon attack",
+                    "summary": "+1d6 damage to marked target"
+                },
+                {
+                    "type": "effect",
+                    "character_id": "gandalf",
+                    "action": "add",
+                    "effect_name": "Fire Resistance",
+                    "duration_type": "hours",
+                    "duration": 1,
+                    "description": "Resistant to fire damage (take half damage from fire)",
+                    "summary": "Resist fire"
+                },
+                {
+                    "type": "effect",
+                    "character_id": "gimli",
+                    "action": "remove",
+                    "effect_name": "Bless"
+                }
             ]
         }
+    )
 
 
 # ==================== Resource Commands (4 commands) ====================
@@ -104,8 +153,8 @@ class SpellSlotCommand(BaseModel):
     spell_name: Optional[str] = Field(None, description="Spell name (for use action)")
     count: int = Field(1, description="Number of slots (for restore action)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {"type": "spell_slot", "character_id": "gandalf", "action": "use",
                  "level": 3, "spell_name": "Fireball"},
@@ -113,6 +162,7 @@ class SpellSlotCommand(BaseModel):
                  "level": 2, "count": 1}
             ]
         }
+    )
 
 
 class HitDiceCommand(BaseModel):
@@ -122,13 +172,14 @@ class HitDiceCommand(BaseModel):
     action: Literal["use", "restore"]
     count: int = Field(1, ge=1, description="Number of hit dice")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {"type": "hit_dice", "character_id": "aragorn", "action": "use", "count": 2},
                 {"type": "hit_dice", "character_id": "aragorn", "action": "restore", "count": 3}
             ]
         }
+    )
 
 
 class ItemCommand(BaseModel):
@@ -139,8 +190,8 @@ class ItemCommand(BaseModel):
     item_name: str = Field(..., examples=["Potion of Healing", "Antitoxin", "Rope"])
     quantity: int = Field(1, ge=1, description="Quantity (for add/remove)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {"type": "item", "character_id": "gimli", "action": "use",
                  "item_name": "Potion of Healing"},
@@ -148,6 +199,7 @@ class ItemCommand(BaseModel):
                  "item_name": "Gold Coins", "quantity": 50}
             ]
         }
+    )
 
 
 # ==================== State Commands (3 commands) ====================
@@ -160,14 +212,15 @@ class DeathSaveCommand(BaseModel):
     result: Literal["success", "failure", "reset"]
     count: int = Field(1, ge=1, le=3, description="Number of saves (usually 1, 2 for crits)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {"type": "death_save", "character_id": "aragorn", "result": "success", "count": 1},
                 {"type": "death_save", "character_id": "aragorn", "result": "failure", "count": 2},
                 {"type": "death_save", "character_id": "aragorn", "result": "reset", "count": 1}
             ]
         }
+    )
 
 
 class RestCommand(BaseModel):
@@ -177,13 +230,14 @@ class RestCommand(BaseModel):
     rest_type: Literal["short", "long"]
     hit_dice_spent: int = Field(0, ge=0, description="Hit dice to spend (short rest only)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {"type": "rest", "character_id": "aragorn", "rest_type": "short", "hit_dice_spent": 2},
                 {"type": "rest", "character_id": "gandalf", "rest_type": "long"}
             ]
         }
+    )
 
 
 # ==================== Command Union (11 commands total) ====================
@@ -192,9 +246,9 @@ StateCommand = Union[
     # HP (1)
     HPChangeCommand,
 
-    # Effects (2)
+    # Effects (2) - Simplified text-based effects
     ConditionCommand,
-    BuffCommand,
+    EffectCommand,
 
     # Resources (3)
     SpellSlotCommand,
@@ -210,13 +264,16 @@ StateCommand = Union[
 # ==================== Specialist Agent Result Types ====================
 
 class HPAgentResult(BaseModel):
-    """Result from HP specialist agent."""
+    """Result from HP specialist agent (Tier 1)."""
     commands: List[HPChangeCommand] = Field(default_factory=list)
 
 
 class EffectAgentResult(BaseModel):
-    """Result from Effect specialist agent."""
-    commands: List[Union[ConditionCommand, BuffCommand]] = Field(default_factory=list)
+    """
+    Result from Effect specialist agent.
+    Handles conditions and effects (buffs, debuffs, spell effects).
+    """
+    commands: List[Union[ConditionCommand, EffectCommand]] = Field(default_factory=list)
 
 
 class ResourceAgentResult(BaseModel):
@@ -239,8 +296,8 @@ class StateCommandResult(BaseModel):
     commands: List[StateCommand] = Field(default_factory=list)
     notes: Optional[str] = None
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {
                     "commands": [
@@ -254,6 +311,7 @@ class StateCommandResult(BaseModel):
                 }
             ]
         }
+    )
 
 
 # ==================== Orchestrator Routing Configuration ====================
@@ -266,11 +324,14 @@ AGENT_ROUTING = {
         "schema_tokens": 50  # Estimated
     },
     "effect_agent": {
-        "commands": ["condition", "buff"],
+        "commands": ["condition", "effect"],
         "result_type": EffectAgentResult,
-        "keywords": ["poisoned", "stunned", "blessed", "hasted", "condition", "buff", "effect",
-                     "prone", "blinded", "paralyzed", "restrained"],
-        "schema_tokens": 80
+        "keywords": ["poisoned", "stunned", "condition", "buff", "debuff", "effect", "prone", "blinded",
+                     "paralyzed", "restrained", "bless", "guidance", "bardic", "advantage",
+                     "disadvantage", "resistance", "vulnerable", "immune", "haste", "slow",
+                     "speed", "hunter's mark", "hex", "divine favor", "concentration",
+                     "fire resistance", "stoneskin", "longstrider"],
+        "schema_tokens": 100  # Simplified from 150
     },
     "resource_agent": {
         "commands": ["spell_slot", "hit_dice", "item"],
@@ -290,18 +351,29 @@ AGENT_ROUTING = {
 # ==================== Comparison ====================
 
 """
-OPTIMIZATION RESULTS:
+SIMPLIFIED TEXT-BASED EFFECT SYSTEM:
 
 Command Count:
 - Original (state_change_commands.py): 15 commands
-- Optimized: 11 commands (-27%)
+- Structured optimized (previous version): 14 commands
+- Current simplified: 11 commands (minimal command set)
+
+Effect Commands:
+1. ConditionCommand - D&D 5e conditions (unchanged)
+2. EffectCommand - Text-based effects (buffs, debuffs, spell effects)
 
 Schema Size (estimated):
-- Monolithic (all 15 commands): ~300 tokens
+- Monolithic (all 11 commands): ~300 tokens
 - HP_AGENT (1 command): ~50 tokens (-83%)
-- EFFECT_AGENT (2 commands): ~80 tokens (-73%)
+- EFFECT_AGENT (2 commands): ~100 tokens (-67%)
 - RESOURCE_AGENT (3 commands): ~50 tokens (-83%)
 - STATE_AGENT (2 commands): ~40 tokens (-87%)
+
+Architecture:
+- Single-tier system (no Tier 2 advanced_buff_agent needed)
+- Effect tracking for display and reference only
+- DM/agents manually apply bonuses when needed
+- System handles duration tracking and expiration
 
 Key Improvements:
 1. ✅ Merged add/remove into action field
@@ -309,10 +381,31 @@ Key Improvements:
 3. ✅ Removed source fields (added in executor)
 4. ✅ Examples instead of full enum bloat
 5. ✅ Organized for specialist agent routing
-6. ✅ Each specialist sees 1-3 commands vs 15
+6. ✅ Simplified effect system:
+   - Text-based descriptions (human-readable)
+   - No structured field validation
+   - Flexible for any D&D effect
+   - Easier for agents to extract
+7. ✅ Flat schemas (minimal nesting) for easier agent extraction
+8. ✅ Future-proof: can add optional structured fields later if automation needed
 
 Trade-offs:
-- Some optional fields return (but scoped to action type)
-- Need orchestrator to route to specialists
-- More complex executor dispatch (handles unified commands)
+- No automatic bonus calculation (DM/agents handle manually)
+- Less type safety (free-form text descriptions)
+- Simpler executor (1 handler instead of 4 specialized handlers)
+- Much smaller schema for effect_agent (~100 vs ~150 tokens)
+
+D&D Effects Supported (via text descriptions):
+- Bless: "Grants +1d4 to attack rolls and saving throws"
+- Haste: "+2 AC, advantage on Dex saves, doubled speed"
+- Hunter's Mark: "+1d6 damage to marked target"
+- Fire Resistance: "Resistant to fire damage (take half damage from fire)"
+- Bardic Inspiration: "+1d8 to ability check, attack, or saving throw"
+- Any other effect describable in natural language
+
+Design Philosophy:
+- Pragmatic approach: text-based display-only system
+- Effects tracked for reference, bonuses applied by DM/agents
+- Optimized for simplicity and agent extraction
+- Can evolve to hybrid system if automation needed later
 """
