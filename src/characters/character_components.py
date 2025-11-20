@@ -20,15 +20,24 @@ class DurationType(str, Enum):
 
 class Effect(BaseModel):
     """
-    Represents a lasting effect on a character.
-    Tracks duration, source, and stat modifiers.
+    Simple text-based effect tracking for display and reference.
+
+    Effects are tracked to show what's active on characters. DM/agents
+    manually apply bonuses when needed. System handles duration tracking
+    and expiration.
+
+    Examples:
+        - Bless: "Grants +1d4 to attack rolls and saving throws" (10 rounds)
+        - Haste: "+2 AC, advantage on Dex saves, doubled speed" (concentration)
+        - Fire Resistance: "Resistant to fire damage" (1 hour)
     """
     name: str
-    effect_type: str  # "condition", "buff", "debuff", "spell"
+    effect_type: str  # "buff", "debuff", "condition", "spell"
     duration_type: DurationType
     duration_remaining: int  # rounds/minutes/hours remaining
-    source: str  # e.g., "Poison (Orc attack)", "Bless (Cleric)", "Rage (Barbarian)"
-    modifiers: Dict[str, int] = {}  # stat modifications (e.g., {"attack_rolls": 1, "saving_throws": 1})
+    source: str  # e.g., "Bless (Cleric)", "Poison (Orc attack)"
+    description: str  # Full text description of the effect
+    summary: Optional[str] = None  # Brief summary for compact display
     created_at_turn: Optional[int] = None  # turn number when applied
 
     def tick(self, increment: int = 1) -> bool:
@@ -53,6 +62,17 @@ class Effect(BaseModel):
             duration_str = f"{self.duration_remaining} {unit} remaining"
 
         return f"{self.name} ({duration_str}, from {self.source})"
+
+    def get_compact_display(self) -> str:
+        """Get compact summary for display."""
+        duration_part = ""
+        if self.duration_type == DurationType.CONCENTRATION:
+            duration_part = f" [{self.duration_remaining}r conc]"
+        elif self.duration_type != DurationType.PERMANENT:
+            duration_part = f" [{self.duration_remaining}{self.duration_type.value[0]}]"
+
+        display_text = self.summary if self.summary else self.description
+        return f"{self.name}: {display_text}{duration_part}"
 
 class AbilityScores(BaseModel):
     strength: int
