@@ -62,24 +62,32 @@ class MarkdownChunker:
         Returns:
             List of MarkdownChunk objects
         """
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
 
         # Extract category from path (e.g., "Classes", "Spells", "Gameplay")
         parts = file_path.parts
-        rules_idx = parts.index('rules') if 'rules' in parts else -1
-        category = parts[rules_idx + 1] if rules_idx >= 0 and rules_idx + 1 < len(parts) else "Unknown"
+        rules_idx = parts.index("rules") if "rules" in parts else -1
+        category = (
+            parts[rules_idx + 1]
+            if rules_idx >= 0 and rules_idx + 1 < len(parts)
+            else "Unknown"
+        )
 
         filename = file_path.name
         file_path_str = str(file_path)
 
         # Extract main header (# Header)
-        main_header_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
-        main_header = main_header_match.group(1).strip() if main_header_match else filename.replace('.md', '')
+        main_header_match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
+        main_header = (
+            main_header_match.group(1).strip()
+            if main_header_match
+            else filename.replace(".md", "")
+        )
 
         # Split by ## headers (level 2)
         chunks = []
-        sections = re.split(r'\n(?=##\s+)', content)
+        sections = re.split(r"\n(?=##\s+)", content)
 
         chunk_index = 0
         for section in sections:
@@ -87,18 +95,26 @@ class MarkdownChunker:
                 continue
 
             # Extract section header (##)
-            section_header_match = re.search(r'^##\s+(.+)$', section, re.MULTILINE)
-            section_header = section_header_match.group(1).strip() if section_header_match else None
+            section_header_match = re.search(r"^##\s+(.+)$", section, re.MULTILINE)
+            section_header = (
+                section_header_match.group(1).strip() if section_header_match else None
+            )
 
             # For very large sections, split by ### headers
-            if len(section) > self.max_chunk_size and '###' in section:
-                subsections = re.split(r'\n(?=###\s+)', section)
+            if len(section) > self.max_chunk_size and "###" in section:
+                subsections = re.split(r"\n(?=###\s+)", section)
                 for subsection in subsections:
                     if not subsection.strip():
                         continue
 
-                    subsection_header_match = re.search(r'^###\s+(.+)$', subsection, re.MULTILINE)
-                    subsection_header = subsection_header_match.group(1).strip() if subsection_header_match else None
+                    subsection_header_match = re.search(
+                        r"^###\s+(.+)$", subsection, re.MULTILINE
+                    )
+                    subsection_header = (
+                        subsection_header_match.group(1).strip()
+                        if subsection_header_match
+                        else None
+                    )
 
                     # Build context-aware chunk text
                     chunk_text = self._build_chunk_text(
@@ -113,7 +129,7 @@ class MarkdownChunker:
                         main_header=main_header,
                         section_header=section_header,
                         subsection_header=subsection_header,
-                        chunk_index=chunk_index
+                        chunk_index=chunk_index,
                     )
                     chunks.append(chunk)
                     chunk_index += 1
@@ -131,7 +147,7 @@ class MarkdownChunker:
                     main_header=main_header,
                     section_header=section_header,
                     subsection_header=None,
-                    chunk_index=chunk_index
+                    chunk_index=chunk_index,
                 )
                 chunks.append(chunk)
                 chunk_index += 1
@@ -147,7 +163,7 @@ class MarkdownChunker:
                 main_header=main_header,
                 section_header=None,
                 subsection_header=None,
-                chunk_index=0
+                chunk_index=0,
             )
             chunks.append(chunk)
 
@@ -158,7 +174,7 @@ class MarkdownChunker:
         main_header: str,
         section_header: Optional[str],
         subsection_header: Optional[str],
-        content: str
+        content: str,
     ) -> str:
         """
         Build context-aware chunk text with header hierarchy.
@@ -176,15 +192,27 @@ class MarkdownChunker:
         # Add the actual content (clean up extra headers already included)
         clean_content = content
         if subsection_header:
-            clean_content = re.sub(r'^###\s+' + re.escape(subsection_header) + r'\s*\n', '', clean_content, count=1)
+            clean_content = re.sub(
+                r"^###\s+" + re.escape(subsection_header) + r"\s*\n",
+                "",
+                clean_content,
+                count=1,
+            )
         if section_header:
-            clean_content = re.sub(r'^##\s+' + re.escape(section_header) + r'\s*\n', '', clean_content, count=1)
+            clean_content = re.sub(
+                r"^##\s+" + re.escape(section_header) + r"\s*\n",
+                "",
+                clean_content,
+                count=1,
+            )
 
         parts.append(clean_content.strip())
 
-        return '\n\n'.join(parts)
+        return "\n\n".join(parts)
 
-    def chunk_directory(self, rules_dir: Path, file_pattern: str = "*.md") -> List[MarkdownChunk]:
+    def chunk_directory(
+        self, rules_dir: Path, file_pattern: str = "*.md"
+    ) -> List[MarkdownChunk]:
         """
         Recursively chunk all markdown files in a directory.
 
@@ -206,7 +234,9 @@ class MarkdownChunker:
                 all_chunks.extend(chunks)
 
                 if idx % 50 == 0:
-                    print(f"Processed {idx}/{len(markdown_files)} files ({len(all_chunks)} chunks so far)")
+                    print(
+                        f"Processed {idx}/{len(markdown_files)} files ({len(all_chunks)} chunks so far)"
+                    )
             except Exception as e:
                 print(f"Error processing {file_path}: {e}")
 
@@ -219,7 +249,7 @@ def main():
     from pathlib import Path
 
     # Test on Combat.md
-    test_file = Path("//wsl.localhost/Ubuntu/home/kenshin/Dungeon-Master/rules/Gameplay/Combat.md")
+    test_file = Path("/home/kenshin/Dungeon-Master/src/db/rules/Gameplay/Combat.md")
 
     if test_file.exists():
         chunker = MarkdownChunker(min_chunk_size=100, max_chunk_size=1000)
