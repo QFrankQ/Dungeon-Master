@@ -361,7 +361,7 @@ class CombatStat(str, Enum):
     # SWIMMING_SPEED = "swimming_speed"
     # CLIMBING_SPEED = "climbing_speed"
     # BURROWING_SPEED = "burrowing_speed"
-    # PROFICIENCY_BONUS = "proficiency_bonus"
+    PROFICIENCY_BONUS = "proficiency_bonus"
 
 
 class RestType(str, Enum):
