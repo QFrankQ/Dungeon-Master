@@ -10,7 +10,7 @@ from pydantic_ai import Agent
 import google.genai as genai
 
 from ..models.state_updates import StateExtractionResult
-from .prompts import STATE_EXTRACTOR_INSTRUCTIONS
+# from .prompts import STATE_EXTRACTOR_INSTRUCTIONS
 
 
 class StateExtractorAgent:
@@ -42,7 +42,7 @@ class StateExtractorAgent:
         self.agent = Agent(
             self.model,
             name="State Extractor",
-            instructions=STATE_EXTRACTOR_INSTRUCTIONS,
+            # instructions=STATE_EXTRACTOR_INSTRUCTIONS,
             output_type=StateExtractionResult
         )
     
