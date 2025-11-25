@@ -66,7 +66,7 @@ class ConditionCommand(BaseModel):
         }
     )
 
-
+#TODO: may want to add options that will apply effect to all characters.
 class EffectCommand(BaseModel):
     """Add or remove any temporary effect (buff, debuff, etc.)."""
     type: Literal["effect"] = "effect"
