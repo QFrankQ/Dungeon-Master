@@ -840,11 +840,18 @@ class StateCommandExecutor:
             )
 
     def _handle_rest(self, command: RestCommand, character: Character) -> CommandExecutionResult:
-        """Handle short/long rest commands."""
-        # TODO: Implement rest handling
+        """
+        Handle short/long rest commands.
+
+        NOTE: RestCommand should NOT reach the executor directly.
+        RestCommands should be expanded to atomic commands by StateCommandOrchestrator
+        before execution. If you see this error, use StateCommandOrchestrator.process_and_execute()
+        instead of StateCommandExecutor.execute_batch().
+        """
         return CommandExecutionResult(
             success=False,
             command_type=command.type,
             character_id=command.character_id,
-            message="Rest handler not yet implemented"
+            message="RestCommand should be expanded by StateCommandOrchestrator before execution. "
+                    "Use orchestrator.process_and_execute() instead of executor.execute_batch()."
         )
