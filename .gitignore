@@ -26,4 +26,9 @@ test_pydantic2.py
 
 #ignore rules for now
 src/db/rules
+src/db/rendered_rules
+src/db/metadata
 TODO.md
+
+# Rendered output from 5etools-renderer submodule (test outputs)
+output/
