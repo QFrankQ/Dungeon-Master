@@ -1,0 +1,3 @@
+[submodule "external/5etools-renderer"]
+	path = external/5etools-renderer
+	url = https://github.com/QFrankQ/5etools-DnD-Rules-Markdown-Renderer
