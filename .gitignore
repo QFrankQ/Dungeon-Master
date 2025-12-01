@@ -23,3 +23,7 @@ test_pydantic2.py
 
 #specstory ignore for now
 .specstory/
+
+#ignore rules for now
+src/db/rules
+TODO.md
