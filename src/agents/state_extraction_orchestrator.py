@@ -1,16 +1,19 @@
 """Orchestrator for multi-agent state extraction with event detection and specialized extractors."""
 
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Any
 import asyncio
 
 from .event_detector import EventDetectorAgent, create_event_detector
 from .combat_state_extractor import CombatStateExtractor, create_combat_state_extractor
 from .resource_extractor import ResourceExtractor, create_resource_extractor
+from .effect_agent import EffectAgent, create_effect_agent
 from ..models.state_updates import (
     StateExtractionResult, EventType, EventDetectionResult,
     CombatStateResult, ResourceResult, CharacterUpdate,
     CombatCharacterUpdate, ResourceCharacterUpdate
 )
+from ..context.effect_agent_context_builder import EffectAgentContextBuilder, create_effect_agent_context_builder
+from ..services.rules_cache_service import RulesCacheService, create_rules_cache_service
 
 
 class StateExtractionOrchestrator:
@@ -27,17 +30,24 @@ class StateExtractionOrchestrator:
         self,
         event_detector: EventDetectorAgent,
         combat_extractor: CombatStateExtractor,
-        resource_extractor: ResourceExtractor
+        resource_extractor: ResourceExtractor,
+        effect_agent: EffectAgent,
+        rules_cache_service: RulesCacheService,
+        effect_agent_context_builder: EffectAgentContextBuilder
     ):
         """Initialize orchestrator with all required agents."""
         self.event_detector = event_detector
         self.combat_extractor = combat_extractor
         self.resource_extractor = resource_extractor
+        self.effect_agent = effect_agent
+        self.rules_cache_service = rules_cache_service
+        self.effect_agent_context_builder = effect_agent_context_builder
 
     async def extract_state_changes(
         self,
-        formatted_turn_context: str, 
-        game_context: Optional[dict] = None
+        formatted_turn_context: str,
+        game_context: Optional[dict] = None,
+        turn_snapshot: Optional[Any] = None  # NEW - snapshot with active_turns_by_level
     ) -> StateExtractionResult:
         """
         Extract state changes using two-phase multi-agent approach.
@@ -45,6 +55,7 @@ class StateExtractionOrchestrator:
         Args:
             formatted_turn_context: XML-formatted turn context with unprocessed messages (from state_extractor_context_builder)
             game_context: Optional game context (turn_id, character info, etc.)
+            turn_snapshot: Optional snapshot from TurnManager (used by EffectAgent for cache merging)
 
         Returns:
             Unified StateExtractionResult with all extracted changes
@@ -60,13 +71,29 @@ class StateExtractionOrchestrator:
             tasks = []
             extractor_types = []
 
-            if EventType.COMBAT_STATE_CHANGE in events.detected_events:
+            # HP_CHANGE and STATE_CHANGE are handled by combat_extractor for now
+            # (until HPAgent and StateAgent are implemented separately)
+            if (EventType.HP_CHANGE in events.detected_events or
+                EventType.STATE_CHANGE in events.detected_events):
                 tasks.append(self.combat_extractor.extract(formatted_turn_context, game_context))
                 extractor_types.append("combat")
 
             if EventType.RESOURCE_USAGE in events.detected_events:
                 tasks.append(self.resource_extractor.extract(formatted_turn_context, game_context))
                 extractor_types.append("resource")
+
+            # Run EffectAgent with cached rules context if EFFECT_APPLIED event detected
+            if EventType.EFFECT_APPLIED in events.detected_events and turn_snapshot:
+                # Build context via EffectAgentContextBuilder (using snapshot)
+                effect_context = self.effect_agent_context_builder.build_context(
+                    narrative=formatted_turn_context,
+                    active_turns_by_level=turn_snapshot.active_turns_by_level,
+                    game_context=game_context
+                )
+
+                # Add EffectAgent task
+                tasks.append(self.effect_agent.extract(effect_context))
+                extractor_types.append("effect")
 
             # If no events detected, return empty result
             if not tasks:
@@ -186,19 +213,40 @@ class StateExtractionOrchestrator:
 
 
 def create_state_extraction_orchestrator(
-    model_name: str = "gemini-2.5-flash-lite"
+    model_name: str = "gemini-2.5-flash-lite",
+    rules_cache_service: Optional[RulesCacheService] = None
 ) -> StateExtractionOrchestrator:
     """
     Factory function to create fully configured state extraction orchestrator.
 
+    Creates all required agents and services internally:
+    - EventDetector for detecting which event types occurred
+    - CombatStateExtractor for HP/death save extraction
+    - ResourceExtractor for spell slot/item/hit dice extraction
+    - EffectAgent for condition/effect extraction with LanceDB caching
+    - RulesCacheService for managing cached rule descriptions (shared across system)
+    - EffectAgentContextBuilder for building effect extraction context
+
     Args:
-        model_name: Gemini model to use for all agents
+        model_name: Gemini model to use for all agents (default: gemini-2.5-flash-lite)
+        rules_cache_service: Optional shared RulesCacheService. If None, creates a new instance.
+                            Share this service with DM tools to maintain consistent cache.
 
     Returns:
         StateExtractionOrchestrator with all agents initialized
     """
+    # Create or use shared RulesCacheService
+    if rules_cache_service is None:
+        rules_cache_service = create_rules_cache_service()
+
+    # Create context builder with the cache service
+    effect_agent_context_builder = create_effect_agent_context_builder(rules_cache_service)
+
     return StateExtractionOrchestrator(
         event_detector=create_event_detector(model_name),
         combat_extractor=create_combat_state_extractor(model_name),
-        resource_extractor=create_resource_extractor(model_name)
+        resource_extractor=create_resource_extractor(model_name),
+        effect_agent=create_effect_agent(model_name),
+        rules_cache_service=rules_cache_service,
+        effect_agent_context_builder=effect_agent_context_builder
     )
