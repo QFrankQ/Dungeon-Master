@@ -74,10 +74,12 @@ class EventDetectorAgent:
 
         sections.extend([
             "Detect which event types occurred:",
-            "- COMBAT_STATE_CHANGE: HP changes, conditions, death saves, combat stat modifiers",
-            "- RESOURCE_USAGE: Spell casting, item usage, inventory changes, hit dice, ability changes",
+            "- HP_CHANGE: HP damage, healing, temporary HP",
+            "- EFFECT_APPLIED: Conditions (poisoned, stunned, etc.), buffs, debuffs, spell effects",
+            "- RESOURCE_USAGE: Spell slot usage, item consumption, hit dice usage",
+            "- STATE_CHANGE: Death saving throws, rest (short/long)",
             "",
-            "Return detected event types. Be permissive - better to detect both than miss one."
+            "Return detected event types. Be permissive - better to detect multiple than miss one."
         ])
 
         return "\n".join(sections)
