@@ -327,3 +327,209 @@ class TestEdgeCases:
         # But should definitely not have HP damage as an effect
         for cmd in result.commands:
             assert isinstance(cmd, (EffectCommand, ConditionCommand))
+
+
+# ==================== Effect Caching Tests ====================
+
+class TestEffectCaching:
+    """Tests for EffectAgent using cached rule descriptions from rules_cache."""
+
+    @pytest.mark.asyncio
+    async def test_uses_cached_bless_description(self, effect_agent):
+        """Test that EffectAgent uses cached Bless description from rules_cache when available."""
+        # Simulate context built by EffectAgentContextBuilder with cached Bless
+        context = """=== NARRATIVE ===
+The cleric casts Bless on Aragorn.
+
+=== KNOWN EFFECTS ===
+The following effects/spells/conditions have been referenced in this turn:
+
+**Bless** (Spell, Level 1)
+Whenever you make an attack roll or saving throw, you can roll 1d4 and add the number rolled to the attack roll or saving throw.
+Duration: Concentration, up to 1 minute
+School: Enchantment
+
+=== GAME CONTEXT ===
+Turn ID: 1.2
+Active Character: Cleric
+"""
+        result = await effect_agent.extract(context)
+
+        # Should extract Bless effect
+        bless_commands = [
+            cmd for cmd in result.commands
+            if isinstance(cmd, EffectCommand) and cmd.effect_name == "Bless"
+        ]
+
+        assert len(bless_commands) == 1
+        bless_cmd = bless_commands[0]
+
+        # Should use cached description (includes both attack rolls AND saving throws)
+        assert bless_cmd.character_id == "aragorn"
+        assert bless_cmd.action == "add"
+        assert "attack roll" in bless_cmd.description.lower()
+        assert "saving throw" in bless_cmd.description.lower()
+        assert "d4" in bless_cmd.description.lower()  # More flexible - accepts "1d4", "a d4", etc.
+        assert bless_cmd.duration_type == DurationType.CONCENTRATION
+
+        # Summary should reference the bonus
+        assert len(bless_cmd.summary) > 0
+
+    @pytest.mark.asyncio
+    async def test_generates_uncached_effect(self, effect_agent):
+        """Test that EffectAgent generates description for custom/uncached effect."""
+        # Context with NO cached effects (empty KNOWN EFFECTS)
+        context = """=== NARRATIVE ===
+The ancient artifact grants you the Dragon's Aura, providing resistance to fire damage.
+
+=== KNOWN EFFECTS ===
+No effects have been queried from the rules database in this turn.
+
+=== GAME CONTEXT ===
+Turn ID: 1.3
+Active Character: Aragorn
+"""
+        result = await effect_agent.extract(context)
+
+        # Should still extract the custom effect
+        assert len(result.commands) >= 1
+
+        custom_effect = next(
+            (cmd for cmd in result.commands if isinstance(cmd, EffectCommand)),
+            None
+        )
+
+        assert custom_effect is not None
+        assert custom_effect.action == "add"
+
+        # Should generate description from narrative (fire resistance)
+        desc_lower = custom_effect.description.lower()
+        assert "fire" in desc_lower
+        assert "resistance" in desc_lower
+
+    @pytest.mark.asyncio
+    async def test_cache_with_multiple_effects(self, effect_agent):
+        """Test that multiple cached rules are used correctly."""
+        # Context with multiple cached effects
+        context = """=== NARRATIVE ===
+The cleric casts Bless on Aragorn and Gimli. The wizard casts Haste on Legolas.
+
+=== KNOWN EFFECTS ===
+The following effects/spells/conditions have been referenced in this turn:
+
+**Bless** (Spell, Level 1)
+Whenever you make an attack roll or saving throw, you can roll 1d4 and add the number rolled to the attack roll or saving throw.
+Duration: Concentration, up to 1 minute
+School: Enchantment
+
+**Haste** (Spell, Level 3)
+Target gains +2 bonus to AC, advantage on Dexterity saving throws, and doubled speed. The target can use the additional action for Attack (one weapon attack only), Dash, Disengage, Hide, or Use an Object.
+Duration: Concentration, up to 1 minute
+School: Transmutation
+
+=== GAME CONTEXT ===
+Turn ID: 2.1
+Active Character: Cleric
+"""
+        result = await effect_agent.extract(context)
+
+        # Should extract 2 Bless + 1 Haste = 3 effects
+        assert len(result.commands) >= 3
+
+        # Validate Bless commands
+        bless_commands = [
+            cmd for cmd in result.commands
+            if isinstance(cmd, EffectCommand) and cmd.effect_name == "Bless"
+        ]
+        assert len(bless_commands) == 2
+
+        # Validate Haste command
+        haste_commands = [
+            cmd for cmd in result.commands
+            if isinstance(cmd, EffectCommand) and cmd.effect_name == "Haste"
+        ]
+        assert len(haste_commands) == 1
+
+        haste_cmd = haste_commands[0]
+        assert haste_cmd.character_id == "legolas"
+
+        # Should use cached Haste description (includes AC bonus, advantage, speed, action)
+        desc_lower = haste_cmd.description.lower()
+        assert "ac" in desc_lower or "armor class" in desc_lower
+        assert "dex" in desc_lower or "dexterity" in desc_lower
+        assert "speed" in desc_lower
+        assert "action" in desc_lower
+
+    @pytest.mark.asyncio
+    async def test_cached_condition_poisoned(self, effect_agent):
+        """Test that cached condition descriptions are used correctly."""
+        # Context with cached Poisoned condition
+        context = """=== NARRATIVE ===
+The orc's poisoned blade strikes Gimli. He becomes poisoned.
+
+=== KNOWN EFFECTS ===
+The following effects/spells/conditions have been referenced in this turn:
+
+**Poisoned** (Condition)
+A poisoned creature has disadvantage on attack rolls and ability checks.
+
+=== GAME CONTEXT ===
+Turn ID: 3.1
+Active Character: Orc
+"""
+        result = await effect_agent.extract(context)
+
+        # Should extract Poisoned condition
+        poisoned_commands = [
+            cmd for cmd in result.commands
+            if isinstance(cmd, ConditionCommand) and cmd.condition == Condition.POISONED
+        ]
+
+        assert len(poisoned_commands) == 1
+        poisoned_cmd = poisoned_commands[0]
+
+        assert poisoned_cmd.character_id == "gimli"
+        assert poisoned_cmd.action == "add"
+        assert poisoned_cmd.condition == Condition.POISONED
+
+    @pytest.mark.asyncio
+    async def test_mixed_cached_and_uncached(self, effect_agent):
+        """Test extracting mix of cached and uncached effects in same narrative."""
+        # Context with Bless cached but custom Dragon Aura NOT cached
+        context = """=== NARRATIVE ===
+The cleric casts Bless on Aragorn. Meanwhile, the ancient dragon grants him the Dragon's Blessing, providing resistance to all damage.
+
+=== KNOWN EFFECTS ===
+The following effects/spells/conditions have been referenced in this turn:
+
+**Bless** (Spell, Level 1)
+Whenever you make an attack roll or saving throw, you can roll 1d4 and add the number rolled to the attack roll or saving throw.
+Duration: Concentration, up to 1 minute
+
+=== GAME CONTEXT ===
+Turn ID: 4.1
+Active Character: Cleric
+"""
+        result = await effect_agent.extract(context)
+
+        # Should extract both Bless (cached) and Dragon's Blessing (uncached)
+        assert len(result.commands) >= 2
+
+        # Validate Bless uses cache
+        bless_cmd = next(
+            (cmd for cmd in result.commands
+             if isinstance(cmd, EffectCommand) and cmd.effect_name == "Bless"),
+            None
+        )
+        assert bless_cmd is not None
+        assert "attack roll" in bless_cmd.description.lower()
+        assert "saving throw" in bless_cmd.description.lower()
+
+        # Validate Dragon's Blessing is generated from narrative
+        dragon_cmd = next(
+            (cmd for cmd in result.commands
+             if isinstance(cmd, EffectCommand) and "dragon" in cmd.effect_name.lower()),
+            None
+        )
+        assert dragon_cmd is not None
+        assert "resistance" in dragon_cmd.description.lower()
