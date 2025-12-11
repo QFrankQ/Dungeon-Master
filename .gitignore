@@ -30,5 +30,11 @@ src/db/rendered_rules
 src/db/metadata
 TODO.md
 
+# LanceDB database
+src/db/lancedb/
+
 # Rendered output from 5etools-renderer submodule (test outputs)
 output/
+
+# Script outputs
+scripts/**/output/

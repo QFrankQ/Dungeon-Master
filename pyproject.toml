@@ -10,4 +10,5 @@ dependencies = [
     "pytest-asyncio>=0.21.0",
     "flask",
     "pydantic-ai>=1.2.1",
+    "lancedb>=0.5.0",
 ]

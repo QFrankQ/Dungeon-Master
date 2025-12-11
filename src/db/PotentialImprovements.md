@@ -1,0 +1,1 @@
+* LanceDB hybrid search & fuzzy search for exact matches. https://lancedb.com/docs/search/full-text-search/#example-fuzzy-search

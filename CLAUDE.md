@@ -43,11 +43,13 @@ User Interface (CLI/Web) → SessionManager → DungeonMasterAgent → Gemini AI
   - `state_extractor_context_builder.py`: Builds isolated context for state extraction (current turn only) to prevent duplicate extractions
   - `turn_message.py`: Message types (LIVE_MESSAGE, COMPLETED_SUBTURN) with selective filtering for different consumers
 
-- **Vector Database & Knowledge** (`src/db/`):
-  - `combat_rules.json`: 442-line comprehensive D&D 5e combat rules with semantic tags
-  - `vector_service.py`: Qdrant integration with Google embeddings (`gemini-embedding-001`)
-  - `prepare_embeddings.py` & `upload_to_vector_DB.py`: Vector database setup
-  - `test_vector_db.py`: Testing utilities
+- **Vector Database & Knowledge** (`src/db/`): **LanceDB-based rule storage with automatic reference expansion**
+  - `lance_rules_service.py`: **Primary vector service** - LanceDB integration with 2,804 embedded D&D rules, automatic reference expansion, and name-based lookups
+  - `vector_service.py`: Legacy Qdrant integration (deprecated, being replaced by LanceDB)
+  - `combat_rules.json`: 442-line procedural D&D 5e combat rules (not yet integrated into vector DB)
+  - `rendered_rules/`: 2,804 rendered D&D rules in markdown format
+  - `metadata/`: JSON metadata for each rule with references and tags
+  - **Note**: Vector services are NOT yet integrated into the agent - all imports are commented out in `agents.py`
 
 - **Web Interface** (`src/`): **Refactored modular architecture**
   - `app.py`: Flask server with chat endpoint and static file serving (port 5001)
@@ -71,6 +73,13 @@ User Interface (CLI/Web) → SessionManager → DungeonMasterAgent → Gemini AI
   - `enemies.json`: Enemy stats and information
   - `enemies/` and `players/` directories for character data
 
+- **Utility Scripts** (`scripts/`):
+  - `scripts/db/`: Database-related utilities
+    - `build_lance_rules_db.py`: Build/rebuild LanceDB from rendered rules
+    - `analyze_dangling_references.py`: Identify missing referenced rules
+    - `example_lance_usage.py`: Example queries and usage patterns
+    - `output/`: Generated reports and analysis (gitignored)
+
 ## Development Setup
 
 ### Dependencies
@@ -78,13 +87,17 @@ The project uses `uv` for dependency management with Python 3.11+. Key dependenc
 - `google-genai` (v1.26.0+): Google Gemini API client
 - `pydantic-ai` (v0.4.6+): AI agent framework
 - `pydantic` (v2.11.7+): Data validation
-- `qdrant-client` (v1.15.0+): Vector database client
+- `lancedb` (v0.5.0+): Local vector database with automatic reference expansion
+- `qdrant-client` (v1.15.0+): Legacy vector database client (deprecated)
 - `flask`: Web interface
 
 ### Environment Variables
-Required:
-- `GEMINI_API_KEY`: Google Gemini API access
-- `QDRANT_API_KEY`: Vector database operations
+**Required:**
+- `GEMINI_API_KEY` or `GOOGLE_API_KEY`: Google Gemini API access (free tier)
+
+**Optional:**
+- `GEMINI_API_KEY_PAID_TIER` or `GOOGLE_API_KEY_PAID_TIER`: Higher rate limit API key for database building (1500 req/min vs 15)
+- `QDRANT_API_KEY`: Legacy Qdrant vector database operations (deprecated)
 
 ### Common Commands
 
@@ -104,8 +117,21 @@ uv run python src/app.py
 # Access at http://localhost:5001
 ```
 
-**Test vector database:**
+**LanceDB vector database operations:**
 ```bash
+# Build/rebuild the rules database (uses paid tier API if available)
+uv run python scripts/db/build_lance_rules_db.py
+
+# Test mode - process only first 10 entries
+uv run python scripts/db/build_lance_rules_db.py --limit 10
+
+# Analyze dangling references (rules referenced but not in dataset)
+uv run python scripts/db/analyze_dangling_references.py
+
+# Example usage and testing
+uv run python scripts/db/example_lance_usage.py
+
+# Legacy Qdrant testing (deprecated)
 uv run python src/db/test_vector_db.py
 ```
 
@@ -115,13 +141,27 @@ uv run pytest
 uv run pytest -v  # verbose output
 uv run pytest path/to/specific_test.py  # single test file
 uv run pytest tests/ -k "memory"  # run memory-related tests
+uv run pytest tests/test_lance_rules_service.py  # test LanceDB service
 ```
+
+**IMPORTANT - Test Execution:**
+- ALWAYS use `uv run` for running tests (e.g., `uv run pytest` or `uv run python -m pytest`)
+- The `-m` flag is fine as long as you use `uv run` (e.g., `uv run python -m pytest tests/`)
+- **Note**: `uv` is installed at `/Users/frankchiu/.local/bin/uv`. If not in PATH, use:
+  - Full path: `/Users/frankchiu/.local/bin/uv run pytest ...`
+  - Or add to PATH: `PATH="$HOME/.local/bin:$PATH" uv run pytest ...`
+  - Or use: `.venv/bin/python -m pytest ...` (also valid)
+- Never run tests with plain `pytest` or `python -m pytest` without `uv run` or proper environment setup
 
 **Test turn management:**
 ```bash
 uv run python test_turn_management.py  # comprehensive turn system testing
 uv run python minimal_turn_test.py     # minimal turn functionality test
 ```
+
+**Utility Scripts** (`scripts/db/`):
+- All database utility scripts are organized in `scripts/db/`
+- Generated reports go to `scripts/db/output/` (gitignored)
 
 ## Key Features & Architecture Patterns
 
@@ -157,10 +197,39 @@ uv run python minimal_turn_test.py     # minimal turn functionality test
 - **Dual context builders**: DM gets full chronological context, StateExtractor gets isolated current-turn context
 - **Message type filtering**: LIVE_MESSAGE vs COMPLETED_SUBTURN with selective filtering for different consumers
 
-### Vector Search Integration
-- **Qdrant vector database**: Semantic search for D&D combat rules using `gemini-embedding-001`
-- **Tagged content**: 442-line rules with semantic tags for precise retrieval
-- **Testing utilities**: `test_vector_db.py` for validation
+### Vector Search Integration (LanceDB)
+**Current Status**: Rules database fully built and tested, but NOT yet integrated into agent (imports commented out in `agents.py`)
+
+**Architecture**:
+- **LanceDB local vector database**: 2,804 D&D rules embedded using `gemini-embedding-001` (768-dim vectors)
+- **Automatic reference expansion**: Queries return related rules (e.g., "Fireball" also returns "Sphere", "burning", etc.)
+- **Dual-tier API support**:
+  - Free tier (`GEMINI_API_KEY`) for queries (15 req/min)
+  - Paid tier (`GEMINI_API_KEY_PAID_TIER`) for building database (1500 req/min)
+- **In-memory name index**: O(1) lookup by rule name without requiring source code
+- **Reference validation**: All 2,544 valid references validated, 1,462 dangling references identified
+- **Type filtering**: Filter by spell, item, condition, action, feat, etc.
+
+**Key Methods**:
+```python
+service = create_lance_rules_service()
+
+# Semantic search with reference expansion
+results = service.search("How does fireball work?", limit=3, expand_references=True)
+
+# Name-based lookup (no source code needed)
+entry = service.get_by_name('Shield', entry_type='spell')  # Returns Shield spell
+
+# Direct ID lookup (requires source)
+entry = service.get_by_id('Fireball|XPHB')
+```
+
+**Data Sources**:
+- `rendered_rules/`: 2,804 markdown-formatted rules
+- `metadata/`: JSON metadata with references, tags, levels, schools, rarity
+- `lancedb/rules.lance/`: Vector database with embeddings (gitignored)
+
+**Legacy**: Qdrant integration (`vector_service.py`) is deprecated but still present
 
 ### CLI Memory Commands
 - `clear`: Reset conversation memory
@@ -270,3 +339,27 @@ The system uses three key message types for different purposes:
 ## Development Workflow Notes
 
 - **Always run with uv**: Use `uv run python` instead of plain `python` for consistent dependency management and virtual environment setup
+
+### LanceDB Implementation Notes
+
+**Google GenAI API Compatibility:**
+- The `task_type` parameter has been removed from `embed_content()` in recent Google GenAI SDK versions
+- Do NOT use: `client.models.embed_content(..., task_type="RETRIEVAL_QUERY")`
+- Use: `client.models.embed_content(model="gemini-embedding-001", contents=[text])`
+
+**Name Index Performance:**
+- The name index is built eagerly on `connect()` by fetching all entries and extracting name/type/id
+- ~2,804 entries × 50 bytes ≈ 140KB memory overhead (negligible)
+- Provides O(1) name lookups vs O(n) semantic search
+- Use `get_by_name()` when you have the rule name but not the source code
+
+**Reference Expansion:**
+- References are validated and deduplicated during database build
+- Cycle detection prevents infinite loops in recursive expansion
+- 2,544 valid references, 1,462 dangling references (pointing to rules not in dataset)
+- Use `expand_references=True` for context-rich results
+
+**Database Statistics:**
+- Total entries: 2,804
+- Reference types: variantrule (1144), spell (396), action (343), condition (330), item (260), etc.
+- Top sources: XPHB (Player's Handbook), XDMG (Dungeon Master's Guide), XMM (Monster Manual)

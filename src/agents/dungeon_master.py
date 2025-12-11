@@ -74,13 +74,15 @@ class DungeonMasterAgent:
     
     async def process_message(
         self,
-        context: str
+        context: str,
+        deps: Optional[Any] = None
     ):
         """
         Process a pre-built context and return Dungeon Master AgentRunResult.
 
         Args:
             context: Pre-built context string from external context builder
+            deps: Optional dependencies for tool execution (e.g., DMToolsDependencies)
 
         Returns:
             AgentRunResult containing:
@@ -88,16 +90,18 @@ class DungeonMasterAgent:
                 - usage(): Method to get token and request usage
         """
         # Get response from LLM agent using pre-built context
-        result = await self.agent.run(context)
+        # Pass deps to agent.run() for tool dependency injection
+        result = await self.agent.run(context, deps=deps)
 
         return result
     
     def process_message_sync(
         self,
-        context: str
+        context: str,
+        deps: Optional[Any] = None
     ) -> DungeonMasterResponse:
         """Synchronous version of process_message."""
-        return asyncio.run(self.process_message(context))
+        return asyncio.run(self.process_message(context, deps=deps))
         
     def get_system_prompt(self):
         # Load DM system prompt from file
