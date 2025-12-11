@@ -4,7 +4,7 @@ These models define what the state extraction agent should return.
 """
 
 from typing import List, Optional, Dict, Any, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 
 from ..characters.dnd_enums import (
@@ -243,10 +243,9 @@ class StateExtractionResult(BaseModel):
         default_factory=list,
         description="Cross-turn effects or modifications that carry over to parent turns"
     )
-    
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {
                     "character_updates": [
@@ -278,3 +277,4 @@ class StateExtractionResult(BaseModel):
                 }
             ]
         }
+    )
