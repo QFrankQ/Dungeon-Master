@@ -28,9 +28,11 @@ class UpdateType(str, Enum):
 
 
 class EventType(str, Enum):
-    """Types of state change events that can occur."""
-    COMBAT_STATE_CHANGE = "combat_state"  # HP, conditions, death saves, combat stats
-    RESOURCE_USAGE = "resource_usage"     # Spells, items, inventory, hit dice, abilities
+    """Types of state change events that can occur - aligned with 4-agent architecture."""
+    HP_CHANGE = "hp_change"              # HP damage, healing, temp HP → HPAgent
+    EFFECT_APPLIED = "effect_applied"    # Conditions, buffs, debuffs → EffectAgent
+    RESOURCE_USAGE = "resource_usage"    # Spell slots, items, hit dice → ResourceAgent
+    STATE_CHANGE = "state_change"        # Death saves, rest → StateAgent
 
 
 class EventDetectionResult(BaseModel):
