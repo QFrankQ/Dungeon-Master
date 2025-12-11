@@ -3,9 +3,10 @@
 from typing import Optional
 import os
 from pydantic_ai import Agent
-from pydantic_ai.models.gemini import GeminiModel
-from pydantic_ai.providers.google_gla import GoogleGLAProvider
-
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
+from dotenv import load_dotenv
+load_dotenv()
 from ..models.state_updates import CombatStateResult
 from .prompts import COMBAT_STATE_EXTRACTOR_INSTRUCTIONS
 
@@ -15,9 +16,9 @@ class CombatStateExtractor:
 
     def __init__(self, model_name: str = "gemini-2.5-flash-lite"):
         """Initialize the combat state extractor."""
-        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-        self.model = GeminiModel(
-            model_name, provider=GoogleGLAProvider(api_key=GEMINI_API_KEY)
+        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+        self.model = GoogleModel(
+            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
         )
         self.agent = Agent(
             model=self.model,
