@@ -25,7 +25,7 @@ from ..models.gd_response import GameflowDirectorResponse
 from ..context.gd_context_builder import GDContextBuilder
 from ..context.dm_context_builder import DMContextBuilder
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
-from ..models.state_updates import StateExtractionResult
+from ..models.state_commands_optimized import StateCommandResult
 
 # Forward reference to avoid circular import - will import in factory function
 from typing import TYPE_CHECKING
@@ -257,8 +257,8 @@ class SessionManager:
                     state_extractor_context = self.state_extractor_context_builder.build_context(
                         current_turn=current_TurnContext_snapshot,
                     )
-                    # Use orchestrator instead of single extractor
-                    state_changes: StateExtractionResult = await self.state_extraction_orchestrator.extract_state_changes(
+                    # Use orchestrator to extract commands
+                    state_commands = await self.state_extraction_orchestrator.extract_state_changes(
                         formatted_turn_context=state_extractor_context,
                         # TODO: game_context TBD
                         game_context={
@@ -267,6 +267,10 @@ class SessionManager:
                             "active_character": current_TurnContext_snapshot.active_character
                         }
                     )
+
+                    # Apply commands using StateManager
+                    # (This code is commented out but updating for when it's activated)
+                    # self.state_manager.apply_commands(state_commands)
                     
                 
 
@@ -515,7 +519,9 @@ class SessionManager:
         )
 
         # Run DM agent and get result (with usage tracking)
-        dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context)
+        # Pass deps if available (for DM tools like query_rules_database)
+        deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
+        dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
         dungeon_master_response: DungeonMasterResponse = dm_result.output
 
         # Track usage from this run
@@ -570,7 +576,8 @@ class SessionManager:
                     turn_manager_snapshots=turn_manager_snapshot,
                     # new_message_entries=None  # All messages already added
                 )
-                dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context)
+                deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
+                dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
                 dungeon_master_response = dm_result.output
 
                 # Track usage from re-run
