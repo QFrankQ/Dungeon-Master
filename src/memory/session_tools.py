@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 import asyncio
 
 from ..agents.dm_response import DMResponse
-from ..agents.state_extractor import StateExtractorAgent
+from ..agents.state_extraction_orchestrator import StateExtractionOrchestrator
 from .state_manager import StateManager
 
 
@@ -42,13 +42,13 @@ class SessionTool(Protocol):
 
 class StateExtractionTool:
     """Tool for extracting and applying state changes from DM narratives."""
-    
+
     def __init__(
-        self, 
-        state_extractor: StateExtractorAgent,
+        self,
+        state_extraction_orchestrator: StateExtractionOrchestrator,
         state_manager: StateManager
     ):
-        self.state_extractor = state_extractor
+        self.state_extraction_orchestrator = state_extraction_orchestrator
         self.state_manager = state_manager
     
     @property
@@ -75,24 +75,22 @@ class StateExtractionTool:
         }
         
         try:
-            # Extract state changes from the narrative
-            extraction_result = await self.state_extractor.extract_state_changes(
-                dm_response.narrative,
-                context=session_context
+            # Extract state commands from the narrative
+            command_result = await self.state_extraction_orchestrator.extract_state_changes(
+                formatted_turn_context=dm_response.narrative,
+                game_context=session_context
             )
-            
+
             results["state_extraction"] = {
-                "character_updates": len(extraction_result.character_updates),
-                "new_characters": len(extraction_result.new_characters),
-                "confidence": extraction_result.confidence,
-                "notes": extraction_result.notes
+                "commands_extracted": len(command_result.commands),
+                "notes": command_result.notes
             }
-            
-            # Apply state updates if any were found
-            if extraction_result.character_updates or extraction_result.new_characters:
-                update_results = self.state_manager.apply_state_updates(extraction_result)
+
+            # Apply commands if any were found
+            if command_result.commands:
+                update_results = self.state_manager.apply_commands(command_result)
                 results["state_updates"] = update_results
-                
+
                 # Collect any state update errors
                 if update_results.get("errors"):
                     results["errors"].extend(update_results["errors"])
