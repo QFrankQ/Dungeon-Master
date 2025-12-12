@@ -28,6 +28,8 @@ test_pydantic2.py
 src/db/rules
 src/db/rendered_rules
 src/db/metadata
+src/db/rendered_rules.backup
+src/db/metadata.backup
 TODO.md
 
 # LanceDB database
