@@ -382,11 +382,29 @@ def create_demo_session_manager(dm_model_name=None) -> 'SessionManager':
     # Create turn manager with condensation agent
     turn_manager = create_turn_manager(turn_condensation_agent=turn_condensation_agent)
 
-    # Create DM agent with turn_manager.start_and_queue_turns as a tool
+    # NEW: Create services for DM tools
+    from src.db.lance_rules_service import create_lance_rules_service
+    from src.services.rules_cache_service import create_rules_cache_service
+    from src.agents.dm_tools import create_dm_tools
+
+    lance_service = create_lance_rules_service()
+    rules_cache_service = create_rules_cache_service()
+
+    # Create DM tools and dependencies
+    dm_tools, dm_deps = create_dm_tools(
+        lance_service=lance_service,
+        turn_manager=turn_manager,
+        rules_cache_service=rules_cache_service
+    )
+
+    # Create DM agent with all tools (turn management + rules database)
     dm_agent = create_dungeon_master_agent(
         model_name=dm_model_name,
-        tools=[turn_manager.start_and_queue_turns]
+        tools=[turn_manager.start_and_queue_turns] + dm_tools
     )
+
+    # Store dm_deps for passing to process_message()
+    dm_agent.dm_deps = dm_deps
 
     # Create player character registry
     player_registry = create_player_character_registry()
