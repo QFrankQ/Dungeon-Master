@@ -22,7 +22,9 @@ from ..models.state_updates import (
     DeathSaveUpdate,
     CombatStatUpdate
 )
+from ..models.state_commands_optimized import StateCommandResult
 from ..characters.charactersheet import Character
+from .state_command_executor import StateCommandExecutor, BatchExecutionResult
 
 
 class StateUpdateError(Exception):
@@ -42,7 +44,7 @@ class StateManager:
     def __init__(self, character_data_path: str = "src/characters/", enable_logging: bool = True):
         """
         Initialize the state manager.
-        
+
         Args:
             character_data_path: Path to character data files
             enable_logging: Whether to log all state changes
@@ -51,7 +53,12 @@ class StateManager:
         self.enable_logging = enable_logging
         self.characters: Dict[str, Character] = {}
         self.update_log: List[Dict[str, Any]] = []
-        
+
+        # Initialize command executor with character lookup function
+        self.command_executor = StateCommandExecutor(
+            character_lookup=self._get_character_for_executor
+        )
+
         # Ensure directories exist
         os.makedirs(character_data_path, exist_ok=True)
         if enable_logging:
@@ -103,6 +110,63 @@ class StateManager:
         
         return False
     
+    def _get_character_for_executor(self, character_id: str) -> Optional[Character]:
+        """
+        Character lookup function for StateCommandExecutor.
+
+        Loads character from storage if not in memory.
+        """
+        if character_id not in self.characters:
+            self.load_character(character_id)
+        return self.characters.get(character_id)
+
+    def apply_commands(self, command_result: StateCommandResult) -> Dict[str, Any]:
+        """
+        Apply state commands using StateCommandExecutor (NEW method - command-based).
+
+        Args:
+            command_result: Result from StateExtractionOrchestrator with list of commands
+
+        Returns:
+            Dictionary with execution results and any errors
+        """
+        results = {
+            "success": True,
+            "commands_executed": 0,
+            "errors": [],
+            "warnings": []
+        }
+
+        try:
+            # Execute all commands using the command executor
+            batch_result: BatchExecutionResult = self.command_executor.execute_batch(
+                command_result.commands
+            )
+
+            results["commands_executed"] = batch_result.successful
+            results["success"] = batch_result.all_successful
+
+            # Collect errors from failed commands
+            for failure in batch_result.get_failures():
+                results["errors"].append(failure.message)
+
+            # Save all modified characters
+            for command in command_result.commands:
+                character_id = command.character_id
+                if character_id in self.characters:
+                    self.save_character(character_id)
+
+            # Log the update
+            if self.enable_logging:
+                self._log_command_execution(command_result, batch_result)
+
+        except Exception as e:
+            results["success"] = False
+            results["errors"].append(f"Critical error executing commands: {str(e)}")
+            self._log_error(f"Critical error executing commands: {e}")
+
+        return results
+
     def apply_state_updates(self, extraction_result: StateExtractionResult) -> Dict[str, Any]:
         """
         Apply all state updates from an extraction result.
@@ -285,8 +349,33 @@ class StateManager:
         # Implementation depends on your character creation needs
         pass
     
+    def _log_command_execution(self, command_result: StateCommandResult, batch_result: BatchExecutionResult) -> None:
+        """Log command execution for audit trail."""
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "extraction_notes": command_result.notes,
+            "total_commands": batch_result.total_commands,
+            "successful": batch_result.successful,
+            "failed": batch_result.failed,
+            "command_types": [cmd.type for cmd in command_result.commands],
+            "failures": [
+                {"character": r.character_id, "type": r.command_type, "message": r.message}
+                for r in batch_result.get_failures()
+            ]
+        }
+
+        self.update_log.append(log_entry)
+
+        # Save to file if logging is enabled
+        log_file = os.path.join(self.character_data_path, "logs", "state_updates.json")
+        try:
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(self.update_log, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self._log_error(f"Failed to save update log: {e}")
+
     def _log_update(self, extraction_result: StateExtractionResult, results: Dict[str, Any]) -> None:
-        """Log state update for audit trail."""
+        """Log state update for audit trail (DEPRECATED - use _log_command_execution instead)."""
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "extraction_confidence": extraction_result.confidence,
@@ -295,9 +384,9 @@ class StateManager:
             "character_updates": len(extraction_result.character_updates),
             "new_characters": len(extraction_result.new_characters)
         }
-        
+
         self.update_log.append(log_entry)
-        
+
         # Save to file if logging is enabled
         log_file = os.path.join(self.character_data_path, "logs", "state_updates.json")
         try:
