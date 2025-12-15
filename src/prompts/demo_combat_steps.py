@@ -19,7 +19,7 @@ DEMO_MAIN_ACTION_STEPS = [
     "Call for initiative rolls from all participants. Wait for the player to provide their initiative roll. DO NOT proceed until you have the roll. Once you have all the rolls, announce the initiative order then PROCEED to the next step.",
 
     # Step C: Process Main Turn Actions - Adjudication Step 1
-    "Receive and interpret the participant's declared action. Use action interpretation guidelines (Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize). Confirm what action they are taking. DO NOT confirm action cost yet. DO NOT resolve the action yet.",
+    "Receive and interpret the participant's declared action. Use action interpretation guidelines (Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize). VALIDATE character capability: check if character has the spell, ability, or equipment needed for this action based on their character sheet. If invalid, explain why and ask for a different action. If valid, confirm what action they are taking. DO NOT confirm action cost yet. DO NOT resolve the action yet.",
 
     # Step C: Process Main Turn Actions - Adjudication Step 2
     # "If the action is Influence, Search, Study, or Utilize, confirm the action cost (using their Action). Ask: 'This will use your Action for the turn. Do you still want to do this?' Otherwise, acknowledge and proceed. DO NOT provide reaction window yet.",
@@ -50,7 +50,7 @@ DEMO_MAIN_ACTION_STEPS = [
 # Used when reactions are declared during pre-resolution or post-resolution windows
 DEMO_REACTION_STEPS = [
     # Adjudication Step 1: Receive and Interpret
-    "Receive and interpret the declared reaction. Confirm what reaction they are using, its trigger, and verify it's valid for the current situation. DO NOT confirm reaction cost yet.",
+    "Receive and interpret the declared reaction. VALIDATE character capability: check if character has this reaction ability based on their character sheet (class features, spells, etc.). If invalid, explain why and ask for a different choice. If valid, confirm what reaction they are using, its trigger, and verify it's valid for the current situation. DO NOT confirm reaction cost yet.",
 
     # Adjudication Step 2: Confirm Reaction Cost
     "Confirm this uses their Reaction for this round. Verify they have a Reaction available (haven't used it this round). If valid, proceed. If not, inform them and ask for a different choice. DO NOT provide reaction window yet.",
