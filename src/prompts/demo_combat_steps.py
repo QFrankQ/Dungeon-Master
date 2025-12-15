@@ -76,3 +76,24 @@ DEMO_SETUP_STEPS = [
 
     # "Announce the complete initiative order from highest to lowest. Then announce whose turn is first and prompt them for their action."
 ]
+
+# Resolution step indices - state extraction triggers after these steps
+MAIN_ACTION_RESOLUTION_INDICES = {3}  # Index 3: "Resolve the declared action..."
+REACTION_RESOLUTION_INDICES = {3}     # Index 3: "Resolve the declared reaction..."
+
+def is_resolution_step_index(step_index: int, step_list: list[str]) -> bool:
+    """
+    Check if a step index is a resolution step that should trigger state extraction.
+
+    Args:
+        step_index: The current step index
+        step_list: The step list being used (DEMO_MAIN_ACTION_STEPS or DEMO_REACTION_STEPS)
+
+    Returns:
+        True if this step index is a resolution step
+    """
+    if step_list is DEMO_MAIN_ACTION_STEPS:
+        return step_index in MAIN_ACTION_RESOLUTION_INDICES
+    elif step_list is DEMO_REACTION_STEPS:
+        return step_index in REACTION_RESOLUTION_INDICES
+    return False
