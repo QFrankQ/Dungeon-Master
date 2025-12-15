@@ -6,6 +6,8 @@ Uses simplified demo methods that bypass GD agent and state management for demo 
 """
 
 import asyncio
+import shutil
+import tempfile
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from pathlib import Path
@@ -26,23 +28,23 @@ class DemoTerminal:
     Provides simple command-line interaction with the DM using demo methods.
     """
 
-    def __init__(self, session_manager: 'SessionManager'):
+    def __init__(self, session_manager: 'SessionManager', temp_character_dir: Optional[str] = None):
         self.session_manager = session_manager
         self.session_active = True
+        self.temp_character_dir = temp_character_dir  # For cleanup on exit
 
         # Usage tracking
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.total_requests = 0
 
-        # Multi-character support
+        # Multi-character support (updated to match new character files)
         self.characters = {
-            "hero": {"player_id": "player1", "character_name": "Hero"},
-            "wizard": {"player_id": "player2", "character_name": "Gandalf"},
-            "rogue": {"player_id": "player3", "character_name": "Shadowblade"},
-            "cleric": {"player_id": "player4", "character_name": "Healix"}
+            "fighter": {"player_id": "player1", "character_name": "Tharion Stormwind"},
+            "wizard": {"player_id": "player2", "character_name": "Lyralei Moonwhisper"},
+            "cleric": {"player_id": "player3", "character_name": "Grimjaw Ironforge"}
         }
-        self.current_character_key = "hero"  # Default character
+        self.current_character_key = "fighter"  # Default character
 
     @property
     def current_player_id(self):
@@ -86,6 +88,9 @@ class DemoTerminal:
                 import traceback
                 traceback.print_exc()
 
+        # Cleanup temp character directory
+        self.cleanup()
+
         print("\n[SYSTEM] Demo session ended. Farewell!")
 
     def print_header(self):
@@ -93,8 +98,8 @@ class DemoTerminal:
         print("=" * 70)
         print(" " * 20 + "D&D SESSION MANAGER DEMO")
         print("=" * 70)
-        print("\nThis demo uses simplified methods without GD and state management.")
-        print("Perfect for testing DM interactions and turn management.\n")
+        print("\nThis demo showcases DM interactions, turn management, and character state tracking.")
+        print("State extraction automatically tracks HP, effects, spell slots, and more.\n")
 
     def print_instructions(self):
         """Print available commands."""
@@ -104,9 +109,11 @@ class DemoTerminal:
         print("  /turn          - Show current turn information")
         print("  /history       - Show completed turns history")
         print("  /stats         - Show turn manager statistics")
+        print("  /character     - Show current character status and stats")
+        print("  /register <id> - Register/switch to a character (fighter, wizard, cleric)")
         print("  /usage         - Show token usage statistics")
         print("  /context       - Show DM context as built by context builder")
-        print("  /switch <char> - Switch to a different character (hero, wizard, rogue, cleric)")
+        print("  /switch <char> - Switch to a different character (fighter, wizard, cleric)")
         print("  /who           - Show current character and all available characters")
         print("  /quit          - Exit the demo")
         print("-" * 70)
@@ -121,6 +128,21 @@ class DemoTerminal:
                 char_info["player_id"],
                 char_info["character_name"]
             )
+
+        # Auto-register default character if state management is enabled
+        if self.session_manager.state_manager:
+            default_char_id = "fighter"
+            character = self.session_manager.state_manager.load_character(default_char_id)
+            if character:
+                self.session_manager.player_character_registry.register_player_character(
+                    self.current_player_id,
+                    default_char_id
+                )
+                classes_str = "/".join([c.value.title() for c in character.info.classes])
+                print(f"[SYSTEM] ✓ Auto-registered '{character.info.name}' ({classes_str} Level {character.info.level})")
+                print("[SYSTEM] Use /character to view stats, /register to switch characters")
+            else:
+                print(f"[SYSTEM] ⚠ Could not auto-register default character. Use /register <character_id> to register.")
 
         # Start first turn with default objective
         # Use the first step from DEMO_MAIN_ACTION_STEPS as the initial objective
@@ -179,6 +201,13 @@ class DemoTerminal:
         for response in responses:
             print(f"[DM] {response}\n")
 
+        # Display state change notifications if any
+        if result.get("state_results") and result["state_results"].get("success"):
+            state_info = result["state_results"]
+            if state_info.get("commands_executed", 0) > 0:
+                print(f"\n💫 {state_info['commands_executed']} state changes applied")
+                print("Type /character to see updated character status\n")
+
         # Display usage for this run
         print(f"[USAGE] This run: {usage['input_tokens']} in / {usage['output_tokens']} out / {usage['total_tokens']} total / {usage['requests']} requests")
 
@@ -216,6 +245,17 @@ class DemoTerminal:
                 print(f"[SYSTEM] Available characters: {', '.join(self.characters.keys())}")
             else:
                 self.switch_character(parts[1].lower())
+
+        elif cmd == '/character':
+            self.show_character_status()
+
+        elif cmd.startswith('/register'):
+            parts = command.split()
+            if len(parts) < 2:
+                print("[SYSTEM] Usage: /register <character_id>")
+                print("[SYSTEM] Available characters: fighter, wizard, cleric")
+            else:
+                await self.register_character(parts[1].lower())
 
         elif cmd == '/who':
             self.show_characters()
@@ -336,7 +376,7 @@ class DemoTerminal:
         Switch to a different character.
 
         Args:
-            character_key: Key for the character to switch to (hero, wizard, rogue, cleric)
+            character_key: Key for the character to switch to (fighter, wizard, cleric)
         """
         if character_key not in self.characters:
             print(f"[SYSTEM] Unknown character: {character_key}")
@@ -358,6 +398,115 @@ class DemoTerminal:
         for key, info in self.characters.items():
             marker = " <-- ACTIVE" if key == self.current_character_key else ""
             print(f"  {key:10} - {info['character_name']:15} (player_id: {info['player_id']}){marker}")
+
+    def show_character_status(self):
+        """Show current character's game stats and status."""
+        if not self.session_manager.state_manager:
+            print("\n[SYSTEM] State management is disabled in this demo.")
+            print("[SYSTEM] Enable state management to view character stats.")
+            return
+
+        # Get character ID from registry
+        character_id = self.session_manager.player_character_registry.get_character_id_by_player_id(self.current_player_id)
+
+        if not character_id:
+            print(f"\n[SYSTEM] No character registered for player '{self.current_player_id}'")
+            print("[SYSTEM] Use /register <character_id> to link a character")
+            print("[SYSTEM] Available characters: fighter, wizard, cleric")
+            return
+
+        # Load character from state manager
+        character = self.session_manager.state_manager.get_character(character_id)
+
+        if not character:
+            print(f"\n[SYSTEM] Character '{character_id}' not found")
+            return
+
+        # Display character stats (comprehensive format)
+        print(f"\n{'='*70}")
+        classes_str = "/".join([c.value.title() for c in character.info.classes])
+        print(f"CHARACTER: {character.info.name} ({classes_str} Level {character.info.level})")
+        print(f"{'='*70}")
+
+        # HP Status with visual bar
+        hp_percent = (character.hit_points.current_hp / character.hit_points.maximum_hp) * 100
+        hp_bar_filled = int(hp_percent / 5)  # 20 char bar (5% per char)
+        hp_bar = "█" * hp_bar_filled + "░" * (20 - hp_bar_filled)
+        print(f"\nHP: [{hp_bar}] {character.hit_points.current_hp}/{character.hit_points.maximum_hp} ({hp_percent:.0f}%)")
+        if character.hit_points.temporary_hp > 0:
+            print(f"Temp HP: +{character.hit_points.temporary_hp}")
+
+        # Combat Stats
+        print(f"\nAC: {character.combat_stats.armor_class} | Initiative: +{character.combat_stats.initiative_bonus} | Speed: {character.combat_stats.speed} ft")
+
+        # Ability Scores
+        print(f"\nAbility Scores:")
+        for ability in ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]:
+            score = getattr(character.ability_scores, ability)
+            modifier = (score - 10) // 2
+            mod_str = f"+{modifier}" if modifier >= 0 else str(modifier)
+            print(f"  {ability.title()[:3].upper()}: {score} ({mod_str})")
+
+        # Active Effects
+        if character.active_effects:
+            print(f"\nActive Effects:")
+            for effect in character.active_effects:
+                duration_str = f"{effect.duration} rounds" if effect.duration else "Permanent"
+                conc_str = " [Concentration]" if hasattr(effect, 'requires_concentration') and effect.requires_concentration else ""
+                print(f"  • {effect.name}: {effect.summary}{conc_str} ({duration_str})")
+
+        # Spell Slots (if spellcaster)
+        if hasattr(character, 'spellcasting') and character.spellcasting and character.spellcasting.spell_slots:
+            print(f"\nSpell Slots:")
+            for level in range(1, 10):
+                total_slots = character.spellcasting.spell_slots.get(str(level), 0)
+                expended = character.spellcasting.spell_slots_expended.get(str(level), 0)
+                current = total_slots - expended
+                if total_slots > 0:
+                    slot_display = "●" * current + "○" * expended
+                    print(f"  Level {level}: {slot_display} ({current}/{total_slots})")
+
+        # Hit Dice
+        print(f"\nHit Dice: {character.hit_dice.total - character.hit_dice.used}/{character.hit_dice.total} {character.hit_dice.die_type}")
+
+        # Death Saves (if any recorded)
+        if character.death_saves.successes > 0 or character.death_saves.failures > 0:
+            success_display = "●" * character.death_saves.successes + "○" * (3 - character.death_saves.successes)
+            failure_display = "●" * character.death_saves.failures + "○" * (3 - character.death_saves.failures)
+            print(f"\nDeath Saves:")
+            print(f"  Successes: {success_display}")
+            print(f"  Failures:  {failure_display}")
+
+        print(f"{'='*70}\n")
+
+    async def register_character(self, character_id: str):
+        """Register/switch to a different character."""
+        if not self.session_manager.state_manager:
+            print("\n[SYSTEM] State management is disabled in this demo.")
+            print("[SYSTEM] Enable state management to use character registration.")
+            return
+
+        # Verify character exists by attempting to load it
+        character = self.session_manager.state_manager.load_character(character_id)
+        if not character:
+            print(f"\n[SYSTEM] Character '{character_id}' not found")
+            print("[SYSTEM] Available characters: fighter, wizard, cleric")
+            return
+
+        # Register mapping
+        self.session_manager.player_character_registry.register_player_character(self.current_player_id, character_id)
+        classes_str = "/".join([c.value.title() for c in character.info.classes])
+        print(f"\n[SYSTEM] ✓ Registered '{character.info.name}' ({classes_str} Level {character.info.level}) to player '{self.current_player_id}'")
+        print("[SYSTEM] Use /character to view character status")
+
+    def cleanup(self):
+        """Clean up temporary character directory on exit."""
+        if self.temp_character_dir and Path(self.temp_character_dir).exists():
+            try:
+                shutil.rmtree(self.temp_character_dir)
+                print(f"[SYSTEM] Cleaned up temporary character data")
+            except Exception as e:
+                print(f"[SYSTEM] Warning: Could not clean up temp directory: {e}")
 
 
 def create_demo_session_manager(dm_model_name=None) -> 'SessionManager':
@@ -409,34 +558,56 @@ def create_demo_session_manager(dm_model_name=None) -> 'SessionManager':
     # Create player character registry
     player_registry = create_player_character_registry()
 
-    # Register demo player and character
-    player_registry.register_player_character("demo_player", "Hero")
+    # Register demo player and character (not used with current demo flow)
+    # player_registry.register_player_character("demo_player", "fighter")
+
+    # Create temporary directory for character state (prevents modifying source files)
+    temp_dir = tempfile.mkdtemp(prefix="dnd_demo_")
+    print(f"[SYSTEM] Created temporary character directory: {temp_dir}")
+
+    # Copy character JSON files from source to temp directory
+    source_char_dir = Path("src/characters")
+    temp_char_dir = Path(temp_dir)
+    character_files = ["fighter.json", "wizard.json", "cleric.json"]
+
+    for char_file in character_files:
+        source_file = source_char_dir / char_file
+        if source_file.exists():
+            shutil.copy2(source_file, temp_char_dir / char_file)
+            print(f"[SYSTEM] Copied {char_file} to temp directory")
+
+    # Create state management components with temp directory
+    from src.memory.state_manager import create_state_manager
+    from src.agents.state_extraction_orchestrator import create_state_extraction_orchestrator
+
+    state_manager = create_state_manager(character_data_path=str(temp_char_dir) + "/")
+    state_extraction_orchestrator = create_state_extraction_orchestrator()
 
     # Create session manager with all components
     session_manager = SessionManager(
         gameflow_director_agent=None,  # No GD for demo
         dungeon_master_agent=dm_agent,
-        state_extraction_orchestrator=None,  # No state extraction for demo
-        state_manager=None,  # No state management for demo
-        enable_state_management=False,
-        # tool_registry=None,
+        state_extraction_orchestrator=state_extraction_orchestrator,
+        state_manager=state_manager,
+        enable_state_management=True,  # ENABLED for character tracking
         turn_manager=turn_manager,
         enable_turn_management=True,
         player_character_registry=player_registry
     )
 
-    return session_manager
+    return session_manager, temp_dir
 
 
 async def main():
     """Main entry point for demo terminal."""
     print("\n[SYSTEM] Creating demo session...")
 
-    # Create session manager
-    session_manager = create_demo_session_manager(dm_model_name='gemini-2.5-flash')
+    # Create session manager with temp directory
+    session_manager, temp_dir = create_demo_session_manager(dm_model_name='gemini-2.5-flash')
     print("[SYSTEM] Demo session manager created.")
-    # # Create and run terminal
-    terminal = DemoTerminal(session_manager)
+
+    # Create and run terminal with temp directory for cleanup
+    terminal = DemoTerminal(session_manager, temp_character_dir=temp_dir)
     print("[SYSTEM] Starting demo terminal...")
     await terminal.run()
 
