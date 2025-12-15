@@ -16,6 +16,7 @@ from ..agents.state_extraction_orchestrator import (
 )
 from ..agents.dungeon_master import DungeonMasterAgent, create_dungeon_master_agent
 from .state_manager import StateManager, create_state_manager
+from ..prompts.demo_combat_steps import is_resolution_step_index
 # from .session_tools import SessionToolRegistry, create_default_tool_registry
 # from .session_tools import StateExtractionTool
 from .turn_manager import TurnManager, create_turn_manager
@@ -447,6 +448,75 @@ class SessionManager:
 
     # ===== DEMO METHODS (Simplified for demo purposes) =====
 
+    async def _extract_state_if_resolution_step(
+        self,
+        response_queue: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Helper method to extract and apply state changes if the current step is a resolution step.
+
+        This checks the CURRENT step (before advancing) to determine if state extraction should occur.
+
+        Args:
+            response_queue: List to append status messages to
+
+        Returns:
+            State extraction results if extraction occurred, None otherwise
+        """
+        if not self.enable_state_management or not self.state_extraction_orchestrator:
+            return None
+
+        try:
+            # Get current turn snapshot
+            turn_snapshot = self.turn_manager.get_snapshot()
+            current_turn = turn_snapshot.turn_stack[-1][0] if turn_snapshot.turn_stack else None
+
+            if not current_turn or not current_turn.game_step_list:
+                return None
+
+            # Check if CURRENT step (before advancing) is a resolution step
+            current_step_index = current_turn.current_step_index
+
+            if not is_resolution_step_index(current_step_index, current_turn.game_step_list):
+                # Not a resolution step - no extraction needed
+                return None
+
+            response_queue.append("[Resolution step detected - extracting state changes...]\n")
+
+            # Build state extraction context
+            state_context = self.state_extractor_context_builder.build_context(
+                current_turn=current_turn
+            )
+
+            # Extract state changes
+            state_commands = await self.state_extraction_orchestrator.extract_state_changes(
+                formatted_turn_context=state_context,
+                game_context={
+                    "turn_id": current_turn.turn_id,
+                    "turn_level": current_turn.turn_level,
+                    "active_character": current_turn.active_character
+                },
+                turn_snapshot=turn_snapshot
+            )
+
+            # Apply commands
+            if state_commands.commands:
+                state_results = self.state_manager.apply_commands(state_commands)
+
+                if state_results["success"]:
+                    response_queue.append(f"✓ Applied {state_results['commands_executed']} state commands\n")
+                else:
+                    response_queue.append(f"⚠ State extraction errors: {state_results['errors']}\n")
+
+                return state_results
+            else:
+                response_queue.append("[No state changes detected]\n")
+                return None
+
+        except Exception as e:
+            response_queue.append(f"⚠ State extraction failed: {e}\n")
+            return None
+
     # Mock combat game steps based on combat_flow.txt
     # These represent a typical combat turn action lifecycle
     _DEMO_COMBAT_STEPS = [
@@ -545,6 +615,7 @@ class SessionManager:
         )
 
         # === PHASE 4: CHECK FOR STEP COMPLETION ===
+        state_results = None
         if not dungeon_master_response.game_step_completed:
             # No step completion - done processing
             pass
@@ -552,9 +623,15 @@ class SessionManager:
             # WHILE loop for step completion
             # Processes multiple steps in same turn OR switches to subturns
             while dungeon_master_response.game_step_completed:
-                response_queue.append("\n[DM has indicated step completion - advancing turn step...]\n")
+                response_queue.append("\n[DM has indicated step completion - processing resolution...]\n")
+
+                # === STATE EXTRACTION BEFORE ADVANCING STEP ===
+                # Check if current step (before advancing) is a resolution step
+                state_results = await self._extract_state_if_resolution_step(response_queue)
+
                 # Advance the processing turn's step
                 # (This is the turn that was being processed when DM ran, even if tools created subturns)
+                response_queue.append("[Advancing turn step...]\n")
                 more_steps = self.turn_manager.advance_processing_turn_step()
                 response_queue.append(f"[New step objective: {self.turn_manager.get_current_step_objective()}]\n")
                 if not more_steps:
@@ -606,7 +683,8 @@ class SessionManager:
                 "output_tokens": total_output_tokens,
                 "total_tokens": total_input_tokens + total_output_tokens,
                 "requests": total_requests
-            }
+            },
+            "state_results": state_results  # NEW - state extraction results
         }
 
     def demo_process_player_input_sync(
