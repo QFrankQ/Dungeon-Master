@@ -7,6 +7,7 @@ from .character_components import (
 )
 
 class Character(BaseModel):
+    character_id: str  # Unique identifier for state management
     info: CharacterInfo
     ability_scores: AbilityScores
     saving_throws: SavingThrows
