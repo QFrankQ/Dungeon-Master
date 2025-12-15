@@ -75,30 +75,30 @@ class SessionManager:
         
         # Store the GD agent
         self.gameflow_director_agent: GameflowDirectorAgent = gameflow_director_agent
-        # Store the DM agent 
+        # Store the DM agent
         self.dungeon_master_agent: DungeonMasterAgent = dungeon_master_agent
-        
-        # Initialize components
-        # self.state_extraction_orchestrator = (
-        #     state_extraction_orchestrator or create_state_extraction_orchestrator()
-        # )
-        # self.state_manager = state_manager or create_state_manager()
+
+        # Initialize state management components
+        self.state_extraction_orchestrator = (
+            state_extraction_orchestrator or create_state_extraction_orchestrator()
+        )
+        self.state_manager = state_manager or create_state_manager()
 
         # Initialize turn manager (optional)
         self.turn_manager = turn_manager
         if enable_turn_management and not turn_manager:
             self.turn_manager = create_turn_manager()
-        
+
         # Initialize player character registry
         self.player_character_registry: PlayerCharacterRegistry = player_character_registry or create_player_character_registry()
-        
+
         # Initialize tool registry
         # self.tool_registry = tool_registry or create_default_tool_registry()
 
         # Initialize context builders
         self.gd_context_builder = GDContextBuilder()
         self.dm_context_builder = DMContextBuilder()
-        self.state_extractor_context_builder = StateExtractorContextBuilder
+        self.state_extractor_context_builder = StateExtractorContextBuilder()
 
         # Register default tools if components are available
         # if self.state_extraction_orchestrator and self.state_manager:
