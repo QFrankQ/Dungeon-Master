@@ -27,6 +27,7 @@ from ..context.gd_context_builder import GDContextBuilder
 from ..context.dm_context_builder import DMContextBuilder
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
 from ..models.state_commands_optimized import StateCommandResult
+from ..services.rules_cache_service import RulesCacheService
 
 # Forward reference to avoid circular import - will import in factory function
 from typing import TYPE_CHECKING
@@ -56,7 +57,8 @@ class SessionManager:
         # tool_registry: Optional[SessionToolRegistry] = None,
         turn_manager: Optional[TurnManager] = None,
         enable_turn_management: bool = False,
-        player_character_registry: Optional[PlayerCharacterRegistry] = None
+        player_character_registry: Optional[PlayerCharacterRegistry] = None,
+        rules_cache_service: Optional[RulesCacheService] = None
     ):
         """
         Initialize session manager.
@@ -95,9 +97,15 @@ class SessionManager:
         # Initialize tool registry
         # self.tool_registry = tool_registry or create_default_tool_registry()
 
+        # Store rules cache service
+        self.rules_cache_service = rules_cache_service
+
         # Initialize context builders
         self.gd_context_builder = GDContextBuilder()
-        self.dm_context_builder = DMContextBuilder()
+        self.dm_context_builder = DMContextBuilder(
+            state_manager=self.state_manager,
+            rules_cache_service=self.rules_cache_service
+        )
         self.state_extractor_context_builder = StateExtractorContextBuilder()
 
         # Register default tools if components are available

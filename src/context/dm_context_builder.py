@@ -24,9 +24,16 @@ class DMContextBuilder:
     - Chronological order preservation
     """
     
-    def __init__(self):
-        """Initialize the DM context builder."""
-        pass
+    def __init__(self, state_manager=None, rules_cache_service=None):
+        """
+        Initialize the DM context builder.
+
+        Args:
+            state_manager: Optional StateManager for loading character information
+            rules_cache_service: Optional RulesCacheService for accessing cached rules
+        """
+        self.state_manager = state_manager
+        self.rules_cache_service = rules_cache_service
     
     def build_context(
         self,
@@ -65,13 +72,29 @@ class DMContextBuilder:
         context_parts.extend("<current_turn>")
         context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level))
         context_parts.extend("</current_turn>")
-        
-        #TODO:
-        # Context about current relevant Game State
-        
-        #TODO:
-        # Rules relevant to the current turn
-        
+
+        # Add character sheet for active character (for capability validation)
+        if self.state_manager and turn_manager_snapshots.active_turns_by_level:
+            current_turn = turn_manager_snapshots.active_turns_by_level[-1]
+            if current_turn.active_character:
+                character = self.state_manager.get_character(current_turn.active_character)
+                if character:
+                    context_parts.append("<character_sheet>")
+                    context_parts.append(self._format_character_sheet(character))
+                    context_parts.append("</character_sheet>")
+                    context_parts.append("")
+
+        # Add cached rules from turn hierarchy (for quick reference)
+        if self.rules_cache_service and turn_manager_snapshots.active_turns_by_level:
+            merged_cache = self.rules_cache_service.merge_cache_from_snapshot(
+                turn_manager_snapshots.active_turns_by_level
+            )
+            if merged_cache:
+                context_parts.append("<cached_rules>")
+                context_parts.append(self._format_cached_rules(merged_cache))
+                context_parts.append("</cached_rules>")
+                context_parts.append("")
+
         # Build New Messages (if provided as parameter)
         if new_message_entries:
             context_parts.append("<new_messages>")
@@ -137,6 +160,116 @@ class DMContextBuilder:
 
         return "\n".join(context_parts)
 
+    def _format_character_sheet(self, character) -> str:
+        """
+        Format character sheet information for DM context.
+
+        Provides essential character capabilities including class, level, HP,
+        spellcasting abilities, and equipment. Helps DM validate actions.
+
+        Args:
+            character: Character object from state_manager
+
+        Returns:
+            Formatted character sheet string
+        """
+        lines = []
+
+        # Basic info
+        classes_str = "/".join([c.value.title() for c in character.info.classes])
+        lines.append(f"Character: {character.info.name} ({classes_str} Level {character.info.level})")
+        lines.append(f"Race: {character.info.race.value.title()} | Background: {character.info.background}")
+        lines.append("")
+
+        # Hit Points
+        hp_current = character.hit_points.current_hp
+        hp_max = character.hit_points.maximum_hp
+        hp_temp = character.hit_points.temporary_hp
+        hp_line = f"HP: {hp_current}/{hp_max}"
+        if hp_temp > 0:
+            hp_line += f" (+{hp_temp} temp)"
+        lines.append(hp_line)
+        lines.append("")
+
+        # Ability Scores (for checking action feasibility)
+        lines.append("Ability Scores:")
+        for ability in ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]:
+            score = getattr(character.ability_scores, ability)
+            modifier = (score - 10) // 2
+            mod_str = f"+{modifier}" if modifier >= 0 else str(modifier)
+            lines.append(f"  {ability.upper()[:3]}: {score} ({mod_str})")
+        lines.append("")
+
+        # Spellcasting (critical for validating spell actions)
+        if character.spellcasting:
+            lines.append("Spellcasting:")
+            lines.append(f"  Ability: {character.spellcasting.spellcasting_ability.upper()}")
+            lines.append(f"  Spell Save DC: {character.spellcasting.spell_save_dc}")
+            lines.append(f"  Spell Attack: +{character.spellcasting.spell_attack_bonus}")
+
+            # Spell slots
+            if character.spellcasting.spell_slots:
+                lines.append("  Spell Slots:")
+                for level in range(1, 10):
+                    total_slots = character.spellcasting.spell_slots.get(level, 0)
+                    expended = character.spellcasting.spell_slots_expended.get(level, 0)
+                    if total_slots > 0:
+                        available = total_slots - expended
+                        lines.append(f"    Level {level}: {available}/{total_slots} available")
+            lines.append("")
+
+        # Active Conditions (affect action feasibility)
+        if character.conditions:
+            lines.append(f"Conditions: {', '.join(character.conditions)}")
+            lines.append("")
+
+        # Active Effects
+        if character.active_effects:
+            lines.append("Active Effects:")
+            for effect in character.active_effects:
+                duration_str = f" ({effect.duration} rounds)" if effect.duration else ""
+                lines.append(f"  - {effect.name}: {effect.summary}{duration_str}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def _format_cached_rules(self, rules_cache: Dict[str, Any]) -> str:
+        """
+        Format cached rules for DM context.
+
+        Provides quick reference to rules already queried during this turn,
+        helping DM make informed decisions without additional lookups.
+
+        Args:
+            rules_cache: Dictionary of cached rule entries
+
+        Returns:
+            Formatted rules cache string
+        """
+        if not rules_cache:
+            return ""
+
+        lines = []
+        lines.append("Cached Rules Reference:")
+
+        # Group by entry_type
+        rules_by_type = {}
+        for rule_name, rule_data in rules_cache.items():
+            entry_type = rule_data.get("entry_type", "unknown")
+            if entry_type not in rules_by_type:
+                rules_by_type[entry_type] = []
+            rules_by_type[entry_type].append(rule_data)
+
+        # Format each type
+        for entry_type, rules in sorted(rules_by_type.items()):
+            lines.append(f"\n  {entry_type.upper()}S:")
+            for rule in rules:
+                name = rule.get("name", "Unknown")
+                summary = rule.get("summary", rule.get("description", "")[:100])
+                lines.append(f"    - {name}: {summary}")
+
+        return "\n".join(lines)
+
     # ===== DEMO METHOD (Simplified for demo purposes) =====
 
     def build_demo_context(
@@ -183,6 +316,28 @@ class DMContextBuilder:
         context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level, exclude_new_messages=True))
         context_parts.append("</current_turn>")
         context_parts.append("")
+
+        # Add character sheet for active character (enables DM to validate capabilities)
+        if self.state_manager and turn_manager_snapshots.active_turns_by_level:
+            current_turn = turn_manager_snapshots.active_turns_by_level[-1]
+            if current_turn.active_character:
+                character = self.state_manager.get_character(current_turn.active_character)
+                if character:
+                    context_parts.append("<character_sheet>")
+                    context_parts.append(self._format_character_sheet(character))
+                    context_parts.append("</character_sheet>")
+                    context_parts.append("")
+
+        # Add cached rules from turn hierarchy (provides quick rule reference)
+        if self.rules_cache_service and turn_manager_snapshots.active_turns_by_level:
+            merged_cache = self.rules_cache_service.merge_cache_from_snapshot(
+                turn_manager_snapshots.active_turns_by_level
+            )
+            if merged_cache:
+                context_parts.append("<cached_rules>")
+                context_parts.append(self._format_cached_rules(merged_cache))
+                context_parts.append("</cached_rules>")
+                context_parts.append("")
 
         # Highlight new messages
         if turn_manager_snapshots.active_turns_by_level:
