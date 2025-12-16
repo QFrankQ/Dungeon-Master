@@ -598,6 +598,7 @@ class SessionManager:
 
         # Run DM agent and get result (with usage tracking)
         # Pass deps if available (for DM tools like query_rules_database)
+        #TODO: if exception, roll back the added messages.
         deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
         dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
         dungeon_master_response: DungeonMasterResponse = dm_result.output

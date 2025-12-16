@@ -233,6 +233,7 @@ class DMContextBuilder:
 
         return "\n".join(lines)
 
+    #TODO: this should be generated directly from Character
     def _format_cached_rules(self, rules_cache: Dict[str, Any]) -> str:
         """
         Format cached rules for DM context.
