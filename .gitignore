@@ -41,5 +41,6 @@ output/
 # Script outputs
 scripts/**/output/
 
-@logs
+#logs
 src/characters/logs/
+src/characters/player_character_registry.json
