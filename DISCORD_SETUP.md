@@ -165,20 +165,108 @@ Without this enabled, the bot cannot read message content and will fail to start
 
 ---
 
-## Next Steps (Future Phases)
+## Phase 2: PostgreSQL Database (Optional)
 
-Phase 2 will add:
-- PostgreSQL database for persistent storage
-- Multi-guild support with proper isolation
-- Session persistence across bot restarts
+Phase 2 adds persistent storage for multi-guild support and session persistence. This is **optional** - the bot works fine without it using Phase 1 in-memory storage.
+
+### Prerequisites
+
+- **Docker** and **Docker Compose** (for local PostgreSQL)
+- OR a hosted PostgreSQL database (Railway, Render, etc.)
+
+### Step 1: Start PostgreSQL
+
+**Option A: Local with Docker (Recommended for Development)**
+```bash
+# Start PostgreSQL in Docker
+docker-compose up -d postgres
+
+# Verify it's running
+docker ps
+```
+
+**Option B: Use Hosted PostgreSQL**
+- Get a PostgreSQL database URL from your hosting provider
+- Update `DATABASE_URL` in `.env` with your connection string
+
+### Step 2: Install Database Dependencies
+
+```bash
+# Install Phase 2 dependencies
+uv sync
+```
+
+### Step 3: Update Environment Variables
+
+Add to your `.env` file:
+```bash
+# Database Configuration
+DATABASE_URL=postgresql+asyncpg://dnd:dev_password@localhost:5432/dnd_bot
+```
+
+### Step 4: Run Database Migrations
+
+```bash
+# Create all database tables
+uv run alembic upgrade head
+```
+
+You should see output like:
+```
+INFO  [alembic.runtime.migration] Running upgrade  -> 001, Initial database schema
+```
+
+### Step 5: Run the Bot
+
+```bash
+# Same command as Phase 1
+uv run python src/discord/bot.py
+```
+
+### What Phase 2 Adds
+
+✅ **Multi-Guild Support**: Bot works in multiple Discord servers simultaneously with data isolation
+✅ **Session Persistence**: Sessions are saved to database (ready for future resume-after-restart feature)
+✅ **Guild Registry**: Each Discord server gets a database record
+✅ **Graceful Degradation**: If database is unavailable, bot falls back to Phase 1 in-memory mode
+
+### Database Management
+
+**View database with pgAdmin (Optional)**:
+```bash
+# Start pgAdmin
+docker-compose --profile tools up -d
+
+# Open http://localhost:5050
+# Login: admin@dnd.local / admin
+```
+
+**Stop PostgreSQL**:
+```bash
+docker-compose down
+```
+
+**Reset database**:
+```bash
+# WARNING: Deletes all data!
+docker-compose down -v
+docker-compose up -d postgres
+uv run alembic upgrade head
+```
+
+---
+
+## Next Steps (Future Phases)
 
 Phase 3 will add:
 - BYOK (Bring Your Own Key) system for Gemini API
 - Per-user or per-guild API keys
+- Encrypted storage of API keys
 
 Phase 4 will add:
 - Custom character creation via JSON templates
 - Character import/export
+- Per-player character storage in database
 
 ---
 
