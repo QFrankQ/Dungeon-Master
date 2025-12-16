@@ -592,7 +592,8 @@ def create_demo_session_manager(dm_model_name=None) -> 'SessionManager':
         enable_state_management=True,  # ENABLED for character tracking
         turn_manager=turn_manager,
         enable_turn_management=True,
-        player_character_registry=player_registry
+        player_character_registry=player_registry,
+        rules_cache_service=rules_cache_service  # For DM context with cached rules
     )
 
     return session_manager, temp_dir
