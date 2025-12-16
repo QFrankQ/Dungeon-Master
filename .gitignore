@@ -32,6 +32,9 @@ src/db/rendered_rules.backup
 src/db/metadata.backup
 TODO.md
 
+# Local player registry data
+src/characters/player_character_registry.json
+
 # LanceDB database
 src/db/lancedb/
 
