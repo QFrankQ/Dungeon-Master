@@ -1,0 +1,33 @@
+Generic single-database configuration for D&D DM Bot.
+
+# Common Alembic Commands
+
+## Create a new migration (auto-generate from model changes)
+```bash
+alembic revision --autogenerate -m "description of changes"
+```
+
+## Apply all pending migrations
+```bash
+alembic upgrade head
+```
+
+## Rollback one migration
+```bash
+alembic downgrade -1
+```
+
+## Show current migration version
+```bash
+alembic current
+```
+
+## Show migration history
+```bash
+alembic history
+```
+
+## Create initial database
+```bash
+alembic upgrade head
+```
