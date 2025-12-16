@@ -568,8 +568,10 @@ class SessionManager:
             raise ValueError("No DungeonMasterAgent configured.")
 
         # === PHASE 0: BEGIN TURN PROCESSING ===
-        # Set processing turn to current stack top
-        self.turn_manager.update_processing_turn_to_current()
+        # Set processing turn to current stack top (only if turn is active)
+        # Note: First message may not have a turn yet - DM will create it via tool
+        if self.turn_manager.is_in_turn():
+            self.turn_manager.update_processing_turn_to_current()
 
         # === PHASE 1: INPUT PROCESSING ===
         # Convert ChatMessages to simple dict format for unified interface
