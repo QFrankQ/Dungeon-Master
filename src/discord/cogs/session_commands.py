@@ -26,6 +26,7 @@ class SessionCommands(commands.Cog):
         """Start a new game session in the current channel."""
         channel_id = interaction.channel_id
         guild_id = interaction.guild_id
+        guild_name = interaction.guild.name if interaction.guild else "Unknown Guild"
 
         # Check if session already exists
         if self.session_pool.get(channel_id):
@@ -39,8 +40,8 @@ class SessionCommands(commands.Cog):
         await interaction.response.defer()
 
         try:
-            # Create new session
-            await self.session_pool.create_session(channel_id, guild_id)
+            # Create new session with database persistence (Phase 2)
+            await self.session_pool.create_session(channel_id, guild_id, guild_name)
 
             await interaction.followup.send(
                 "🎲 **D&D Game Session Started!**\n\n"
