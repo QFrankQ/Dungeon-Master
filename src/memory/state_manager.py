@@ -1,27 +1,20 @@
 """
-State update handler for managing character state changes.
-Processes structured state updates and applies them to character models.
+State Manager - Character Persistence Layer
+
+This class handles character storage and persistence:
+- load_character(): Load character from JSON file
+- save_character(): Save character to JSON file
+- get_character(): Get character with caching
+
+All state updates are handled by StateCommandExecutor.
+See state_command_executor.py for update logic.
 """
 
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 import json
 import os
 from datetime import datetime
-from copy import deepcopy
 
-from ..models.state_updates import (
-    StateExtractionResult,
-    CharacterUpdate,
-    CharacterCreation,
-    HPUpdate,
-    ConditionUpdate,
-    AbilityUpdate,
-    InventoryUpdate,
-    SpellSlotUpdate,
-    HitDiceUpdate,
-    DeathSaveUpdate,
-    CombatStatUpdate
-)
 from ..models.state_commands_optimized import StateCommandResult
 from ..characters.charactersheet import Character
 from .state_command_executor import StateCommandExecutor, BatchExecutionResult
@@ -34,11 +27,17 @@ class StateUpdateError(Exception):
 
 class StateManager:
     """
-    Manages character state updates based on extracted state changes.
-    
-    This class handles the system-level application of state changes
-    identified by the StateExtractorAgent. It maintains character data,
-    validates updates, and provides audit trails.
+    Character Persistence and Storage Manager.
+
+    This class provides character storage, loading, and saving functionality.
+    It delegates state updates to StateCommandExecutor while maintaining
+    character data, caching, and audit trails.
+
+    Key responsibilities:
+    - Load/save character JSON files
+    - Cache characters in memory
+    - Coordinate with StateCommandExecutor for state updates
+    - Provide audit logging for state changes
     """
     
     def __init__(self, character_data_path: str = "src/characters/", enable_logging: bool = True):
@@ -167,188 +166,6 @@ class StateManager:
 
         return results
 
-    def apply_state_updates(self, extraction_result: StateExtractionResult) -> Dict[str, Any]:
-        """
-        Apply all state updates from an extraction result.
-        
-        Args:
-            extraction_result: Result from StateExtractorAgent
-        
-        Returns:
-            Dictionary with update results and any errors
-        """
-        results = {
-            "success": True,
-            "character_updates_applied": 0,
-            "new_characters_created": 0,
-            "errors": [],
-            "warnings": []
-        }
-        
-        try:
-            # Apply character updates
-            for update in extraction_result.character_updates:
-                try:
-                    self._apply_character_update(update)
-                    results["character_updates_applied"] += 1
-                except Exception as e:
-                    error_msg = f"Failed to update {update.character_id}: {str(e)}"
-                    results["errors"].append(error_msg)
-                    self._log_error(error_msg)
-            
-            # Create new characters
-            for creation in extraction_result.new_characters:
-                try:
-                    self._create_character(creation)
-                    results["new_characters_created"] += 1
-                except Exception as e:
-                    error_msg = f"Failed to create character {creation.name}: {str(e)}"
-                    results["errors"].append(error_msg)
-                    self._log_error(error_msg)
-            
-            # Log the update
-            if self.enable_logging:
-                self._log_update(extraction_result, results)
-            
-            # If any errors occurred, mark as partial success
-            if results["errors"]:
-                results["success"] = False
-        
-        except Exception as e:
-            results["success"] = False
-            results["errors"].append(f"Critical error in state updates: {str(e)}")
-            self._log_error(f"Critical error applying state updates: {e}")
-        
-        return results
-    
-    def _apply_character_update(self, update: CharacterUpdate) -> None:
-        """Apply updates to a specific character."""
-        character_id = update.character_id
-        
-        # Load character if not in memory
-        if character_id not in self.characters:
-            character = self.load_character(character_id)
-            if not character:
-                raise StateUpdateError(f"Character {character_id} not found")
-        
-        character = self.characters[character_id]
-        
-        # Apply different types of updates
-        if update.hp_update:
-            self._apply_hp_update(character, update.hp_update)
-        
-        if update.condition_update:
-            self._apply_condition_update(character, update.condition_update)
-        
-        if update.ability_update:
-            self._apply_ability_update(character, update.ability_update)
-        
-        if update.inventory_update:
-            self._apply_inventory_update(character, update.inventory_update)
-        
-        if update.spell_slot_update:
-            self._apply_spell_slot_update(character, update.spell_slot_update)
-        
-        if update.hit_dice_update:
-            self._apply_hit_dice_update(character, update.hit_dice_update)
-        
-        if update.death_save_update:
-            self._apply_death_save_update(character, update.death_save_update)
-        
-        if update.combat_stat_update:
-            self._apply_combat_stat_update(character, update.combat_stat_update)
-        
-        # Save the updated character
-        self.save_character(character_id)
-    
-    #TODO:HP Update needs to take temporary HP into account
-    def _apply_hp_update(self, character: Character, hp_update: HPUpdate) -> None:
-        """Apply HP changes to a character."""
-        if hp_update.damage:
-            current_hp = character.hit_points.current_hp
-            new_hp = max(0, current_hp - hp_update.damage)
-            character.hit_points.current_hp = new_hp
-        
-        if hp_update.healing:
-            current_hp = character.hit_points.current_hp
-            max_hp = character.hit_points.maximum_hp
-            new_hp = min(max_hp, current_hp + hp_update.healing)
-            character.hit_points.current_hp = new_hp
-        
-        if hp_update.temporary_hp:
-            character.hit_points.temporary_hp = hp_update.temporary_hp
-    
-    def _apply_condition_update(self, character: Character, condition_update: ConditionUpdate) -> None:
-        """Apply condition changes to a character."""
-        # Initialize conditions list if it doesn't exist
-        if not hasattr(character, 'conditions'):
-            # Add conditions as a dynamic attribute for now
-            # You may want to add this to the character model properly
-            character.conditions = []
-        
-        # Add new conditions
-        for condition in condition_update.add_conditions:
-            if condition.value not in character.conditions:
-                character.conditions.append(condition.value)
-        
-        # Remove conditions
-        for condition in condition_update.remove_conditions:
-            if condition.value in character.conditions:
-                character.conditions.remove(condition.value)
-    
-    def _apply_ability_update(self, character: Character, ability_update: AbilityUpdate) -> None:
-        """Apply ability score modifications to a character."""
-        # This would modify temporary ability scores or modifiers
-        # Implementation depends on how you handle temporary modifiers
-        pass
-    
-    def _apply_inventory_update(self, character: Character, inventory_update: InventoryUpdate) -> None:
-        """Apply inventory changes to a character."""
-        # Implementation depends on your inventory structure
-        pass
-    
-    def _apply_spell_slot_update(self, character: Character, spell_slot_update: SpellSlotUpdate) -> None:
-        """Apply spell slot changes to a character."""
-        if character.spellcasting and character.spellcasting.spell_slots:
-            level = int(spell_slot_update.level.value)  # Convert enum to int
-            if level in character.spellcasting.spell_slots:
-                current = character.spellcasting.spell_slots[level]
-                new_value = max(0, current + spell_slot_update.change)
-                character.spellcasting.spell_slots[level] = new_value
-    
-    def _apply_hit_dice_update(self, character: Character, hit_dice_update: HitDiceUpdate) -> None:
-        """Apply hit dice changes to a character."""
-        # Implementation depends on hit dice structure in character model
-        pass
-    
-    #TODO: implement the effects once either success or failures hits 3
-    def _apply_death_save_update(self, character: Character, death_save_update: DeathSaveUpdate) -> None:
-        """Apply death saving throw updates to a character."""
-        if death_save_update.reset:
-            character.death_saves.successes = 0
-            character.death_saves.failures = 0
-        else:
-            # Increment successes if specified
-            if death_save_update.success_increment is not None and death_save_update.success_increment > 0:
-                new_successes = character.death_saves.successes + death_save_update.success_increment
-                character.death_saves.successes = min(3, new_successes)
-            
-            # Increment failures if specified
-            if death_save_update.failure_increment is not None and death_save_update.failure_increment > 0:
-                new_failures = character.death_saves.failures + death_save_update.failure_increment
-                character.death_saves.failures = min(3, new_failures)
-    
-    def _apply_combat_stat_update(self, character: Character, combat_stat_update: CombatStatUpdate) -> None:
-        """Apply combat statistic updates to a character."""
-        # Implementation for temporary combat stat changes
-        pass
-    
-    def _create_character(self, creation: CharacterCreation) -> None:
-        """Create a new character from creation data."""
-        # This would create a basic character structure
-        # Implementation depends on your character creation needs
-        pass
-    
     def _log_command_execution(self, command_result: StateCommandResult, batch_result: BatchExecutionResult) -> None:
         """Log command execution for audit trail."""
         log_entry = {
@@ -374,27 +191,6 @@ class StateManager:
         except Exception as e:
             self._log_error(f"Failed to save update log: {e}")
 
-    def _log_update(self, extraction_result: StateExtractionResult, results: Dict[str, Any]) -> None:
-        """Log state update for audit trail (DEPRECATED - use _log_command_execution instead)."""
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "extraction_confidence": extraction_result.confidence,
-            "extracted_from": extraction_result.extracted_from,
-            "results": results,
-            "character_updates": len(extraction_result.character_updates),
-            "new_characters": len(extraction_result.new_characters)
-        }
-
-        self.update_log.append(log_entry)
-
-        # Save to file if logging is enabled
-        log_file = os.path.join(self.character_data_path, "logs", "state_updates.json")
-        try:
-            with open(log_file, 'w', encoding='utf-8') as f:
-                json.dump(self.update_log, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            self._log_error(f"Failed to save update log: {e}")
-    
     def _log_error(self, message: str) -> None:
         """Log error messages."""
         error_entry = {
