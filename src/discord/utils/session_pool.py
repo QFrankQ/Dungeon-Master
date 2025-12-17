@@ -65,6 +65,7 @@ class SessionPool:
 
         Raises:
             ValueError: If session already exists for this channel
+            ValueError: If guild has no API key registered (strict BYOK)
         """
         if channel_id in self._sessions:
             raise ValueError(f"Session already exists for channel {channel_id}")
@@ -75,9 +76,21 @@ class SessionPool:
         from src.persistence.database import get_session
         from src.persistence.repositories.guild_repo import GuildRepository
         from src.persistence.repositories.session_repo import SessionRepository
+        from src.services.byok_service import get_api_key_for_guild
 
-        # Create session manager with temp directory (like demo_terminal.py:607)
-        session_manager, temp_dir = create_demo_session_manager(dm_model_name='gemini-2.5-flash')
+        # Phase 3: Get guild's API key (strict BYOK - no fallback)
+        guild_api_key = await get_api_key_for_guild(guild_id)
+        if not guild_api_key:
+            raise ValueError(
+                f"This server needs an API key before you can start a game. "
+                f"Server admins: use `/guild-key` to register a Gemini API key."
+            )
+
+        # Create session manager with guild's API key
+        session_manager, temp_dir = create_demo_session_manager(
+            dm_model_name='gemini-2.5-flash',
+            api_key=guild_api_key  # Pass guild's API key for BYOK
+        )
 
         # Initialize first turn (like demo_terminal.py:150-158)
         # This ensures there's an active turn before first player message
