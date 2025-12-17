@@ -167,7 +167,8 @@ class StateExtractionOrchestrator:
 
 
 def create_state_extraction_orchestrator(
-    model_name: str = "gemini-2.5-flash-lite",
+    model_name: str,
+    api_key: str,
     rules_cache_service: Optional[RulesCacheService] = None
 ) -> StateExtractionOrchestrator:
     """
@@ -183,7 +184,8 @@ def create_state_extraction_orchestrator(
     - EffectAgentContextBuilder: Builds effect extraction context with cached rules
 
     Args:
-        model_name: Gemini model to use for all agents (default: gemini-2.5-flash-lite)
+        model_name: Gemini model to use for all agents
+        api_key: API key (required for guild-level BYOK)
         rules_cache_service: Optional shared RulesCacheService. If None, creates a new instance.
                             Share this service with DM tools to maintain consistent cache.
 
@@ -198,11 +200,11 @@ def create_state_extraction_orchestrator(
     effect_agent_context_builder = create_effect_agent_context_builder(rules_cache_service)
 
     return StateExtractionOrchestrator(
-        event_detector=create_event_detector(model_name),
-        hp_agent=create_hp_agent(model_name),
-        effect_agent=create_effect_agent(model_name),
-        resource_agent=create_resource_agent(model_name),
-        lifecycle_agent=create_lifecycle_agent(model_name),
+        event_detector=create_event_detector(model_name, api_key),
+        hp_agent=create_hp_agent(model_name, api_key),
+        effect_agent=create_effect_agent(model_name, api_key),
+        resource_agent=create_resource_agent(model_name, api_key),
+        lifecycle_agent=create_lifecycle_agent(model_name, api_key),
         rules_cache_service=rules_cache_service,
         effect_agent_context_builder=effect_agent_context_builder
     )
