@@ -1,12 +1,15 @@
 """
 Character Commands Cog
 
-Handles character management commands: /character, /register, /switch, /who
+Handles character management commands: /character, /register, /switch, /who, /upload-character
 """
 
 import discord
 from discord import app_commands
 from discord.ext import commands
+import json
+import os
+from pathlib import Path
 
 from src.discord.utils.session_pool import get_session_pool
 
@@ -24,6 +27,74 @@ class CharacterCommands(commands.Cog):
         if not session_context:
             return None, "⚠️ No active game session in this channel. Use `/start` to begin."
         return session_context, None
+
+    def _validate_character_json(self, data: dict) -> tuple[bool, str]:
+        """
+        Validate character JSON structure (permissive - allows extra fields).
+
+        Args:
+            data: Parsed JSON data
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Check required top-level fields
+        required_fields = {
+            "character_id": str,
+            "info": dict,
+            "ability_scores": dict,
+            "hit_points": dict,
+            "combat_stats": dict
+        }
+
+        for field, expected_type in required_fields.items():
+            if field not in data:
+                return False, f"Missing required field: '{field}'"
+            if not isinstance(data[field], expected_type):
+                return False, f"Field '{field}' must be of type {expected_type.__name__}"
+
+        # Validate ability scores (must be 1-30)
+        ability_scores = data["ability_scores"]
+        required_abilities = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]
+
+        for ability in required_abilities:
+            if ability not in ability_scores:
+                return False, f"Missing ability score: '{ability}'"
+            score = ability_scores[ability]
+            if not isinstance(score, int) or not (1 <= score <= 30):
+                return False, f"Ability score '{ability}' must be an integer between 1 and 30"
+
+        # Validate info nested fields
+        info = data["info"]
+        required_info = {"name": str, "level": int, "classes": list}
+
+        for field, expected_type in required_info.items():
+            if field not in info:
+                return False, f"Missing required info field: '{field}'"
+            if not isinstance(info[field], expected_type):
+                return False, f"Info field '{field}' must be of type {expected_type.__name__}"
+
+        # Validate hit_points nested fields
+        hp = data["hit_points"]
+        required_hp = {"current_hp": int, "maximum_hp": int}
+
+        for field, expected_type in required_hp.items():
+            if field not in hp:
+                return False, f"Missing required hit_points field: '{field}'"
+            if not isinstance(hp[field], expected_type):
+                return False, f"Hit_points field '{field}' must be of type {expected_type.__name__}"
+
+        # Validate combat_stats nested fields
+        combat = data["combat_stats"]
+        required_combat = {"armor_class": int, "initiative_bonus": int, "speed": int}
+
+        for field, expected_type in required_combat.items():
+            if field not in combat:
+                return False, f"Missing required combat_stats field: '{field}'"
+            if not isinstance(combat[field], expected_type):
+                return False, f"Combat_stats field '{field}' must be of type {expected_type.__name__}"
+
+        return True, ""
 
     @app_commands.command(name="character", description="View your character's stats and status")
     async def show_character(self, interaction: discord.Interaction):
@@ -127,7 +198,7 @@ class CharacterCommands(commands.Cog):
         await interaction.response.send_message(char_sheet, ephemeral=True)
 
     @app_commands.command(name="register", description="Register or switch to a character")
-    @app_commands.describe(character_id="Character ID (fighter, wizard, or cleric)")
+    @app_commands.describe(character_id="Character ID (use /who to see available characters)")
     async def register_character(self, interaction: discord.Interaction, character_id: str):
         """Register character (mirrors demo_terminal.py:482-500)."""
         session_context, error = self._get_session_or_error(interaction)
@@ -143,7 +214,7 @@ class CharacterCommands(commands.Cog):
         if not character:
             await interaction.response.send_message(
                 f"❌ Character '{character_id}' not found\n"
-                f"Available characters: fighter, wizard, cleric",
+                f"Use `/who` to see available characters or `/upload-character` to upload your own.",
                 ephemeral=True
             )
             return
@@ -173,23 +244,152 @@ class CharacterCommands(commands.Cog):
 
         session_manager = session_context.session_manager
 
-        # Get available character IDs
-        available_chars = ["fighter", "wizard", "cleric"]
+        # Get character directory from session's temp directory
+        char_dir = session_context.temp_character_dir or "src/characters"
+
+        # Dynamically discover all character JSON files
+        all_char_files = []
+        if os.path.exists(char_dir):
+            all_char_files = [f[:-5] for f in os.listdir(char_dir) if f.endswith('.json')]
+
+        # Separate built-in from custom
+        builtin_chars = ["fighter", "wizard", "cleric"]
+        builtin_available = [c for c in all_char_files if c in builtin_chars]
+        custom_available = [c for c in all_char_files if c not in builtin_chars]
 
         who_text = "**🎭 Available Characters**\n\n"
 
-        for char_id in available_chars:
-            character = session_manager.state_manager.load_character(char_id)
-            if character:
-                classes_str = "/".join([c.value.title() for c in character.info.classes])
-                who_text += (
-                    f"• **{char_id}**: {character.info.name} "
-                    f"({classes_str} Level {character.info.level})\n"
-                )
+        # Show built-in characters
+        if builtin_available:
+            who_text += "**Built-in:**\n"
+            for char_id in builtin_available:
+                character = session_manager.state_manager.load_character(char_id)
+                if character:
+                    classes_str = "/".join([c.value.title() for c in character.info.classes])
+                    who_text += (
+                        f"• **{char_id}**: {character.info.name} "
+                        f"({classes_str} Level {character.info.level})\n"
+                    )
+            who_text += "\n"
 
-        who_text += "\nUse `/register <character_id>` to register a character!"
+        # Show custom characters
+        if custom_available:
+            who_text += "**Custom (Uploaded):**\n"
+            for char_id in custom_available:
+                character = session_manager.state_manager.load_character(char_id)
+                if character:
+                    classes_str = "/".join([c.value.title() for c in character.info.classes])
+                    who_text += (
+                        f"• **{char_id}**: {character.info.name} "
+                        f"({classes_str} Level {character.info.level})\n"
+                    )
+            who_text += "\n"
+
+        who_text += "Use `/register <character_id>` to register a character!\n"
+        who_text += "Use `/upload-character` to upload your own character JSON file."
 
         await interaction.response.send_message(who_text, ephemeral=True)
+
+    @app_commands.command(name="upload-character", description="Upload a custom character JSON file")
+    @app_commands.describe(character_file="JSON file containing character data")
+    async def upload_character(self, interaction: discord.Interaction, character_file: discord.Attachment):
+        """Upload a custom character JSON file."""
+        session_context, error = self._get_session_or_error(interaction)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        # Defer response as file processing may take a moment
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Validate file type
+            if not character_file.filename.endswith('.json'):
+                await interaction.followup.send(
+                    "❌ Invalid file type. Please upload a `.json` file.",
+                    ephemeral=True
+                )
+                return
+
+            # Validate file size (max 1MB)
+            if character_file.size > 1_000_000:
+                await interaction.followup.send(
+                    "❌ File too large. Maximum file size is 1MB.",
+                    ephemeral=True
+                )
+                return
+
+            # Download and parse JSON
+            file_bytes = await character_file.read()
+            try:
+                data = json.loads(file_bytes.decode('utf-8'))
+            except json.JSONDecodeError as e:
+                await interaction.followup.send(
+                    f"❌ Invalid JSON file: {str(e)}",
+                    ephemeral=True
+                )
+                return
+
+            # Validate character structure
+            is_valid, error_msg = self._validate_character_json(data)
+            if not is_valid:
+                await interaction.followup.send(
+                    f"❌ Invalid character structure: {error_msg}\n\n"
+                    f"Please ensure your JSON file has all required fields.",
+                    ephemeral=True
+                )
+                return
+
+            # Prevent overwriting built-in characters
+            character_id = data["character_id"]
+            builtin_chars = ["fighter", "wizard", "cleric"]
+            if character_id in builtin_chars:
+                await interaction.followup.send(
+                    f"❌ Cannot upload a character with ID '{character_id}' - this is a built-in character.\n"
+                    f"Please use a different character_id in your JSON file.",
+                    ephemeral=True
+                )
+                return
+
+            # Save to session's temp character directory
+            char_dir = session_context.temp_character_dir or "src/characters"
+            os.makedirs(char_dir, exist_ok=True)
+
+            char_file_path = Path(char_dir) / f"{character_id}.json"
+
+            with open(char_file_path, 'w') as f:
+                json.dump(data, f, indent=2)
+
+            # Verify the character can be loaded
+            session_manager = session_context.session_manager
+            character = session_manager.state_manager.load_character(character_id)
+
+            if not character:
+                await interaction.followup.send(
+                    f"❌ Failed to load uploaded character. Please check your JSON structure.",
+                    ephemeral=True
+                )
+                return
+
+            # Success!
+            classes_str = "/".join([c.value.title() for c in character.info.classes])
+            await interaction.followup.send(
+                f"✅ **Character Uploaded Successfully!**\n\n"
+                f"**ID:** {character_id}\n"
+                f"**Name:** {character.info.name}\n"
+                f"**Class/Level:** {classes_str} Level {character.info.level}\n\n"
+                f"Use `/register {character_id}` to play as this character!\n\n"
+                f"⚠️ **Note:** This character will be deleted when the session ends via `/end`.",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Error uploading character: {str(e)}",
+                ephemeral=True
+            )
+            import traceback
+            traceback.print_exc()
 
 
 async def setup(bot: commands.Bot):
