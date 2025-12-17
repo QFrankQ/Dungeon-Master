@@ -509,12 +509,16 @@ class DemoTerminal:
                 print(f"[SYSTEM] Warning: Could not clean up temp directory: {e}")
 
 
-def create_demo_session_manager(dm_model_name=None) -> 'SessionManager':
+def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['SessionManager', str]:
     """
     Create a session manager configured for demo purposes.
 
+    Args:
+        dm_model_name: Optional model name override
+        api_key: Optional API key for guild-level BYOK (falls back to environment if not provided)
+
     Returns:
-        SessionManager with DM agent and turn manager
+        Tuple of (SessionManager with DM agent and turn manager, temp character directory path)
     """
     # Local imports to avoid heavy SDK/module import at module load time
     print("Starting imports for demo session manager...")
@@ -547,9 +551,11 @@ def create_demo_session_manager(dm_model_name=None) -> 'SessionManager':
     )
 
     # Create DM agent with all tools (turn management + rules database)
+    # Pass guild-level API key for BYOK
     dm_agent = create_dungeon_master_agent(
         model_name=dm_model_name,
-        tools=[turn_manager.start_and_queue_turns] + dm_tools
+        tools=[turn_manager.start_and_queue_turns] + dm_tools,
+        api_key=api_key  # NEW: Pass guild's API key
     )
 
     # Store dm_deps for passing to process_message()
