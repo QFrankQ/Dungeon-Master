@@ -47,6 +47,21 @@ def create_bot() -> commands.Bot:
         print(f"✓ Bot connected as {bot.user} (ID: {bot.user.id})")
         print(f"✓ Connected to {len(bot.guilds)} guild(s)")
         print("✓ D&D Dungeon Master Bot is ready!")
+        #TODO: may want to make it 
+        # Clean up orphaned sessions from previous runs
+        try:
+            from src.persistence.database import get_session
+            from src.persistence.repositories.session_repo import SessionRepository
+
+            async with get_session() as db_session:
+                session_repo = SessionRepository(db_session)
+                # Delete all active sessions (they're orphaned if bot just started)
+                deleted_count = await session_repo.delete_all_active()
+                await db_session.commit()
+                if deleted_count > 0:
+                    print(f"✓ Cleaned up {deleted_count} orphaned session(s) from database")
+        except Exception as e:
+            print(f"⚠ Warning: Could not clean up orphaned sessions: {e}")
 
         # Sync slash commands with Discord
         try:

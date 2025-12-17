@@ -83,6 +83,24 @@ class SessionRepository:
             return True
         return False
 
+    async def delete_all_active(self) -> int:
+        """
+        Delete all active sessions (cleanup orphaned sessions on bot restart).
+
+        Returns:
+            Number of sessions deleted
+        """
+        result = await self.session.execute(
+            select(Session).where(Session.status == "active")
+        )
+        sessions = list(result.scalars().all())
+
+        for game_session in sessions:
+            await self.session.delete(game_session)
+
+        await self.session.flush()
+        return len(sessions)
+
     async def add_player(
         self,
         session_id: uuid.UUID,
