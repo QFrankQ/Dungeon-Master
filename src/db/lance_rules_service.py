@@ -115,11 +115,11 @@ class LanceRulesService:
                 logger.debug("Using explicitly provided API key")
             elif self._use_paid_tier:
                 # Try paid tier keys first
-                api_key = os.getenv("GEMINI_API_KEY_PAID_TIER") or os.getenv("GOOGLE_API_KEY_PAID_TIER")
+                api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
                 if not api_key:
                     raise ValueError(
-                        "Paid tier API key requested but GEMINI_API_KEY_PAID_TIER or "
-                        "GOOGLE_API_KEY_PAID_TIER environment variable not set"
+                        "Paid tier API key requested but GEMINI_API_KEY or "
+                        "GOOGLE_API_KEY environment variable not set"
                     )
                 logger.info("Using paid tier API key for higher rate limits")
             else:
@@ -283,7 +283,7 @@ class LanceRulesService:
 
             # Skip if doesn't exist in dataset
             if ref_id not in valid_ids:
-                logger.warning(f"Dangling reference filtered: {ref_id} (from {entry_id})")
+                # logger.warning(f"Dangling reference filtered: {ref_id} (from {entry_id})")
                 continue
 
             # Valid reference - add it
