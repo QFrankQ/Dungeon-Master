@@ -40,7 +40,7 @@ class SessionCommands(commands.Cog):
         await interaction.response.defer()
 
         try:
-            # Create new session with database persistence (Phase 2)
+            # Create new session with database persistence + BYOK (Phase 2 + Phase 3)
             await self.session_pool.create_session(channel_id, guild_id, guild_name)
 
             await interaction.followup.send(
@@ -55,6 +55,23 @@ class SessionCommands(commands.Cog):
                 "May the dice roll in your favor! 🎲"
             )
 
+        except ValueError as e:
+            # Phase 3: Specific handling for missing API key (strict BYOK)
+            error_msg = str(e)
+            if "API key" in error_msg:
+                await interaction.followup.send(
+                    f"⚠️ **{error_msg}**\n\n"
+                    f"**To register an API key:**\n"
+                    f"1. Get a Gemini API key at https://makersuite.google.com/app/apikey\n"
+                    f"2. Use `/guild-key` to register it (admin only)\n\n"
+                    f"**Note:** Both free and paid tier keys work. Free tier provides 15 requests/min.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    f"❌ Failed to start session: {error_msg}",
+                    ephemeral=True
+                )
         except Exception as e:
             await interaction.followup.send(
                 f"❌ Failed to start session: {str(e)}",
