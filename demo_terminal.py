@@ -587,7 +587,11 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
     from src.agents.state_extraction_orchestrator import create_state_extraction_orchestrator
 
     state_manager = create_state_manager(character_data_path=str(temp_char_dir) + "/")
-    state_extraction_orchestrator = create_state_extraction_orchestrator()
+    state_extraction_orchestrator = create_state_extraction_orchestrator(
+        model_name="gemini-2.5-flash-lite",
+        api_key=api_key,
+        rules_cache_service=rules_cache_service  # Share with DM tools
+    )
 
     # Create session manager with all components
     session_manager = SessionManager(
