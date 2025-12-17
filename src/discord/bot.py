@@ -50,8 +50,14 @@ def create_bot() -> commands.Bot:
 
         # Sync slash commands with Discord
         try:
+            # Sync to each guild for instant updates (vs global sync which takes 1 hour)
+            for guild in bot.guilds:
+                await bot.tree.sync(guild=discord.Object(id=guild.id))
+                print(f"✓ Synced commands to guild: {guild.name}")
+
+            # Also sync globally for guilds the bot joins later
             synced = await bot.tree.sync()
-            print(f"✓ Synced {len(synced)} command(s)")
+            print(f"✓ Synced {len(synced)} command(s) globally")
         except Exception as e:
             print(f"✗ Failed to sync commands: {e}")
 
@@ -79,7 +85,7 @@ async def load_cogs(bot: commands.Bot):
         "src.discord.cogs.session_commands",
         "src.discord.cogs.game_commands",
         "src.discord.cogs.character_commands",
-        # admin_commands will be added later for BYOK
+        "src.discord.cogs.admin_commands",  # Phase 3: BYOK
     ]
 
     for cog in cogs:
