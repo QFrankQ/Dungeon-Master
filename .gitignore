@@ -11,7 +11,7 @@ wheels/
 
 #environment variables
 .env
-
+.env.example
 .DS_Store
 
 .pytest_cache
