@@ -256,12 +256,86 @@ uv run alembic upgrade head
 
 ---
 
-## Next Steps (Future Phases)
+## Phase 3: Guild-Level BYOK (Strict Bring Your Own Key)
 
-Phase 3 will add:
-- BYOK (Bring Your Own Key) system for Gemini API
-- Per-user or per-guild API keys
-- Encrypted storage of API keys
+Phase 3 implements **strict guild-level BYOK** - each Discord server MUST have its own Gemini API key. No fallback to bot owner's key.
+
+### Prerequisites
+
+- **Phase 2 completed** (PostgreSQL database)
+- **Encryption key generated** (for secure key storage)
+
+### Step 1: Generate Encryption Key
+
+Run this command to generate a secure encryption key:
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Copy the output (looks like: `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=`)
+
+### Step 2: Add to Environment
+
+Add to your `.env` file:
+```bash
+# Phase 3: Encryption key for BYOK
+ENCRYPTION_KEY=paste_your_generated_key_here
+```
+
+### Step 3: Restart Bot
+
+```bash
+# Stop bot (Ctrl+C), then restart
+uv run python src/discord/bot.py
+```
+
+### Step 4: Register Guild API Key (REQUIRED)
+
+**Each Discord server needs its own API key before users can play:**
+
+1. Get a Gemini API key at https://makersuite.google.com/app/apikey
+2. In Discord, run (admin only):
+   ```
+   /guild-key key:YOUR_GEMINI_KEY key_type:free
+   ```
+
+**Available Commands (Admin Only):**
+- `/guild-key` - Set or update server's API key
+- `/guild-key-status` - Check if server has a key registered
+- `/remove-guild-key` - Remove server's API key
+### What Phase 3 Adds
+
+✅ **Strict Guild-Level BYOK**: Each Discord server MUST register its own API key
+✅ **No Bot Owner Cost**: Bot owner pays nothing - each guild brings their own key
+✅ **Encrypted Storage**: All keys encrypted with Fernet (AES-128) before storing in database
+✅ **Cost Control**: Each guild admin controls their own API usage and costs
+✅ **Rate Limit Isolation**: Each guild has independent rate limits based on their key tier
+
+### How It Works
+
+1. **Before registering a key**: Users cannot start games - `/start` will show an error message
+2. **Admin registers guild key**: Use `/guild-key` to set server's API key (admin only)
+3. **All users share guild key**: Everyone in the server uses the same key
+4. **Bot owner pays nothing**: No fallback to bot owner's key
+
+### Rate Limits Per Guild
+
+| Tier | Rate Limit | Best For |
+|------|------------|----------|
+| Free | 15 requests/min | Small groups (5-10 players) |
+| Paid | 1500 requests/min | Large servers (hundreds of players) |
+
+### Security Notes
+
+- Keys are encrypted with Fernet (AES-128) before storage
+- Encryption key must be kept secret (don't commit to git!)
+- Keys are stored per-guild (different servers have different keys)
+- Only admins can set/remove/check guild keys
+- Keys never displayed after registration
+
+---
+
+## Next Steps (Future Phases)
 
 Phase 4 will add:
 - Custom character creation via JSON templates
