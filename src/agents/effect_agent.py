@@ -1,12 +1,9 @@
 """Effect Agent - Extracts effect and condition commands from game narratives."""
 
 from typing import Optional
-import os
 from pydantic_ai import Agent
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
-from dotenv import load_dotenv
-load_dotenv()
 
 from ..models.state_commands_optimized import EffectAgentResult
 
@@ -268,11 +265,19 @@ IF NO effects or conditions are found, return an empty list.
 class EffectAgent:
     """Specialized agent for extracting effect and condition commands."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash-lite"):
-        """Initialize the effect agent."""
-        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    def __init__(self, model_name: str, api_key: str):
+        """
+        Initialize the effect agent.
+
+        Args:
+            model_name: Gemini model to use
+            api_key: API key (required for guild-level BYOK)
+        """
+        if not api_key:
+            raise ValueError("API key is required for EffectAgent")
+
         self.model = GoogleModel(
-            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
+            model_name, provider=GoogleProvider(api_key=api_key)
         )
         self.agent = Agent(
             model=self.model,
@@ -326,6 +331,12 @@ class EffectAgent:
         return "\n".join(sections)
 
 
-def create_effect_agent(model_name: str = "gemini-2.5-flash-lite") -> EffectAgent:
-    """Factory function to create Effect agent."""
-    return EffectAgent(model_name=model_name)
+def create_effect_agent(model_name: str, api_key: str) -> EffectAgent:
+    """
+    Factory function to create Effect agent.
+
+    Args:
+        model_name: Gemini model to use
+        api_key: API key (required for guild-level BYOK)
+    """
+    return EffectAgent(model_name=model_name, api_key=api_key)

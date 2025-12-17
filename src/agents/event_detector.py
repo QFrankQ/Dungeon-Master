@@ -14,11 +14,19 @@ from .prompts import EVENT_DETECTOR_INSTRUCTIONS
 class EventDetectorAgent:
     """Lightweight agent that detects which types of state changes occurred."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash-lite"):
-        """Initialize the event detector agent."""
-        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    def __init__(self, model_name: str, api_key: str):
+        """
+        Initialize the event detector agent.
+
+        Args:
+            model_name: Gemini model to use
+            api_key: API key (required for guild-level BYOK)
+        """
+        if not api_key:
+            raise ValueError("API key is required for EventDetectorAgent")
+
         self.model = GoogleModel(
-            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
+            model_name, provider=GoogleProvider(api_key=api_key)
         )
         self.agent = Agent(
             model=self.model,
@@ -85,6 +93,12 @@ class EventDetectorAgent:
         return "\n".join(sections)
 
 
-def create_event_detector(model_name: str = "gemini-2.5-flash-lite") -> EventDetectorAgent:
-    """Factory function to create event detector agent."""
-    return EventDetectorAgent(model_name=model_name)
+def create_event_detector(model_name: str, api_key: str) -> EventDetectorAgent:
+    """
+    Factory function to create event detector agent.
+
+    Args:
+        model_name: Gemini model to use
+        api_key: API key (required for guild-level BYOK)
+    """
+    return EventDetectorAgent(model_name=model_name, api_key=api_key)

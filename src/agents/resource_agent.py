@@ -1,12 +1,9 @@
 """Resource Agent - Extracts resource usage commands (spell slots, hit dice, items)."""
 
 from typing import Optional
-import os
 from pydantic_ai import Agent
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
-from dotenv import load_dotenv
-load_dotenv()
 
 from ..models.state_commands_optimized import ResourceAgentResult
 
@@ -84,11 +81,19 @@ If no resource changes are found, return an empty list.
 class ResourceAgent:
     """Specialized agent for extracting resource usage commands."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash-lite"):
-        """Initialize the resource agent."""
-        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    def __init__(self, model_name: str, api_key: str):
+        """
+        Initialize the resource agent.
+
+        Args:
+            model_name: Gemini model to use
+            api_key: API key (required for guild-level BYOK)
+        """
+        if not api_key:
+            raise ValueError("API key is required for ResourceAgent")
+
         self.model = GoogleModel(
-            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
+            model_name, provider=GoogleProvider(api_key=api_key)
         )
         self.agent = Agent(
             model=self.model,
@@ -142,6 +147,12 @@ class ResourceAgent:
         return "\n".join(sections)
 
 
-def create_resource_agent(model_name: str = "gemini-2.5-flash-lite") -> ResourceAgent:
-    """Factory function to create resource agent."""
-    return ResourceAgent(model_name=model_name)
+def create_resource_agent(model_name: str, api_key: str) -> ResourceAgent:
+    """
+    Factory function to create resource agent.
+
+    Args:
+        model_name: Gemini model to use
+        api_key: API key (required for guild-level BYOK)
+    """
+    return ResourceAgent(model_name=model_name, api_key=api_key)

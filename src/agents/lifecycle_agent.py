@@ -1,12 +1,9 @@
 """Lifecycle Agent - Extracts death save and rest commands from game narratives."""
 
 from typing import Optional
-import os
 from pydantic_ai import Agent
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
-from dotenv import load_dotenv
-load_dotenv()
 
 from ..models.state_commands_optimized import StateAgentResult
 
@@ -108,11 +105,19 @@ IF NO lifecycle events are found, return an empty list.
 class LifecycleAgent:
     """Specialized agent for extracting lifecycle event commands."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash-lite"):
-        """Initialize the lifecycle agent."""
-        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    def __init__(self, model_name: str, api_key: str):
+        """
+        Initialize the lifecycle agent.
+
+        Args:
+            model_name: Gemini model to use
+            api_key: API key (required for guild-level BYOK)
+        """
+        if not api_key:
+            raise ValueError("API key is required for LifecycleAgent")
+
         self.model = GoogleModel(
-            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
+            model_name, provider=GoogleProvider(api_key=api_key)
         )
         self.agent = Agent(
             model=self.model,
@@ -166,6 +171,12 @@ class LifecycleAgent:
         return "\n".join(sections)
 
 
-def create_lifecycle_agent(model_name: str = "gemini-2.5-flash-lite") -> LifecycleAgent:
-    """Factory function to create lifecycle agent."""
-    return LifecycleAgent(model_name=model_name)
+def create_lifecycle_agent(model_name: str, api_key: str) -> LifecycleAgent:
+    """
+    Factory function to create lifecycle agent.
+
+    Args:
+        model_name: Gemini model to use
+        api_key: API key (required for guild-level BYOK)
+    """
+    return LifecycleAgent(model_name=model_name, api_key=api_key)

@@ -38,26 +38,27 @@ class DungeonMasterAgent:
     
     def __init__(
         self,
-        # vector_service: Optional[VectorService] = None,
-        model_name: str = MODEL_NAME,
+        model_name: str,
+        api_key: str,
         tools: Optional[List[Callable]] = None
     ):
         """
         Initialize the Dungeon Master LLM Agent.
 
         Args:
-            vector_service: Vector service for rule lookups
             model_name: Gemini model to use for the agent
+            api_key: API key (required for guild-level BYOK)
             tools: Optional list of tool functions to provide to the agent
         """
         # Initialize components
-        # self.vector_service = vector_service
         self.tools = tools or []
 
-        # Initialize PydanticAI agent
-        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+        # Initialize PydanticAI agent with guild-level API key
+        if not api_key:
+            raise ValueError("API key is required for DungeonMasterAgent")
+
         self.model = GoogleModel(
-            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
+            model_name, provider=GoogleProvider(api_key=api_key)
         )
         self.agent = self._create_agent()
 
@@ -117,23 +118,23 @@ class DungeonMasterAgent:
                      manage NPCs, and adjudicate rules. Signal step completion when objectives are met."""
 
 def create_dungeon_master_agent(
-    # vector_service: Optional[VectorService] = None,
-    model_name: str = MODEL_NAME,
+    model_name: str,
+    api_key: str,
     tools: Optional[List[Callable]] = None
 ) -> DungeonMasterAgent:
     """
     Factory function to create a configured Dungeon Master Agent.
 
     Args:
-        vector_service: Vector service for rule lookups
         model_name: Gemini model name to use
+        api_key: API key (required for guild-level BYOK)
         tools: Optional list of tool functions to provide to the agent
 
     Returns:
         Configured DungeonMasterAgent instance
     """
     return DungeonMasterAgent(
-        # vector_service=vector_service,
         model_name=model_name,
+        api_key=api_key,
         tools=tools
     )

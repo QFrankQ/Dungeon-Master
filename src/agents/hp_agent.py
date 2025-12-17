@@ -86,11 +86,19 @@ IF NO HP changes are found, return an empty list.
 class HPAgent:
     """Specialized agent for extracting HP change commands."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash-lite"):
-        """Initialize the HP agent."""
-        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+    def __init__(self, model_name: str, api_key: str):
+        """
+        Initialize the HP agent.
+
+        Args:
+            model_name: Gemini model to use
+            api_key: API key (required for guild-level BYOK)
+        """
+        if not api_key:
+            raise ValueError("API key is required for HPAgent")
+
         self.model = GoogleModel(
-            model_name, provider=GoogleProvider(api_key=GOOGLE_API_KEY)
+            model_name, provider=GoogleProvider(api_key=api_key)
         )
         self.agent = Agent(
             model=self.model,
@@ -144,6 +152,12 @@ class HPAgent:
         return "\n".join(sections)
 
 
-def create_hp_agent(model_name: str = "gemini-2.5-flash-lite") -> HPAgent:
-    """Factory function to create HP agent."""
-    return HPAgent(model_name=model_name)
+def create_hp_agent(model_name: str, api_key: str) -> HPAgent:
+    """
+    Factory function to create HP agent.
+
+    Args:
+        model_name: Gemini model to use
+        api_key: API key (required for guild-level BYOK)
+    """
+    return HPAgent(model_name=model_name, api_key=api_key)
