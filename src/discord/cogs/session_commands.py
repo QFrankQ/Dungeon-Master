@@ -121,6 +121,20 @@ class SessionCommands(commands.Cog):
         if message.content.startswith('/'):
             return
 
+        # Verify guild still has a valid API key (safety check)
+        from src.services.byok_service import get_api_key_for_guild
+        guild_api_key = await get_api_key_for_guild(session_context.guild_id)
+        if not guild_api_key:
+            # API key was removed - end this session
+            await self.session_pool.end_session(message.channel.id)
+            await message.channel.send(
+                "⚠️ **Session Ended - API Key Removed**\n\n"
+                "The server's API key was removed by an admin.\n"
+                "This session has been automatically ended.\n\n"
+                "To play again, an admin must register a new API key with `/guild-key`."
+            )
+            return
+
         try:
             # Show typing indicator while processing
             async with message.channel.typing():
