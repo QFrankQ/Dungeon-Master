@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from src.persistence.database import get_session
 from src.persistence.repositories.api_key_repo import APIKeyRepository
+from src.discord.utils.session_pool import get_session_pool
 
 
 class AdminCommands(commands.Cog):
@@ -20,6 +21,7 @@ class AdminCommands(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.session_pool = get_session_pool()
 
     @app_commands.command(name="guild-key", description="Set server-wide API key (Admin only)")
     @app_commands.describe(
@@ -113,12 +115,19 @@ class AdminCommands(commands.Cog):
                 await db_session.commit()
 
             if deleted:
-                await interaction.followup.send(
-                    "✅ **Server API Key Removed**\n\n"
-                    "The server's API key has been deleted from the database.\n"
-                    "Users will no longer be able to start games until a new key is registered.",
-                    ephemeral=True
-                )
+                # End all active sessions for this guild
+                ended_sessions = await self.session_pool.end_all_guild_sessions(guild_id)
+
+                response_msg = "✅ **Server API Key Removed**\n\n"
+                response_msg += "The server's API key has been deleted from the database.\n"
+
+                if ended_sessions > 0:
+                    response_msg += f"\n🛑 **{ended_sessions} active session(s) were automatically ended**\n"
+                    response_msg += "Players in those channels will need to start new sessions with a new API key.\n"
+
+                response_msg += "\nUsers will no longer be able to start games until a new key is registered."
+
+                await interaction.followup.send(response_msg, ephemeral=True)
             else:
                 await interaction.followup.send(
                     "ℹ️ **No key to remove**\n\n"

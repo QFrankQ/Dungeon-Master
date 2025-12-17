@@ -172,6 +172,33 @@ class SessionPool:
         """Get number of active sessions."""
         return len(self._sessions)
 
+    async def end_all_guild_sessions(self, guild_id: int) -> int:
+        """
+        End all active sessions for a specific guild.
+
+        This is used when a guild's API key is removed to immediately
+        stop all sessions that were using that key.
+
+        Args:
+            guild_id: Discord guild (server) ID
+
+        Returns:
+            Number of sessions ended
+        """
+        # Find all channel IDs for this guild
+        channels_to_end = [
+            channel_id for channel_id, context in self._sessions.items()
+            if context.guild_id == guild_id
+        ]
+
+        # End each session
+        ended_count = 0
+        for channel_id in channels_to_end:
+            if await self.end_session(channel_id):
+                ended_count += 1
+
+        return ended_count
+
 
 # Global session pool instance
 _session_pool: Optional[SessionPool] = None
