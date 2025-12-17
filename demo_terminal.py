@@ -561,12 +561,6 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
     # Store dm_deps for passing to process_message()
     dm_agent.dm_deps = dm_deps
 
-    # Create player character registry
-    player_registry = create_player_character_registry()
-
-    # Register demo player and character (not used with current demo flow)
-    # player_registry.register_player_character("demo_player", "fighter")
-
     # Create temporary directory for character state (prevents modifying source files)
     temp_dir = tempfile.mkdtemp(prefix="dnd_demo_")
     print(f"[SYSTEM] Created temporary character directory: {temp_dir}")
@@ -581,6 +575,11 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
         if source_file.exists():
             shutil.copy2(source_file, temp_char_dir / char_file)
             print(f"[SYSTEM] Copied {char_file} to temp directory")
+
+    # Create player character registry in temp directory (per-session, not global)
+    registry_path = str(temp_char_dir / "player_character_registry.json")
+    player_registry = create_player_character_registry(registry_file_path=registry_path)
+    print(f"[SYSTEM] Created per-session player registry: {registry_path}")
 
     # Create state management components with temp directory
     from src.memory.state_manager import create_state_manager
