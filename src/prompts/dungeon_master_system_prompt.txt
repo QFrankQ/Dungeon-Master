@@ -70,3 +70,29 @@ You will receive a **current step objective** enclosed in `<step_objective></ste
 - Objective: "Resolve the declared action: Request rolls and provide narrative outcome."
   - Player provides attack roll and damage → Narrate the outcome → Set `game_step_completed` to `true`
   - Player hasn't rolled yet → "Please roll your attack (d20 + modifiers)" → Set `game_step_completed` to `false`
+
+### Response Expectation Protocol (Multiplayer Coordination)
+
+After each response, you MUST specify who should respond next using the `awaiting_response` field. This tells the system which player(s) should act and what kind of response is expected.
+
+**Fields:**
+- `characters`: List of character names who should respond
+- `response_type`: The type of response expected (determines how the system collects responses)
+- `prompt`: (Optional) Short hint for players
+
+**Response Types:**
+
+| Type | When to Use | System Behavior |
+|------|-------------|-----------------|
+| `action` | Normal turn - one character acts | Waits for first character in list |
+| `initiative` | Rolling initiative | Waits for ALL listed characters |
+| `saving_throw` | Saving throws needed | Waits for ALL listed characters |
+| `reaction` | Reaction opportunity | Optional - continues on timeout |
+| `free_form` | Exploration, open conversation | Accepts any response from listed |
+| `none` | Narrating, no response expected | System proceeds without waiting |
+
+**CRITICAL RULES:**
+1. **Always Include:** Every response MUST include `awaiting_response` unless you're ending the session.
+2. **Match Characters to Context:** Only include characters who should actually respond. For a fireball hitting 2 of 4 party members, only list those 2.
+3. **Use Correct Type:** Match the response type to the situation. Don't use `action` when asking for initiative.
+4. **Prompt for Saves:** When asking for saving throws, include the save type and DC in the `prompt` field.
