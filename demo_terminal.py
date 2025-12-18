@@ -515,7 +515,7 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
 
     Args:
         dm_model_name: Optional model name override
-        api_key: Optional API key for guild-level BYOK (falls back to environment if not provided)
+        api_key: Optional API key for guild-level BYOK (required)
 
     Returns:
         Tuple of (SessionManager with DM agent and turn manager, temp character directory path)
@@ -528,6 +528,10 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
     from src.memory.player_character_registry import create_player_character_registry
     from src.agents.structured_summarizer import create_turn_condensation_agent
     print("Finished imports for demo session manager.")
+
+    # API key is required
+    if not api_key:
+        raise ValueError("API key is required for demo session manager")
 
     # Create turn condensation agent for automatic reaction summarization
     turn_condensation_agent = create_turn_condensation_agent()
@@ -610,10 +614,26 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
 
 async def main():
     """Main entry point for demo terminal."""
+    import os
+    from dotenv import load_dotenv
+
+    # Load environment variables
+    load_dotenv()
+
+    # Get API key from environment
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        print("[ERROR] API key not found in environment variables.")
+        print("[ERROR] Please set GEMINI_API_KEY or GOOGLE_API_KEY in your .env file")
+        return
+
     print("\n[SYSTEM] Creating demo session...")
 
-    # Create session manager with temp directory
-    session_manager, temp_dir = create_demo_session_manager(dm_model_name='gemini-2.5-flash')
+    # Create session manager with temp directory and API key
+    session_manager, temp_dir = create_demo_session_manager(
+        dm_model_name='gemini-2.5-flash',
+        api_key=api_key
+    )
     print("[SYSTEM] Demo session manager created.")
 
     # Create and run terminal with temp directory for cleanup
