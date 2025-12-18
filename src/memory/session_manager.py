@@ -695,7 +695,8 @@ class SessionManager:
                 "total_tokens": total_input_tokens + total_output_tokens,
                 "requests": total_requests
             },
-            "state_results": state_results  # NEW - state extraction results
+            "state_results": state_results,  # State extraction results
+            "awaiting_response": dungeon_master_response.awaiting_response  # Multiplayer coordination
         }
 
     def demo_process_player_input_sync(
