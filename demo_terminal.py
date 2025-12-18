@@ -15,6 +15,11 @@ from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_
 from src.memory.turn_manager import ActionDeclaration
 from src.models.response_expectation import ResponseExpectation, ResponseType
 from src.memory.response_collector import ResponseCollector, AddResult, create_response_collector
+from src.memory.message_coordinator import (
+    MessageCoordinator,
+    create_message_coordinator,
+    MessageValidationResult
+)
 # Defer heavy imports (agents, vector services, cloud SDKs) until runtime so
 # importing this module doesn't trigger long SDK initializations.
 if TYPE_CHECKING:
@@ -48,10 +53,8 @@ class DemoTerminal:
         }
         self.current_character_key = "fighter"  # Default character
 
-        # Multiplayer coordination
-        self.current_expectation: Optional[ResponseExpectation] = None
-        self.response_collector: Optional[ResponseCollector] = None
-        self.combat_mode: bool = False  # When False, accept all messages
+        # Multiplayer coordination - use MessageCoordinator as central gatekeeper
+        self.message_coordinator = create_message_coordinator()
 
     @property
     def current_player_id(self):
@@ -63,25 +66,33 @@ class DemoTerminal:
         """Get current character name."""
         return self.characters[self.current_character_key]["character_name"]
 
+    # Property accessors for MessageCoordinator state
+    @property
+    def combat_mode(self) -> bool:
+        """Get combat mode from coordinator."""
+        return self.message_coordinator.combat_mode
+
+    @property
+    def current_expectation(self) -> Optional[ResponseExpectation]:
+        """Get current expectation from coordinator."""
+        return self.message_coordinator.current_expectation
+
+    @property
+    def response_collector(self) -> Optional[ResponseCollector]:
+        """Get response collector from coordinator."""
+        return self.message_coordinator.response_collector
+
     def is_valid_responder(self, character_name: str) -> bool:
         """Check if a character is expected to respond."""
-        if not self.combat_mode:
-            return True  # Exploration mode - accept all
-        if self.current_expectation is None:
-            return True  # No expectation set - accept all
-        if self.current_expectation.response_type == ResponseType.NONE:
-            return False  # DM narrating - no response expected
-        return character_name in self.current_expectation.characters
+        return self.message_coordinator.is_valid_responder(character_name)
 
     def update_expectation(self, expectation: Optional[ResponseExpectation]):
         """Update the current expectation and display status."""
-        self.current_expectation = expectation
+        # Use MessageCoordinator to set expectation (also creates response collector)
+        self.message_coordinator.set_expectation(expectation)
 
         if expectation is None:
             return
-
-        # Create response collector
-        self.response_collector = create_response_collector(expectation)
 
         # Display expectation status
         mode = expectation.get_collection_mode()
@@ -158,15 +169,18 @@ class DemoTerminal:
         print("  /history       - Show completed turns history")
         print("  /stats         - Show turn manager statistics")
         print("  /character     - Show current character status and stats")
-        print("  /register <id> - Register/switch to a character (fighter, wizard, cleric)")
+        print("  /register <id> - Link a character file to current player (fighter, wizard, cleric)")
         print("  /usage         - Show token usage statistics")
         print("  /context       - Show DM context as built by context builder")
-        print("  /switch <char> - Switch to a different character (fighter, wizard, cleric)")
+        print("  /switch <char> - Switch to a different player/character (fighter, wizard, cleric)")
         print("  /who           - Show current character and all available characters")
         print("  /combat        - Toggle combat mode (strict turn enforcement)")
         print("  /expectation   - Show current response expectation")
         print("  /collected     - Show collected responses (for multi-response modes)")
         print("  /quit          - Exit the demo")
+        print("-" * 70)
+        print("\nNOTE: In this demo, each character has a separate player_id to simulate")
+        print("      multiplayer. Use /switch to change characters for multi-response tests.")
         print("-" * 70)
 
     async def initialize_session(self):
@@ -219,19 +233,25 @@ class DemoTerminal:
         For multi-response modes (initiative, saving_throw), responses are collected
         until all expected characters have responded. Only then is the DM called.
 
+        Uses MessageCoordinator for validation and response collection.
+
         Args:
             action_text: The player's action text
         """
-        # Check if speaker is valid (only in combat mode)
-        if self.combat_mode and self.current_expectation:
-            if not self.is_valid_responder(self.current_character_name):
-                expected = self.current_expectation.characters
-                if expected:
-                    print(f"\n[SYSTEM] Not your turn! Waiting for: {', '.join(expected)}")
-                    print(f"[SYSTEM] Use /switch to change to an expected character.")
-                else:
-                    print(f"\n[SYSTEM] DM is narrating. No response expected.")
-                return
+        # Validate responder using MessageCoordinator
+        validation = self.message_coordinator.validate_responder(self.current_character_name)
+
+        if validation.result != MessageValidationResult.VALID:
+            # Handle different invalid cases with appropriate messages
+            if validation.result == MessageValidationResult.INVALID_NOT_YOUR_TURN:
+                print(f"\n[SYSTEM] {validation.message}")
+                print(f"[SYSTEM] Use /switch to change to an expected character.")
+            elif validation.result == MessageValidationResult.INVALID_NO_RESPONSE_EXPECTED:
+                print(f"\n[SYSTEM] {validation.message}")
+            elif validation.result == MessageValidationResult.INVALID_ALREADY_RESPONDED:
+                print(f"\n[SYSTEM] {validation.message}")
+                print(f"[SYSTEM] {self.message_coordinator.get_status_message()}")
+            return
 
         # Create ChatMessage (import locally to avoid heavy imports at module import)
         from src.models.chat_message import ChatMessage
@@ -243,40 +263,39 @@ class DemoTerminal:
         )
 
         # Check if we're in multi-response collection mode
-        if self.response_collector and self.current_expectation:
-            mode = self.current_expectation.get_collection_mode()
+        collection_mode = self.message_coordinator.get_collection_mode()
 
-            if mode == "all":
-                # Multi-response mode: collect responses before sending to DM
-                result = self.response_collector.add_response(
-                    self.current_character_name,
-                    message
-                )
+        if collection_mode == "all":
+            # Multi-response mode: collect responses before sending to DM
+            result = self.message_coordinator.add_response(
+                self.current_character_name,
+                message
+            )
 
-                if result == AddResult.DUPLICATE:
-                    print(f"\n[SYSTEM] {self.current_character_name} has already responded.")
-                    print(f"[SYSTEM] {self.response_collector.get_status_message()}")
+            if result == AddResult.DUPLICATE:
+                print(f"\n[SYSTEM] {self.current_character_name} has already responded.")
+                print(f"[SYSTEM] {self.message_coordinator.get_status_message()}")
+                return
+            elif result == AddResult.UNEXPECTED:
+                print(f"\n[SYSTEM] {self.current_character_name} is not expected to respond.")
+                return
+            else:
+                # Response accepted
+                print(f"\n[SYSTEM] Response from {self.current_character_name} collected.")
+
+                # Check if collection is complete
+                if not self.message_coordinator.is_collection_complete():
+                    # Still waiting for more responses
+                    missing = self.message_coordinator.get_missing_responders()
+                    print(f"[SYSTEM] Still waiting for: {', '.join(missing)}")
+                    print(f"[SYSTEM] Use /switch to respond as another character.")
                     return
-                elif result == AddResult.UNEXPECTED:
-                    print(f"\n[SYSTEM] {self.current_character_name} is not expected to respond.")
-                    return
-                else:
-                    # Response accepted
-                    print(f"\n[SYSTEM] Response from {self.current_character_name} collected.")
 
-                    # Check if collection is complete
-                    if not self.response_collector.is_complete():
-                        # Still waiting for more responses
-                        missing = self.response_collector.get_missing_responders()
-                        print(f"[SYSTEM] Still waiting for: {', '.join(missing)}")
-                        print(f"[SYSTEM] Use /switch to respond as another character.")
-                        return
-
-                    # Collection complete - gather all messages and send to DM
-                    print(f"\n[SYSTEM] All responses collected! Sending to DM...")
-                    all_messages = list(self.response_collector.collected.values())
-                    await self._send_messages_to_dm(all_messages)
-                    return
+                # Collection complete - gather all messages and send to DM
+                print(f"\n[SYSTEM] All responses collected! Sending to DM...")
+                all_messages = list(self.message_coordinator.get_collected_responses().values())
+                await self._send_messages_to_dm(all_messages)
+                return
 
         # For single/any/none modes, send immediately
         await self._send_messages_to_dm([message])
@@ -524,14 +543,16 @@ class DemoTerminal:
             print(f"  {key:10} - {info['character_name']:15} (player_id: {info['player_id']}){marker}")
 
     def toggle_combat_mode(self):
-        """Toggle combat mode on/off."""
-        self.combat_mode = not self.combat_mode
-        status = "ON (strict turn enforcement)" if self.combat_mode else "OFF (free exploration)"
-        print(f"\n[SYSTEM] Combat mode: {status}")
-
-        if self.combat_mode and self.current_expectation:
-            # Show current expectation when entering combat mode
-            self.show_expectation()
+        """Toggle combat mode on/off using MessageCoordinator."""
+        if self.message_coordinator.combat_mode:
+            self.message_coordinator.exit_combat_mode()
+            print(f"\n[SYSTEM] Combat mode: OFF (free exploration)")
+        else:
+            self.message_coordinator.enter_combat_mode()
+            print(f"\n[SYSTEM] Combat mode: ON (strict turn enforcement)")
+            if self.current_expectation:
+                # Show current expectation when entering combat mode
+                self.show_expectation()
 
     def show_expectation(self):
         """Show current response expectation."""
@@ -689,7 +710,14 @@ class DemoTerminal:
         print(f"{'='*70}\n")
 
     async def register_character(self, character_id: str):
-        """Register/switch to a different character."""
+        """
+        Register a character file to the current player and switch to that character.
+
+        This is useful if you want to use a different character file than the default
+        mapping (e.g., use 'wizard' file for player1 instead of 'fighter').
+
+        For simply switching between the 3 pre-configured characters, use /switch instead.
+        """
         if not self.session_manager.state_manager:
             print("\n[SYSTEM] State management is disabled in this demo.")
             print("[SYSTEM] Enable state management to use character registration.")
@@ -702,10 +730,16 @@ class DemoTerminal:
             print("[SYSTEM] Available characters: fighter, wizard, cleric")
             return
 
-        # Register mapping
+        # Also switch to that character if it's one of the pre-configured ones
+        if character_id in self.characters:
+            old_char = self.current_character_name
+            self.current_character_key = character_id
+            print(f"\n[SYSTEM] Switched from {old_char} to {self.current_character_name}")
+
+        # Register mapping for the current player
         self.session_manager.player_character_registry.register_player_character(self.current_player_id, character_id)
         classes_str = "/".join([c.value.title() for c in character.info.classes])
-        print(f"\n[SYSTEM] ✓ Registered '{character.info.name}' ({classes_str} Level {character.info.level}) to player '{self.current_player_id}'")
+        print(f"[SYSTEM] ✓ Registered '{character.info.name}' ({classes_str} Level {character.info.level}) to player '{self.current_player_id}'")
         print("[SYSTEM] Use /character to view character status")
 
     def cleanup(self):
