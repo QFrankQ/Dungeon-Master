@@ -165,6 +165,7 @@ class DemoTerminal:
         print("  /who           - Show current character and all available characters")
         print("  /combat        - Toggle combat mode (strict turn enforcement)")
         print("  /expectation   - Show current response expectation")
+        print("  /collected     - Show collected responses (for multi-response modes)")
         print("  /quit          - Exit the demo")
         print("-" * 70)
 
@@ -215,6 +216,9 @@ class DemoTerminal:
         """
         Process player action through the demo session manager.
 
+        For multi-response modes (initiative, saving_throw), responses are collected
+        until all expected characters have responded. Only then is the DM called.
+
         Args:
             action_text: The player's action text
         """
@@ -238,12 +242,58 @@ class DemoTerminal:
             text=action_text
         )
 
+        # Check if we're in multi-response collection mode
+        if self.response_collector and self.current_expectation:
+            mode = self.current_expectation.get_collection_mode()
+
+            if mode == "all":
+                # Multi-response mode: collect responses before sending to DM
+                result = self.response_collector.add_response(
+                    self.current_character_name,
+                    message
+                )
+
+                if result == AddResult.DUPLICATE:
+                    print(f"\n[SYSTEM] {self.current_character_name} has already responded.")
+                    print(f"[SYSTEM] {self.response_collector.get_status_message()}")
+                    return
+                elif result == AddResult.UNEXPECTED:
+                    print(f"\n[SYSTEM] {self.current_character_name} is not expected to respond.")
+                    return
+                else:
+                    # Response accepted
+                    print(f"\n[SYSTEM] Response from {self.current_character_name} collected.")
+
+                    # Check if collection is complete
+                    if not self.response_collector.is_complete():
+                        # Still waiting for more responses
+                        missing = self.response_collector.get_missing_responders()
+                        print(f"[SYSTEM] Still waiting for: {', '.join(missing)}")
+                        print(f"[SYSTEM] Use /switch to respond as another character.")
+                        return
+
+                    # Collection complete - gather all messages and send to DM
+                    print(f"\n[SYSTEM] All responses collected! Sending to DM...")
+                    all_messages = list(self.response_collector.collected.values())
+                    await self._send_messages_to_dm(all_messages)
+                    return
+
+        # For single/any/none modes, send immediately
+        await self._send_messages_to_dm([message])
+
+    async def _send_messages_to_dm(self, messages: list):
+        """
+        Send collected messages to the DM and handle the response.
+
+        Args:
+            messages: List of ChatMessage objects to send
+        """
         # Process through demo method
         print("\n[SYSTEM] Processing...", end="", flush=True)
 
         # Use demo method - returns dict with responses and usage
         result = await self.session_manager.demo_process_player_input(
-            new_messages=[message]
+            new_messages=messages
         )
 
         # Clear processing message
@@ -330,6 +380,9 @@ class DemoTerminal:
 
         elif cmd == '/expectation':
             self.show_expectation()
+
+        elif cmd == '/collected':
+            self.show_collected()
 
         elif cmd == '/quit':
             self.session_active = False
@@ -502,6 +555,58 @@ class DemoTerminal:
         is_valid = self.is_valid_responder(self.current_character_name)
         print(f"\nCurrent Character: {self.current_character_name}")
         print(f"Can Respond: {'YES' if is_valid else 'NO'}")
+
+        # Show collection progress for multi-response modes
+        if self.response_collector and mode == "all":
+            collected_count = len(self.response_collector.collected)
+            total_count = len(exp.characters)
+            print(f"\nCollection Progress: {collected_count}/{total_count}")
+            if self.response_collector.collected:
+                print(f"Collected from: {', '.join(self.response_collector.collected.keys())}")
+
+    def show_collected(self):
+        """Show collected responses for multi-response modes."""
+        print(f"\n--- COLLECTED RESPONSES ---")
+
+        if self.response_collector is None:
+            print("No response collector active.")
+            return
+
+        if not self.current_expectation:
+            print("No expectation set.")
+            return
+
+        mode = self.current_expectation.get_collection_mode()
+        print(f"Collection Mode: {mode}")
+
+        if mode != "all":
+            print("(Multi-response collection only applies to 'all' mode - initiative/saving_throw)")
+            return
+
+        # Show collected responses
+        collected = self.response_collector.collected
+        expected = self.current_expectation.characters
+
+        print(f"\nExpected Characters: {', '.join(expected)}")
+        print(f"Collection Progress: {len(collected)}/{len(expected)}")
+
+        if collected:
+            print(f"\nCollected Responses:")
+            for char_name, message in collected.items():
+                # message is a ChatMessage object
+                text_preview = message.text[:50] + "..." if len(message.text) > 50 else message.text
+                print(f"  ✓ {char_name}: \"{text_preview}\"")
+
+        missing = self.response_collector.get_missing_responders()
+        if missing:
+            print(f"\nStill Waiting For:")
+            for char_name in missing:
+                print(f"  ○ {char_name}")
+
+        if self.response_collector.is_complete():
+            print(f"\n[READY] All responses collected! Next message will send to DM.")
+        else:
+            print(f"\n[TIP] Use /switch <character> to respond as another character.")
 
     def show_character_status(self):
         """Show current character's game stats and status."""
