@@ -13,6 +13,8 @@ from typing import Optional, TYPE_CHECKING
 from pathlib import Path
 from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS
 from src.memory.turn_manager import ActionDeclaration
+from src.models.response_expectation import ResponseExpectation, ResponseType
+from src.memory.response_collector import ResponseCollector, AddResult, create_response_collector
 # Defer heavy imports (agents, vector services, cloud SDKs) until runtime so
 # importing this module doesn't trigger long SDK initializations.
 if TYPE_CHECKING:
@@ -46,6 +48,11 @@ class DemoTerminal:
         }
         self.current_character_key = "fighter"  # Default character
 
+        # Multiplayer coordination
+        self.current_expectation: Optional[ResponseExpectation] = None
+        self.response_collector: Optional[ResponseCollector] = None
+        self.combat_mode: bool = False  # When False, accept all messages
+
     @property
     def current_player_id(self):
         """Get current player ID."""
@@ -55,6 +62,47 @@ class DemoTerminal:
     def current_character_name(self):
         """Get current character name."""
         return self.characters[self.current_character_key]["character_name"]
+
+    def is_valid_responder(self, character_name: str) -> bool:
+        """Check if a character is expected to respond."""
+        if not self.combat_mode:
+            return True  # Exploration mode - accept all
+        if self.current_expectation is None:
+            return True  # No expectation set - accept all
+        if self.current_expectation.response_type == ResponseType.NONE:
+            return False  # DM narrating - no response expected
+        return character_name in self.current_expectation.characters
+
+    def update_expectation(self, expectation: Optional[ResponseExpectation]):
+        """Update the current expectation and display status."""
+        self.current_expectation = expectation
+
+        if expectation is None:
+            return
+
+        # Create response collector
+        self.response_collector = create_response_collector(expectation)
+
+        # Display expectation status
+        mode = expectation.get_collection_mode()
+        chars = expectation.characters
+
+        if mode == "none":
+            print("[WAITING] DM narrating - no response expected")
+        elif mode == "single" and chars:
+            print(f"[WAITING] {chars[0]}'s turn")
+            if expectation.prompt:
+                print(f"[PROMPT] {expectation.prompt}")
+        elif mode == "all" and chars:
+            print(f"[WAITING] All must respond: {', '.join(chars)}")
+            if expectation.prompt:
+                print(f"[PROMPT] {expectation.prompt}")
+        elif mode == "any" and chars:
+            print(f"[WAITING] Any of: {', '.join(chars)}")
+        elif mode == "optional" and chars:
+            print(f"[WAITING] Optional - {', '.join(chars)} may respond or pass")
+            if expectation.prompt:
+                print(f"[PROMPT] {expectation.prompt}")
 
     async def run(self):
         """Main demo loop."""
@@ -115,6 +163,8 @@ class DemoTerminal:
         print("  /context       - Show DM context as built by context builder")
         print("  /switch <char> - Switch to a different character (fighter, wizard, cleric)")
         print("  /who           - Show current character and all available characters")
+        print("  /combat        - Toggle combat mode (strict turn enforcement)")
+        print("  /expectation   - Show current response expectation")
         print("  /quit          - Exit the demo")
         print("-" * 70)
 
@@ -168,6 +218,17 @@ class DemoTerminal:
         Args:
             action_text: The player's action text
         """
+        # Check if speaker is valid (only in combat mode)
+        if self.combat_mode and self.current_expectation:
+            if not self.is_valid_responder(self.current_character_name):
+                expected = self.current_expectation.characters
+                if expected:
+                    print(f"\n[SYSTEM] Not your turn! Waiting for: {', '.join(expected)}")
+                    print(f"[SYSTEM] Use /switch to change to an expected character.")
+                else:
+                    print(f"\n[SYSTEM] DM is narrating. No response expected.")
+                return
+
         # Create ChatMessage (import locally to avoid heavy imports at module import)
         from src.models.chat_message import ChatMessage
 
@@ -205,8 +266,12 @@ class DemoTerminal:
         if result.get("state_results") and result["state_results"].get("success"):
             state_info = result["state_results"]
             if state_info.get("commands_executed", 0) > 0:
-                print(f"\n💫 {state_info['commands_executed']} state changes applied")
+                print(f"\n[STATE] {state_info['commands_executed']} state changes applied")
                 print("Type /character to see updated character status\n")
+
+        # Update and display awaiting_response
+        awaiting = result.get("awaiting_response")
+        self.update_expectation(awaiting)
 
         # Display usage for this run
         print(f"[USAGE] This run: {usage['input_tokens']} in / {usage['output_tokens']} out / {usage['total_tokens']} total / {usage['requests']} requests")
@@ -259,6 +324,12 @@ class DemoTerminal:
 
         elif cmd == '/who':
             self.show_characters()
+
+        elif cmd == '/combat':
+            self.toggle_combat_mode()
+
+        elif cmd == '/expectation':
+            self.show_expectation()
 
         elif cmd == '/quit':
             self.session_active = False
@@ -398,6 +469,39 @@ class DemoTerminal:
         for key, info in self.characters.items():
             marker = " <-- ACTIVE" if key == self.current_character_key else ""
             print(f"  {key:10} - {info['character_name']:15} (player_id: {info['player_id']}){marker}")
+
+    def toggle_combat_mode(self):
+        """Toggle combat mode on/off."""
+        self.combat_mode = not self.combat_mode
+        status = "ON (strict turn enforcement)" if self.combat_mode else "OFF (free exploration)"
+        print(f"\n[SYSTEM] Combat mode: {status}")
+
+        if self.combat_mode and self.current_expectation:
+            # Show current expectation when entering combat mode
+            self.show_expectation()
+
+    def show_expectation(self):
+        """Show current response expectation."""
+        print(f"\n--- RESPONSE EXPECTATION ---")
+        print(f"Combat Mode: {'ON' if self.combat_mode else 'OFF'}")
+
+        if self.current_expectation is None:
+            print("No expectation set (DM hasn't responded yet or awaiting_response was empty)")
+            return
+
+        exp = self.current_expectation
+        mode = exp.get_collection_mode()
+
+        print(f"Response Type: {exp.response_type.value}")
+        print(f"Collection Mode: {mode}")
+        print(f"Expected Characters: {', '.join(exp.characters) if exp.characters else '(none)'}")
+        if exp.prompt:
+            print(f"Prompt: {exp.prompt}")
+
+        # Show validation status
+        is_valid = self.is_valid_responder(self.current_character_name)
+        print(f"\nCurrent Character: {self.current_character_name}")
+        print(f"Can Respond: {'YES' if is_valid else 'NO'}")
 
     def show_character_status(self):
         """Show current character's game stats and status."""
