@@ -135,13 +135,16 @@ from dataclasses import dataclass
 from datetime import datetime
 import asyncio
 from pydantic import BaseModel, Field
-from pydantic import BaseModel, Field
 
 from ..models.formatted_game_message import FormattedGameMessage
 from ..models.turn_context import TurnContext, TurnExtractionContext
 from ..models.turn_message import create_live_message, create_message_group
+from ..models.combat_state import CombatState, CombatPhase, InitiativeEntry, create_combat_state
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
-from ..prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS
+from ..prompts.demo_combat_steps import (
+    DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS,
+    COMBAT_START_STEPS, COMBAT_TURN_STEPS, COMBAT_END_STEPS
+)
 
 
 class ActionDeclaration(BaseModel):
@@ -237,6 +240,9 @@ class TurnManager:
         # This is set at the start of each processing call and used to advance
         # the correct turn's step even if tools create subturns during processing
         self._processing_turn: Optional[TurnContext] = None
+
+        # Combat state - tracks phase progression and initiative order
+        self.combat_state: CombatState = create_combat_state()
     
     def _get_message_formatter(self):
         """Lazy load MessageFormatter when needed."""
@@ -754,6 +760,8 @@ class TurnManager:
         self.completed_turns = []
         # self._current_messages = []
         self._turn_counter = 0
+        # Reset combat state
+        self.combat_state = create_combat_state()
 
     # Helper methods for GD post-run function calls
 
@@ -804,6 +812,361 @@ class TurnManager:
             turn_counter=self._turn_counter,
             active_turns_by_level=active_turns_by_level
         )
+
+    # =========================================================================
+    # COMBAT PHASE MANAGEMENT
+    # =========================================================================
+    # Methods for managing combat phase progression (Phase 1 → 2 → 3)
+
+    def enter_combat(
+        self,
+        participants: List[str],
+        encounter_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Start Phase 1: Combat Start.
+
+        Transitions from exploration to combat mode and creates the initial
+        combat start turn for initiative collection.
+
+        Args:
+            participants: List of all combatant names (players + enemies)
+            encounter_name: Optional descriptive name for the encounter
+
+        Returns:
+            Dictionary with combat start info including turn_id
+        """
+        if self.combat_state.phase != CombatPhase.NOT_IN_COMBAT:
+            raise ValueError(f"Cannot enter combat: already in phase {self.combat_state.phase}")
+
+        # Initialize combat state
+        self.combat_state.start_combat(participants, encounter_name)
+
+        # Create Phase 1 turn for initiative collection
+        # Use SYSTEM as speaker since this is a system-initiated phase
+        self._turn_counter += 1
+        turn_id = str(self._turn_counter)
+
+        combat_start_turn = TurnContext(
+            turn_id=turn_id,
+            turn_level=0,
+            current_step_objective=COMBAT_START_STEPS[0],
+            active_character="SYSTEM",
+            game_step_list=COMBAT_START_STEPS,
+            current_step_index=0
+        )
+
+        # Add initial message about combat starting
+        combat_start_turn.add_live_message(
+            f"Combat initiated: {encounter_name or 'Encounter'} with {len(participants)} participants",
+            "SYSTEM"
+        )
+
+        # Add to turn stack
+        self.turn_stack.append([combat_start_turn])
+
+        return {
+            "phase": CombatPhase.COMBAT_START.value,
+            "turn_id": turn_id,
+            "participants": participants,
+            "encounter_name": encounter_name,
+            "step_objective": COMBAT_START_STEPS[0]
+        }
+
+    def add_initiative_roll(
+        self,
+        character_name: str,
+        roll: int,
+        is_player: bool = True,
+        dex_modifier: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Add an initiative roll during Phase 1.
+
+        Note on 2024 PHB Surprise Rules:
+        - Surprise gives DISADVANTAGE on initiative roll (not "skip first turn")
+        - The disadvantage should be applied BEFORE rolling
+        - The roll parameter should be the final result with all modifiers applied
+
+        Args:
+            character_name: Name of the character
+            roll: Total initiative roll result (with any advantage/disadvantage already applied)
+            is_player: Whether this is a player character
+            dex_modifier: Dexterity modifier for tie-breaking
+
+        Returns:
+            Dictionary with roll info and collection status
+        """
+        if self.combat_state.phase != CombatPhase.COMBAT_START:
+            raise ValueError(f"Cannot add initiative in phase {self.combat_state.phase}")
+
+        entry = InitiativeEntry(
+            character_name=character_name,
+            roll=roll,
+            is_player=is_player,
+            dex_modifier=dex_modifier
+        )
+
+        self.combat_state.add_initiative_roll(entry)
+
+        # Check if all participants have rolled
+        rolled = {e.character_name for e in self.combat_state.initiative_order}
+        missing = [p for p in self.combat_state.participants if p not in rolled]
+
+        return {
+            "character": character_name,
+            "roll": roll,
+            "collected": len(self.combat_state.initiative_order),
+            "total_participants": len(self.combat_state.participants),
+            "missing": missing,
+            "all_collected": len(missing) == 0
+        }
+
+    def finalize_initiative(self) -> Dict[str, Any]:
+        """
+        Finalize initiative order and transition Phase 1 → Phase 2.
+
+        Sorts the initiative order and queues the first round of combat turns.
+
+        Returns:
+            Dictionary with initiative order and first turn info
+        """
+        if self.combat_state.phase != CombatPhase.COMBAT_START:
+            raise ValueError(f"Cannot finalize initiative in phase {self.combat_state.phase}")
+
+        # Finalize the initiative order in combat state
+        self.combat_state.finalize_initiative()
+
+        # End the combat start turn if one exists
+        if self.turn_stack and self.turn_stack[-1]:
+            combat_start_turn = self.turn_stack[-1][0]
+            combat_start_turn.end_time = datetime.now()
+            self.turn_stack[-1].pop(0)
+            if not self.turn_stack[-1]:
+                self.turn_stack.pop()
+            self.completed_turns.append(combat_start_turn)
+
+        # Queue the first round of combat turns
+        self._queue_combat_round()
+
+        # Get the first participant
+        first_participant = self.combat_state.get_current_participant()
+
+        return {
+            "phase": CombatPhase.COMBAT_ROUNDS.value,
+            "round_number": self.combat_state.round_number,
+            "initiative_order": [
+                {
+                    "character": e.character_name,
+                    "roll": e.roll,
+                    "is_player": e.is_player
+                }
+                for e in self.combat_state.initiative_order
+            ],
+            "first_participant": first_participant,
+            "initiative_summary": self.combat_state.get_initiative_summary()
+        }
+
+    def _queue_combat_round(self) -> None:
+        """
+        Queue turns for the current combat round based on initiative order.
+
+        Creates a turn for each participant in initiative order.
+        """
+        if not self.combat_state.initiative_order:
+            return
+
+        # Create actions for each participant in initiative order
+        actions = [
+            ActionDeclaration(
+                speaker=entry.character_name,
+                content=f"{entry.character_name}'s turn begins"
+            )
+            for entry in self.combat_state.initiative_order
+        ]
+
+        # Queue turns using COMBAT_TURN_STEPS
+        # This uses the existing start_and_queue_turns but we override the step list
+        turn_level = len(self.turn_stack)
+
+        for i, action in enumerate(actions):
+            self._turn_counter += 1
+            turn_id = str(self._turn_counter)
+
+            turn_context = TurnContext(
+                turn_id=turn_id,
+                turn_level=turn_level,
+                current_step_objective=COMBAT_TURN_STEPS[0],
+                active_character=action.speaker,
+                initiative_order=[e.character_name for e in self.combat_state.initiative_order],
+                game_step_list=COMBAT_TURN_STEPS,
+                current_step_index=0
+            )
+
+            # Add the turn start message
+            turn_context.add_live_message(action.content, action.speaker)
+
+            # Add to turn stack
+            if len(self.turn_stack) == turn_level:
+                self.turn_stack.append([turn_context])
+            else:
+                self.turn_stack[turn_level].append(turn_context)
+
+    def advance_combat_turn(self) -> Dict[str, Any]:
+        """
+        Advance to the next participant in combat order.
+
+        Should be called after a participant's turn ends to move to the next.
+        Handles round wrap-around and checks for combat end conditions.
+
+        Returns:
+            Dictionary with next turn info or combat end trigger
+        """
+        if self.combat_state.phase != CombatPhase.COMBAT_ROUNDS:
+            raise ValueError(f"Cannot advance combat turn in phase {self.combat_state.phase}")
+
+        next_participant, is_new_round = self.combat_state.advance_turn()
+
+        # Check if combat should end
+        if self.combat_state.is_combat_over():
+            return {
+                "combat_over": True,
+                "reason": "One side eliminated",
+                "remaining_players": self.combat_state.get_remaining_players(),
+                "remaining_enemies": self.combat_state.get_remaining_enemies()
+            }
+
+        result = {
+            "combat_over": False,
+            "next_participant": next_participant,
+            "is_new_round": is_new_round,
+            "round_number": self.combat_state.round_number
+        }
+
+        # If new round, queue new turns
+        if is_new_round:
+            self._queue_combat_round()
+            result["new_round_queued"] = True
+
+        return result
+
+    def start_combat_end(self, reason: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Start Phase 3: Combat End.
+
+        Transitions from combat rounds to the conclusion phase.
+
+        Args:
+            reason: Optional reason for combat ending
+
+        Returns:
+            Dictionary with combat end phase info
+        """
+        if self.combat_state.phase != CombatPhase.COMBAT_ROUNDS:
+            raise ValueError(f"Cannot end combat from phase {self.combat_state.phase}")
+
+        # Transition combat state
+        self.combat_state.start_combat_end()
+
+        # Clear any remaining combat turns
+        self.turn_stack = []
+
+        # Create Phase 3 turn for conclusion
+        self._turn_counter += 1
+        turn_id = str(self._turn_counter)
+
+        combat_end_turn = TurnContext(
+            turn_id=turn_id,
+            turn_level=0,
+            current_step_objective=COMBAT_END_STEPS[0],
+            active_character="SYSTEM",
+            game_step_list=COMBAT_END_STEPS,
+            current_step_index=0
+        )
+
+        # Add summary message
+        players_remaining = self.combat_state.get_remaining_players()
+        enemies_remaining = self.combat_state.get_remaining_enemies()
+        combat_end_turn.add_live_message(
+            f"Combat concluding. Rounds: {self.combat_state.round_number}. "
+            f"Players remaining: {len(players_remaining)}. "
+            f"Enemies remaining: {len(enemies_remaining)}. "
+            f"Reason: {reason or 'Combat conditions met'}",
+            "SYSTEM"
+        )
+
+        self.turn_stack.append([combat_end_turn])
+
+        return {
+            "phase": CombatPhase.COMBAT_END.value,
+            "turn_id": turn_id,
+            "rounds_fought": self.combat_state.round_number,
+            "players_remaining": players_remaining,
+            "enemies_remaining": enemies_remaining,
+            "reason": reason,
+            "step_objective": COMBAT_END_STEPS[0]
+        }
+
+    def finish_combat(self) -> Dict[str, Any]:
+        """
+        Complete combat and return to exploration mode.
+
+        Should be called after Phase 3 steps are complete.
+
+        Returns:
+            Dictionary with combat summary
+        """
+        if self.combat_state.phase != CombatPhase.COMBAT_END:
+            raise ValueError(f"Cannot finish combat from phase {self.combat_state.phase}")
+
+        # Capture summary before clearing
+        summary = {
+            "encounter_name": self.combat_state.encounter_name,
+            "rounds_fought": self.combat_state.round_number,
+            "final_participants": self.combat_state.participants.copy(),
+            "players_remaining": self.combat_state.get_remaining_players(),
+            "enemies_remaining": self.combat_state.get_remaining_enemies()
+        }
+
+        # End combat end turn if exists
+        if self.turn_stack and self.turn_stack[-1]:
+            combat_end_turn = self.turn_stack[-1][0]
+            combat_end_turn.end_time = datetime.now()
+            self.completed_turns.append(combat_end_turn)
+
+        # Reset everything
+        self.combat_state.finish_combat()
+        self.turn_stack = []
+
+        return {
+            "phase": CombatPhase.NOT_IN_COMBAT.value,
+            "combat_complete": True,
+            "summary": summary
+        }
+
+    def get_combat_phase(self) -> CombatPhase:
+        """Get the current combat phase."""
+        return self.combat_state.phase
+
+    def is_in_combat(self) -> bool:
+        """Check if currently in any combat phase."""
+        return self.combat_state.phase != CombatPhase.NOT_IN_COMBAT
+
+    def get_combat_summary(self) -> Dict[str, Any]:
+        """Get a summary of the current combat state."""
+        return {
+            "phase": self.combat_state.phase.value,
+            "round_number": self.combat_state.round_number,
+            "current_participant": self.combat_state.get_current_participant(),
+            "participants_count": len(self.combat_state.participants),
+            "initiative_order": [
+                {"name": e.character_name, "roll": e.roll, "is_player": e.is_player}
+                for e in self.combat_state.initiative_order
+            ],
+            "players_remaining": len(self.combat_state.get_remaining_players()),
+            "enemies_remaining": len(self.combat_state.get_remaining_enemies())
+        }
+
 
 def create_turn_manager(
     turn_condensation_agent: Optional[Any] = None
