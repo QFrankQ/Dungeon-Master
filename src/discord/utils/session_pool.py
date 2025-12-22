@@ -21,6 +21,7 @@ class SessionContext:
     channel_id: int
     session_db_id: uuid.UUID  # Database session ID (Phase 2)
     temp_character_dir: Optional[str] = None
+    message_coordinator: Optional['MessageCoordinator'] = None  # Milestone 5: Multiplayer coordination
 
 
 class SessionPool:
@@ -73,6 +74,7 @@ class SessionPool:
         # Import here to avoid circular dependencies
         from demo_terminal import create_demo_session_manager
         from src.memory.turn_manager import ActionDeclaration
+        from src.memory.message_coordinator import create_message_coordinator
         from src.persistence.database import get_session
         from src.persistence.repositories.guild_repo import GuildRepository
         from src.persistence.repositories.session_repo import SessionRepository
@@ -100,6 +102,10 @@ class SessionPool:
         session_manager.turn_manager.update_processing_turn_to_current()
         session_manager.turn_manager.mark_new_messages_as_responded()
 
+        # Milestone 5: Create message coordinator for multiplayer coordination
+        # Starts in exploration mode (combat_mode=False)
+        message_coordinator = create_message_coordinator()
+
         # Phase 2: Persist to database
         session_db_id = None
         try:
@@ -123,7 +129,8 @@ class SessionPool:
             guild_id=guild_id,
             channel_id=channel_id,
             session_db_id=session_db_id,
-            temp_character_dir=temp_dir
+            temp_character_dir=temp_dir,
+            message_coordinator=message_coordinator
         )
 
         self._sessions[channel_id] = context
