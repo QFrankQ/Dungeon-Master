@@ -1,15 +1,17 @@
 """
 Game Commands Cog
 
-Handles game information commands: /turn, /history, /stats, /context, /usage, /help
+Handles game information commands: /turn, /history, /stats, /context, /usage, /help, /combat
 """
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 from pathlib import Path
+from typing import Optional
 
 from src.discord.utils.session_pool import get_session_pool
+from src.models.combat_state import CombatPhase
 
 
 class GameCommands(commands.Cog):
@@ -190,6 +192,206 @@ class GameCommands(commands.Cog):
             ephemeral=True
         )
 
+    @app_commands.command(name="combat", description="Manage combat mode")
+    @app_commands.describe(action="Combat action: start, end, status, or toggle (default)")
+    async def combat(self, interaction: discord.Interaction, action: Optional[str] = None):
+        """Toggle or manage combat mode for multiplayer coordination."""
+        session_context, error = self._get_session_or_error(interaction)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        coordinator = session_context.message_coordinator
+        turn_manager = session_context.session_manager.turn_manager
+
+        if not coordinator:
+            await interaction.response.send_message(
+                "⚠️ Message coordinator not available.",
+                ephemeral=True
+            )
+            return
+
+        if action is None:
+            # Toggle combat mode
+            if coordinator.combat_mode:
+                coordinator.exit_combat_mode()
+                await interaction.response.send_message(
+                    "⚔️ **Combat Mode: OFF**\n"
+                    "Free exploration - all players can send messages."
+                )
+            else:
+                coordinator.enter_combat_mode()
+                await interaction.response.send_message(
+                    "⚔️ **Combat Mode: ON**\n"
+                    "Strict turn enforcement enabled.\n"
+                    "Use `/combat start` to begin a combat encounter."
+                )
+
+        elif action.lower() == "start":
+            # Start a combat encounter
+            if turn_manager.is_in_combat():
+                phase = turn_manager.get_combat_phase()
+                await interaction.response.send_message(
+                    f"⚠️ Already in combat! Phase: {phase.value}\n"
+                    f"Use `/combat end` to end current combat first.",
+                    ephemeral=True
+                )
+                return
+
+            # Get all registered characters for this session
+            registry = session_context.session_manager.player_character_registry
+            player_chars = list(registry._character_by_player.values())
+
+            if not player_chars:
+                await interaction.response.send_message(
+                    "⚠️ No registered characters! Players must use `/register` first.",
+                    ephemeral=True
+                )
+                return
+
+            # For now, add some placeholder enemies
+            # In future, DM narrative or explicit command would specify enemies
+            enemies = ["Goblin 1", "Goblin 2"]
+            all_participants = player_chars + enemies
+
+            # Enter combat via TurnManager
+            turn_manager.enter_combat(all_participants, "Combat Encounter")
+            coordinator.enter_combat_mode()
+
+            # Build combat announcement
+            player_list = ", ".join(player_chars) if player_chars else "No players"
+            enemy_list = ", ".join(enemies) if enemies else "No enemies"
+
+            await interaction.response.send_message(
+                "⚔️ **COMBAT INITIATED!**\n\n"
+                f"**Players:** {player_list}\n"
+                f"**Enemies:** {enemy_list}\n\n"
+                "🎲 **Roll for Initiative!**\n"
+                "Use `/initiative <roll>` to submit your initiative roll.\n"
+                "Example: `/initiative 15`"
+            )
+
+        elif action.lower() == "end":
+            # End combat
+            if not turn_manager.is_in_combat():
+                await interaction.response.send_message(
+                    "⚠️ Not currently in combat.",
+                    ephemeral=True
+                )
+                return
+
+            turn_manager.finish_combat()
+            coordinator.exit_combat_mode()
+
+            await interaction.response.send_message(
+                "⚔️ **Combat has ended.**\n\n"
+                "Returning to exploration mode.\n"
+                "All players can now send messages freely."
+            )
+
+        elif action.lower() == "status":
+            # Show combat status
+            phase = turn_manager.get_combat_phase()
+
+            if phase == CombatPhase.NOT_IN_COMBAT:
+                mode = "ON (strict)" if coordinator.combat_mode else "OFF (exploration)"
+                await interaction.response.send_message(
+                    f"⚔️ **Combat Status**\n\n"
+                    f"**Mode:** {mode}\n"
+                    f"**Combat Phase:** Not in combat\n\n"
+                    f"Use `/combat start` to begin an encounter."
+                )
+            else:
+                combat_state = turn_manager.combat_state
+                summary = combat_state.get_initiative_summary()
+
+                await interaction.response.send_message(
+                    f"⚔️ **Combat Status**\n\n"
+                    f"**Phase:** {phase.value}\n"
+                    f"**Round:** {combat_state.round_number}\n"
+                    f"**Current Participant:** {combat_state.get_current_participant() or 'N/A'}\n\n"
+                    f"```\n{summary}\n```"
+                )
+
+        else:
+            await interaction.response.send_message(
+                f"⚠️ Unknown combat action: `{action}`\n"
+                f"Valid actions: `start`, `end`, `status`, or omit for toggle.",
+                ephemeral=True
+            )
+
+    @app_commands.command(name="initiative", description="Submit your initiative roll")
+    @app_commands.describe(roll="Your initiative roll result (d20 + modifier)")
+    async def initiative(self, interaction: discord.Interaction, roll: int):
+        """Submit an initiative roll during combat start phase."""
+        session_context, error = self._get_session_or_error(interaction)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        turn_manager = session_context.session_manager.turn_manager
+        coordinator = session_context.message_coordinator
+
+        # Verify combat phase
+        if turn_manager.get_combat_phase() != CombatPhase.COMBAT_START:
+            await interaction.response.send_message(
+                "⚠️ Initiative can only be rolled during combat start phase!",
+                ephemeral=True
+            )
+            return
+
+        # Get character for this user
+        player_id = str(interaction.user.id)
+        registry = session_context.session_manager.player_character_registry
+        character_id = registry.get_character_id_by_player_id(player_id)
+
+        if not character_id:
+            await interaction.response.send_message(
+                "⚠️ You need to register a character first! Use `/register`",
+                ephemeral=True
+            )
+            return
+
+        # Add the initiative roll
+        result = turn_manager.add_initiative_roll(
+            character_name=character_id,
+            roll=roll,
+            is_player=True
+        )
+
+        if result.get("error"):
+            await interaction.response.send_message(
+                f"⚠️ {result['error']}",
+                ephemeral=True
+            )
+            return
+
+        # Acknowledge the roll
+        await interaction.response.send_message(
+            f"🎲 **{character_id}** rolled **{roll}** for initiative!\n"
+            f"({result['collected']}/{result['total_participants']} collected)"
+        )
+
+        # Check if all initiative collected
+        if result.get("all_collected"):
+            # Finalize initiative order
+            finalize_result = turn_manager.finalize_initiative()
+            order = finalize_result.get("initiative_order", [])
+
+            # Build initiative order display
+            order_text = ""
+            for i, entry in enumerate(order):
+                player_marker = "🎮" if entry["is_player"] else "🐉"
+                order_text += f"{i+1}. {player_marker} **{entry['character_name']}** - {entry['roll']}\n"
+
+            first_char = order[0]["character_name"] if order else "Unknown"
+
+            await interaction.channel.send(
+                "📋 **Initiative Order Finalized!**\n\n"
+                f"{order_text}\n"
+                f"**{first_char}** goes first!"
+            )
+
     @app_commands.command(name="help", description="Show available commands and how to play")
     async def show_help(self, interaction: discord.Interaction):
         """Show help information."""
@@ -204,6 +406,12 @@ class GameCommands(commands.Cog):
             "• `/switch <character_id>` - Switch to a different character\n"
             "• `/who` - Show all available characters\n"
             "• `/upload-character` - Upload your own custom character JSON file\n\n"
+            "**Combat:**\n"
+            "• `/combat` - Toggle combat mode on/off\n"
+            "• `/combat start` - Start a combat encounter\n"
+            "• `/combat end` - End the current combat\n"
+            "• `/combat status` - Show combat status and initiative\n"
+            "• `/initiative <roll>` - Submit initiative roll\n\n"
             "**Game Information:**\n"
             "• `/turn` - Show current turn information\n"
             "• `/history` - Show completed turns\n"
