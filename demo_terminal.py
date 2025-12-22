@@ -11,9 +11,10 @@ import tempfile
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from pathlib import Path
-from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS
+from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS, COMBAT_START_STEPS, COMBAT_TURN_STEPS, COMBAT_END_STEPS
 from src.memory.turn_manager import ActionDeclaration
 from src.models.response_expectation import ResponseExpectation, ResponseType
+from src.models.combat_state import CombatPhase
 from src.memory.response_collector import ResponseCollector, AddResult, create_response_collector
 from src.memory.message_coordinator import (
     MessageCoordinator,
@@ -164,20 +165,27 @@ class DemoTerminal:
         """Print available commands."""
         print("-" * 70)
         print("COMMANDS:")
-        print("  /help          - Show this help message")
-        print("  /turn          - Show current turn information")
-        print("  /history       - Show completed turns history")
-        print("  /stats         - Show turn manager statistics")
-        print("  /character     - Show current character status and stats")
-        print("  /register <id> - Link a character file to current player (fighter, wizard, cleric)")
-        print("  /usage         - Show token usage statistics")
-        print("  /context       - Show DM context as built by context builder")
-        print("  /switch <char> - Switch to a different player/character (fighter, wizard, cleric)")
-        print("  /who           - Show current character and all available characters")
-        print("  /combat        - Toggle combat mode (strict turn enforcement)")
-        print("  /expectation   - Show current response expectation")
-        print("  /collected     - Show collected responses (for multi-response modes)")
-        print("  /quit          - Exit the demo")
+        print("  /help            - Show this help message")
+        print("  /turn            - Show current turn information")
+        print("  /history         - Show completed turns history")
+        print("  /stats           - Show turn manager statistics")
+        print("  /character       - Show current character status and stats")
+        print("  /register <id>   - Link a character file to current player (fighter, wizard, cleric)")
+        print("  /usage           - Show token usage statistics")
+        print("  /context         - Show DM context as built by context builder")
+        print("  /switch <char>   - Switch to a different player/character (fighter, wizard, cleric)")
+        print("  /who             - Show current character and all available characters")
+        print("  /combat          - Toggle combat mode (strict turn enforcement)")
+        print("  /expectation     - Show current response expectation")
+        print("  /collected       - Show collected responses (for multi-response modes)")
+        print("  /quit            - Exit the demo")
+        print("-" * 70)
+        print("COMBAT PHASE COMMANDS:")
+        print("  /combat start <encounter>  - Start combat with encounter name")
+        print("  /combat end [reason]       - End combat (transition to Phase 3)")
+        print("  /combat status             - Show current combat phase and initiative")
+        print("  /initiative <roll>         - Submit your initiative roll")
+        print("  /initiative finalize       - Finalize initiative order and begin combat rounds")
         print("-" * 70)
         print("\nNOTE: In this demo, each character has a separate player_id to simulate")
         print("      multiplayer. Use /switch to change characters for multi-response tests.")
@@ -394,8 +402,11 @@ class DemoTerminal:
         elif cmd == '/who':
             self.show_characters()
 
-        elif cmd == '/combat':
-            self.toggle_combat_mode()
+        elif cmd == '/combat' or cmd.startswith('/combat '):
+            await self.handle_combat_command(command)
+
+        elif cmd.startswith('/initiative'):
+            await self.handle_initiative_command(command)
 
         elif cmd == '/expectation':
             self.show_expectation()
@@ -411,11 +422,25 @@ class DemoTerminal:
 
     def show_turn_info(self):
         """Show current turn information."""
-        if not self.session_manager.turn_manager.is_in_turn():
+        turn_manager = self.session_manager.turn_manager
+
+        # Show combat phase info first
+        combat_phase = turn_manager.get_combat_phase()
+        print(f"\n--- COMBAT STATUS ---")
+        print(f"Combat Phase: {combat_phase.value}")
+
+        if turn_manager.is_in_combat():
+            combat_summary = turn_manager.get_combat_summary()
+            print(f"Round: {combat_summary['round_number']}")
+            print(f"Current Participant: {combat_summary['current_participant'] or 'N/A'}")
+            print(f"Participants: {combat_summary['participants_count']} total")
+            print(f"  Players: {combat_summary['players_remaining']}, Enemies: {combat_summary['enemies_remaining']}")
+
+        if not turn_manager.is_in_turn():
             print("\n[SYSTEM] No active turn")
             return
 
-        current_turn = self.session_manager.turn_manager.get_current_turn_context()
+        current_turn = turn_manager.get_current_turn_context()
         print(f"\n--- CURRENT TURN INFO ---")
         print(f"Turn ID: {current_turn.turn_id}")
         print(f"Turn Level: {current_turn.turn_level}")
@@ -628,6 +653,249 @@ class DemoTerminal:
             print(f"\n[READY] All responses collected! Next message will send to DM.")
         else:
             print(f"\n[TIP] Use /switch <character> to respond as another character.")
+
+    async def handle_combat_command(self, command: str):
+        """
+        Handle combat phase commands.
+
+        Commands:
+        - /combat - Toggle combat mode (existing behavior)
+        - /combat start <encounter> - Start Phase 1 with all registered characters
+        - /combat end [reason] - Transition to Phase 3
+        - /combat status - Show combat status
+        - /combat finish - Complete Phase 3 and return to exploration
+        """
+        parts = command.split(maxsplit=2)
+        turn_manager = self.session_manager.turn_manager
+
+        if len(parts) == 1:
+            # Just "/combat" - toggle combat mode
+            self.toggle_combat_mode()
+            return
+
+        subcommand = parts[1].lower()
+
+        if subcommand == "start":
+            # Start combat with all characters + some enemies
+            if turn_manager.is_in_combat():
+                print(f"\n[SYSTEM] Already in combat! Current phase: {turn_manager.get_combat_phase().value}")
+                return
+
+            encounter_name = parts[2] if len(parts) > 2 else "Combat Encounter"
+
+            # Get all player character names
+            player_chars = [info["character_name"] for info in self.characters.values()]
+
+            # Add some demo enemies
+            enemies = ["Goblin 1", "Goblin 2", "Goblin Boss"]
+            all_participants = player_chars + enemies
+
+            # Enter combat
+            result = turn_manager.enter_combat(all_participants, encounter_name)
+
+            # Also enter combat mode for message validation
+            self.message_coordinator.enter_combat_mode()
+
+            print(f"\n{'='*70}")
+            print(f"⚔️  COMBAT INITIATED: {encounter_name}")
+            print(f"{'='*70}")
+            print(f"\nPhase: {result['phase']}")
+            print(f"Participants ({len(all_participants)}):")
+            print(f"  Players: {', '.join(player_chars)}")
+            print(f"  Enemies: {', '.join(enemies)}")
+            print(f"\nCurrent Objective: {result['step_objective'][:80]}...")
+            print(f"\n[SYSTEM] Use /initiative <roll> to submit your initiative roll")
+            print(f"[SYSTEM] Use /initiative finalize when all rolls are collected")
+
+            # Set up expectation for initiative collection
+            init_expectation = ResponseExpectation(
+                characters=player_chars,
+                response_type=ResponseType.INITIATIVE,
+                prompt="Roll initiative (d20 + Dex modifier)"
+            )
+            self.update_expectation(init_expectation)
+
+        elif subcommand == "end":
+            # End combat (transition to Phase 3)
+            if not turn_manager.is_in_combat():
+                print(f"\n[SYSTEM] Not currently in combat")
+                return
+
+            if turn_manager.get_combat_phase() != CombatPhase.COMBAT_ROUNDS:
+                print(f"\n[SYSTEM] Can only end combat during combat rounds phase")
+                print(f"[SYSTEM] Current phase: {turn_manager.get_combat_phase().value}")
+                return
+
+            reason = parts[2] if len(parts) > 2 else "Combat ended by DM"
+            result = turn_manager.start_combat_end(reason)
+
+            print(f"\n{'='*70}")
+            print(f"🏁 COMBAT ENDING: {reason}")
+            print(f"{'='*70}")
+            print(f"\nPhase: {result['phase']}")
+            print(f"Rounds Fought: {result['rounds_fought']}")
+            print(f"Players Remaining: {', '.join(result['players_remaining']) or 'None'}")
+            print(f"Enemies Remaining: {', '.join(result['enemies_remaining']) or 'None'}")
+            print(f"\nCurrent Objective: {result['step_objective'][:80]}...")
+            print(f"\n[SYSTEM] Use /combat finish to complete combat and return to exploration")
+
+        elif subcommand == "finish":
+            # Complete Phase 3 and return to exploration
+            if turn_manager.get_combat_phase() != CombatPhase.COMBAT_END:
+                print(f"\n[SYSTEM] Can only finish combat during combat end phase")
+                print(f"[SYSTEM] Current phase: {turn_manager.get_combat_phase().value}")
+                return
+
+            result = turn_manager.finish_combat()
+
+            # Exit combat mode
+            self.message_coordinator.exit_combat_mode()
+
+            print(f"\n{'='*70}")
+            print(f"✅ COMBAT COMPLETE")
+            print(f"{'='*70}")
+            summary = result['summary']
+            print(f"\nEncounter: {summary['encounter_name']}")
+            print(f"Rounds Fought: {summary['rounds_fought']}")
+            print(f"Players Remaining: {len(summary['players_remaining'])}")
+            print(f"Enemies Remaining: {len(summary['enemies_remaining'])}")
+            print(f"\n[SYSTEM] Returned to exploration mode")
+
+        elif subcommand == "status":
+            # Show detailed combat status
+            if not turn_manager.is_in_combat():
+                print(f"\n[SYSTEM] Not currently in combat")
+                print(f"[SYSTEM] Use /combat start <encounter> to begin combat")
+                return
+
+            summary = turn_manager.get_combat_summary()
+            print(f"\n{'='*70}")
+            print(f"⚔️  COMBAT STATUS")
+            print(f"{'='*70}")
+            print(f"Phase: {summary['phase']}")
+            print(f"Round: {summary['round_number']}")
+            print(f"Current Participant: {summary['current_participant'] or 'N/A'}")
+
+            if summary['initiative_order']:
+                print(f"\nInitiative Order:")
+                for i, entry in enumerate(summary['initiative_order']):
+                    marker = "→ " if entry['name'] == summary['current_participant'] else "  "
+                    player_tag = "[PC]" if entry['is_player'] else "[NPC]"
+                    print(f"  {marker}{i+1}. {entry['name']} {player_tag}: {entry['roll']}")
+
+            print(f"\nRemaining: {summary['players_remaining']} players, {summary['enemies_remaining']} enemies")
+
+        else:
+            print(f"\n[SYSTEM] Unknown combat command: {subcommand}")
+            print("[SYSTEM] Available: start, end, finish, status")
+
+    async def handle_initiative_command(self, command: str):
+        """
+        Handle initiative commands during Phase 1.
+
+        Commands:
+        - /initiative <roll> - Submit your initiative roll
+        - /initiative finalize - Finalize order and begin combat rounds
+        - /initiative npc <name> <roll> - Add NPC initiative
+        """
+        parts = command.split()
+        turn_manager = self.session_manager.turn_manager
+
+        if turn_manager.get_combat_phase() != CombatPhase.COMBAT_START:
+            print(f"\n[SYSTEM] Initiative commands only available during combat start phase")
+            print(f"[SYSTEM] Current phase: {turn_manager.get_combat_phase().value}")
+            return
+
+        if len(parts) < 2:
+            print(f"\n[SYSTEM] Usage: /initiative <roll> or /initiative finalize")
+            return
+
+        subcommand = parts[1].lower()
+
+        if subcommand == "finalize":
+            # Finalize initiative order
+            result = turn_manager.finalize_initiative()
+
+            print(f"\n{'='*70}")
+            print(f"📋 INITIATIVE ORDER FINALIZED")
+            print(f"{'='*70}")
+            print(f"\nPhase: {result['phase']}")
+            print(f"Round: {result['round_number']}")
+            print(f"\n{result['initiative_summary']}")
+            print(f"\nFirst to act: {result['first_participant']}")
+
+            # Update expectation to single action from first participant
+            first_participant = result['first_participant']
+            action_expectation = ResponseExpectation(
+                characters=[first_participant] if first_participant else [],
+                response_type=ResponseType.ACTION,
+                prompt=f"It's {first_participant}'s turn. What do you do?"
+            )
+            self.update_expectation(action_expectation)
+
+        elif subcommand == "npc":
+            # Add NPC initiative: /initiative npc <name> <roll>
+            if len(parts) < 4:
+                print(f"\n[SYSTEM] Usage: /initiative npc <name> <roll>")
+                return
+
+            npc_name = parts[2]
+            try:
+                roll = int(parts[3])
+            except ValueError:
+                print(f"\n[SYSTEM] Invalid roll value: {parts[3]}")
+                return
+
+            result = turn_manager.add_initiative_roll(
+                character_name=npc_name,
+                roll=roll,
+                is_player=False
+            )
+
+            print(f"\n[SYSTEM] Added initiative for {npc_name}: {roll}")
+            print(f"[SYSTEM] Collected {result['collected']}/{result['total_participants']}")
+            if result['missing']:
+                print(f"[SYSTEM] Still waiting for: {', '.join(result['missing'])}")
+            if result['all_collected']:
+                print(f"[SYSTEM] All initiatives collected! Use /initiative finalize")
+
+        else:
+            # Assume it's a roll value: /initiative <roll>
+            try:
+                roll = int(subcommand)
+            except ValueError:
+                print(f"\n[SYSTEM] Invalid roll value: {subcommand}")
+                print(f"[SYSTEM] Usage: /initiative <roll> or /initiative finalize")
+                return
+
+            # Get character's dex modifier if available
+            dex_mod = 0
+            if self.session_manager.state_manager:
+                char_id = self.session_manager.player_character_registry.get_character_id_by_player_id(self.current_player_id)
+                if char_id:
+                    character = self.session_manager.state_manager.get_character(char_id)
+                    if character:
+                        dex_mod = (character.ability_scores.dexterity - 10) // 2
+
+            result = turn_manager.add_initiative_roll(
+                character_name=self.current_character_name,
+                roll=roll,
+                is_player=True,
+                dex_modifier=dex_mod
+            )
+
+            print(f"\n[SYSTEM] Initiative for {self.current_character_name}: {roll}")
+            print(f"[SYSTEM] Collected {result['collected']}/{result['total_participants']}")
+            if result['missing']:
+                missing_players = [m for m in result['missing'] if m in [c["character_name"] for c in self.characters.values()]]
+                missing_npcs = [m for m in result['missing'] if m not in [c["character_name"] for c in self.characters.values()]]
+                if missing_players:
+                    print(f"[SYSTEM] Waiting for players: {', '.join(missing_players)}")
+                if missing_npcs:
+                    print(f"[SYSTEM] Waiting for NPCs: {', '.join(missing_npcs)}")
+                    print(f"[SYSTEM] Use /initiative npc <name> <roll> to add NPC initiatives")
+            if result['all_collected']:
+                print(f"[SYSTEM] All initiatives collected! Use /initiative finalize")
 
     def show_character_status(self):
         """Show current character's game stats and status."""
