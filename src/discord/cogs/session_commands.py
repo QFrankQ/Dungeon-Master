@@ -8,10 +8,16 @@ plus the on_message handler for player actions during active sessions.
 import discord
 from discord import app_commands
 from discord.ext import commands
-from typing import Optional
+from typing import Optional, List
 
-from src.discord.utils.session_pool import get_session_pool
+from src.discord.utils.session_pool import get_session_pool, SessionContext
 from src.discord.utils.message_converter import discord_to_chat_message
+from src.memory.message_coordinator import MessageValidationResult
+from src.memory.response_collector import AddResult
+from src.models.response_expectation import ResponseExpectation, ResponseType
+from src.discord.views.reaction_view import ReactionView
+from src.discord.views.initiative_modal import InitiativeView
+from src.discord.views.save_modal import SaveView, parse_save_from_prompt
 
 
 class SessionCommands(commands.Cog):
@@ -159,13 +165,67 @@ class SessionCommands(commands.Cog):
                 character = session_manager.state_manager.get_character(character_id)
                 character_name = character.info.name if character else character_id
 
+                # Milestone 5: Validate responder via MessageCoordinator
+                coordinator = session_context.message_coordinator
+                if coordinator:
+                    validation = coordinator.validate_responder(character_name)
+                    if validation.result != MessageValidationResult.VALID:
+                        if coordinator.combat_mode:
+                            # In combat mode, reject invalid responders with feedback
+                            await self._send_validation_feedback(message, validation)
+                            return
+                        # In exploration mode, let message through (validation passes)
+
                 # Convert Discord message to ChatMessage format
                 chat_message = discord_to_chat_message(message, character_name)
 
-                # Process through SessionManager (mirrors demo_terminal.py:184-186)
+                # Milestone 5: Multi-response collection for combat mode
+                if coordinator and coordinator.combat_mode:
+                    # Add response to collector
+                    add_result = coordinator.add_response(character_name, chat_message)
+
+                    if add_result == AddResult.DUPLICATE:
+                        await message.reply(
+                            "You've already responded! Waiting for others...",
+                            delete_after=10
+                        )
+                        return
+                    elif add_result == AddResult.UNEXPECTED:
+                        await message.reply(
+                            "Your response wasn't expected at this time.",
+                            delete_after=10
+                        )
+                        return
+
+                    # Check if collection is complete
+                    if not coordinator.is_collection_complete():
+                        # Show progress
+                        missing = coordinator.get_missing_responders()
+                        collected_count = len(coordinator.get_collected_responses())
+                        total_count = collected_count + len(missing)
+                        await message.add_reaction("✅")
+                        await message.channel.send(
+                            f"Got **{character_name}**'s response. "
+                            f"({collected_count}/{total_count}) "
+                            f"Waiting for: {', '.join(missing)}"
+                        )
+                        return
+
+                    # Collection complete - gather all messages for batch processing
+                    collected_messages = list(coordinator.get_collected_responses().values())
+                else:
+                    # Exploration mode or no coordinator - single message processing
+                    collected_messages = [chat_message]
+
+                # Process through SessionManager
                 result = await session_manager.demo_process_player_input(
-                    new_messages=[chat_message]
+                    new_messages=collected_messages
                 )
+
+                # Milestone 5: Update expectation after DM response and show UI
+                if coordinator:
+                    awaiting = result.get("awaiting_response")
+                    coordinator.set_expectation(awaiting)
 
                 # Send DM responses (mirrors demo_terminal.py:201-202)
                 for response_text in result["responses"]:
@@ -190,6 +250,16 @@ class SessionCommands(commands.Cog):
                             f"Type `/character` to see updated character status"
                         )
 
+                # Milestone 5: System-driven UI selection based on ResponseType
+                if coordinator and coordinator.combat_mode:
+                    awaiting = result.get("awaiting_response")
+                    if awaiting:
+                        await self._show_response_ui(
+                            message.channel,
+                            awaiting,
+                            session_context
+                        )
+
         except Exception as e:
             await message.channel.send(
                 f"❌ Error processing message: {str(e)}\n"
@@ -198,6 +268,163 @@ class SessionCommands(commands.Cog):
             print(f"Error in on_message: {e}")
             import traceback
             traceback.print_exc()
+
+    async def _send_validation_feedback(
+        self,
+        message: discord.Message,
+        validation
+    ) -> None:
+        """
+        Send feedback when a player tries to act out of turn in combat mode.
+
+        Uses reactions and ephemeral-like messages to minimize channel clutter.
+        """
+        if validation.result == MessageValidationResult.INVALID_NOT_YOUR_TURN:
+            # Add hourglass reaction to indicate waiting
+            await message.add_reaction("⏳")
+            # Send feedback (auto-delete to reduce clutter)
+            expected = validation.expected_characters
+            if expected:
+                await message.reply(
+                    f"⏳ It's not your turn! Waiting for: **{', '.join(expected)}**",
+                    delete_after=10
+                )
+            else:
+                await message.reply(
+                    "⏳ It's not your turn!",
+                    delete_after=10
+                )
+
+        elif validation.result == MessageValidationResult.INVALID_ALREADY_RESPONDED:
+            await message.add_reaction("✅")
+            await message.reply(
+                "You've already responded. Waiting for others...",
+                delete_after=10
+            )
+
+        elif validation.result == MessageValidationResult.INVALID_NO_RESPONSE_EXPECTED:
+            await message.add_reaction("🤫")
+            await message.reply(
+                "The DM is narrating - no response expected right now.",
+                delete_after=10
+            )
+
+    async def _show_response_ui(
+        self,
+        channel: discord.TextChannel,
+        expectation: ResponseExpectation,
+        session_context: SessionContext
+    ) -> None:
+        """
+        Show appropriate UI based on ResponseType (system-driven UI selection).
+
+        This is a key principle from the multiplayer coordination design:
+        The system selects UI based on ResponseType, NOT text parsing.
+        """
+        if expectation is None:
+            return
+
+        # Get helper to resolve user ID -> character name
+        registry = session_context.session_manager.player_character_registry
+
+        def get_character_for_user(user_id: int) -> Optional[str]:
+            return registry.get_character_id_by_player_id(str(user_id))
+
+        # Get helper to get character stats
+        state_manager = session_context.session_manager.state_manager
+
+        def get_dex_modifier(character_name: str) -> int:
+            try:
+                char = state_manager.get_character(character_name)
+                if char and char.abilities:
+                    dex = char.abilities.dexterity
+                    return (dex - 10) // 2  # D&D modifier formula
+            except:
+                pass
+            return 0
+
+        def get_save_modifier(character_name: str, save_type: str) -> int:
+            try:
+                char = state_manager.get_character(character_name)
+                if char and char.abilities:
+                    # Get base ability modifier
+                    ability_map = {
+                        "STR": char.abilities.strength,
+                        "DEX": char.abilities.dexterity,
+                        "CON": char.abilities.constitution,
+                        "INT": char.abilities.intelligence,
+                        "WIS": char.abilities.wisdom,
+                        "CHA": char.abilities.charisma,
+                    }
+                    ability_score = ability_map.get(save_type.upper(), 10)
+                    modifier = (ability_score - 10) // 2
+
+                    # Check for proficiency in save
+                    if hasattr(char, 'saving_throws') and char.saving_throws:
+                        prof_bonus = char.proficiency_bonus if hasattr(char, 'proficiency_bonus') else 2
+                        if save_type.upper() in [s.upper() for s in char.saving_throws]:
+                            modifier += prof_bonus
+
+                    return modifier
+            except:
+                pass
+            return 0
+
+        # Select and show UI based on response type
+        if expectation.response_type == ResponseType.NONE:
+            # DM narrating - no UI needed
+            return
+
+        elif expectation.response_type == ResponseType.ACTION:
+            # Standard turn - just announce whose turn it is
+            active = expectation.characters[0] if expectation.characters else "Unknown"
+            await channel.send(f"⚔️ **{active}'s turn.** What do you do?")
+
+        elif expectation.response_type == ResponseType.INITIATIVE:
+            # Show initiative view with roll button
+            view = InitiativeView(
+                expected_characters=expectation.characters,
+                timeout=120.0,
+                get_character_for_user=get_character_for_user,
+                get_dex_modifier=get_dex_modifier,
+            )
+            await channel.send(
+                "🎲 **Roll for Initiative!**\n"
+                f"Waiting for: {', '.join(expectation.characters)}",
+                view=view
+            )
+
+        elif expectation.response_type == ResponseType.SAVING_THROW:
+            # Parse save type and DC from prompt
+            prompt = expectation.prompt or "Make a saving throw"
+            save_type, dc = parse_save_from_prompt(prompt)
+
+            view = SaveView(
+                expected_characters=expectation.characters,
+                prompt=prompt,
+                save_type=save_type,
+                dc=dc,
+                timeout=60.0,
+                get_character_for_user=get_character_for_user,
+                get_save_modifier=get_save_modifier,
+            )
+            await channel.send(f"🎲 **{prompt}**", view=view)
+
+        elif expectation.response_type == ResponseType.REACTION:
+            # Show reaction view with Pass/Use Reaction buttons
+            prompt = expectation.prompt or "Does anyone want to use a reaction?"
+            view = ReactionView(
+                expected_characters=expectation.characters,
+                prompt=prompt,
+                timeout=30.0,
+                get_character_for_user=get_character_for_user,
+            )
+            await channel.send(f"⚡ {prompt}", view=view)
+
+        elif expectation.response_type == ResponseType.FREE_FORM:
+            # Exploration mode - anyone can respond
+            chars = ', '.join(expectation.characters) if expectation.characters else "Anyone"
+            await channel.send(f"*{chars} may respond.*")
 
 
 async def setup(bot: commands.Bot):
