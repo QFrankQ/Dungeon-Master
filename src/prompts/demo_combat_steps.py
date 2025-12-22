@@ -1,85 +1,137 @@
 """
 Demo combat step objectives for mock Game Director.
 
-Based on combat_flow.txt Phase 2 (Combat Rounds), specifically:
-- Steps A-F for main action processing
-- Adjudication Sub-Routine for reactions
+Based on combat_flow.txt with three distinct phases:
+- Phase 1: Combat Start (initiative collection, order finalization)
+- Phase 2: Combat Rounds (main combat loop with turns)
+- Phase 3: Combat End (conclusion and cleanup)
 
 These objectives guide the DM through proper combat flow without an actual GD agent.
 """
 
-# Main action steps (Steps A-F from combat_flow.txt)
-# Used for processing a participant's full turn
-DEMO_MAIN_ACTION_STEPS = [
-    
-    "Greet the player and describe the initial combat scene. Set the stage for combat.",
-    
-    # Step A: Announce Current Turn
-    # "Announce whose turn it is and check for any turn-start effects. If no turn-start effects apply, simply announce the turn. DO NOT ask for action yet.",
-    "Call for initiative rolls from all participants. Wait for the player to provide their initiative roll. DO NOT proceed until you have the roll. Once you have all the rolls, announce the initiative order then PROCEED to the next step.",
+# =============================================================================
+# PHASE 1: COMBAT START
+# =============================================================================
+# Used when entering combat - describes encounter, collects initiative, establishes order
 
-    # Step C: Process Main Turn Actions - Adjudication Step 1
-    "Receive and interpret the participant's declared action. Use action interpretation guidelines (Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize). VALIDATE character capability: check if character has the spell, ability, or equipment needed for this action based on their character sheet. If invalid, explain why and ask for a different action. If valid, confirm what action they are taking. DO NOT confirm action cost yet. DO NOT resolve the action yet.",
+COMBAT_START_STEPS = [
+    # Step 1: Announce Combat Initiation
+    "Announce combat initiation. Describe the encounter, identify all hostile participants, and set the stage for battle. Make the transition from exploration to combat dramatic and clear. DO NOT call for initiative rolls in this step.",
 
-    # Step C: Process Main Turn Actions - Adjudication Step 2
-    # "If the action is Influence, Search, Study, or Utilize, confirm the action cost (using their Action). Ask: 'This will use your Action for the turn. Do you still want to do this?' Otherwise, acknowledge and proceed. DO NOT provide reaction window yet.",
+    # Step 2: Determine Surprise and Initiative Modifiers
+    "Determine surprise and initiative modifiers. Assess which sides were aware of each other before combat. Per 2024 PHB: Surprised creatures roll initiative with DISADVANTAGE (they do NOT skip their first turn). Determine if anyone gets advantage on initiative from initiating combat. DO NOT call for rolls in this step - only determine modifiers.",
 
-    # Step C: Process Main Turn Actions - Adjudication Step 3
-    "Provide pre-resolution reaction window: Ask if anyone wants to use a Reaction BEFORE the action resolves. Wait for response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s) with the reaction declaration(s). DO NOT resolve the main action yet.",
+    # Step 3: Call for Initiative Rolls
+    "Call for initiative rolls from ALL participants. Specify any advantage or disadvantage determined in the previous step (surprised = disadvantage). For NPCs, roll their initiative. DO NOT announce initiative order in this step - wait for all rolls to be collected.",
 
-    # Step C: Process Main Turn Actions - Adjudication Step 4
-    "Resolve the declared action: Validate the action, call for necessary rolls, determine outcome, and narrate the result. DO NOT check for status changes yet.",
+    # Step 4: Announce and Verify Initiative Order
+    "Announce the initial initiative order from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step.",
 
-    # Step C: Process Main Turn Actions - Adjudication Step 5
-    # "Handle critical status changes and zero hit points: Check if anyone dropped to 0 HP. For PCs, they fall unconscious and begin death saves. For NPCs, they are dead. Narrate the consequences. DO NOT provide reaction window yet.",
+    # Step 5: Finalize Order and Begin Combat
+    "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step."
+]
 
-    # Step C: Process Main Turn Actions - Adjudication Step 6
-    "Provide post-resolution reaction window: Ask if anyone wants to use a Reaction AFTER the action's outcome. Wait for response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s) with the reaction declaration(s). DO NOT ask about other actions yet.",
+# =============================================================================
+# PHASE 2: COMBAT ROUNDS - Individual Turn Steps
+# =============================================================================
+# Used for each participant's turn during combat rounds
+# Maps to Steps A-F from combat_flow.txt Phase 2
+
+COMBAT_TURN_STEPS = [
+    # Step A: Announce Current Turn (Index 0 - Resolution step for turn-start effects)
+    "Announce whose turn it is. Check for any effects that trigger at the start of this turn (ongoing damage, concentration checks, spell effects). If any turn-start effects apply, resolve them before requesting actions. DO NOT request actions in this step if there are turn-start effects to resolve.",
+
+    # Step B/C: Receive and Interpret Action (Adjudication Step 1)
+    "Receive and interpret the participant's declared action. Use action interpretation guidelines (Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize). VALIDATE character capability: check if character has the spell, ability, or equipment needed. If invalid, explain why and ask for a different action. If valid, confirm what action they are taking. DO NOT resolve the action in this step.",
+
+    # Adjudication Step 3: Pre-Resolution Reaction Window
+    "Provide pre-resolution reaction window: Ask if anyone wants to use a Reaction BEFORE the action resolves. Wait for response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s) with the reaction declaration(s). DO NOT resolve the main action in this step.",
+
+    # Adjudication Step 4: Resolve Action (Index 3 - Main Resolution step)
+    "Resolve the declared action: Validate the action, call for necessary rolls (attack rolls, saving throws, ability checks), determine outcome based on the rolls, and narrate the result vividly. Apply damage and effects. DO NOT handle status changes or post-resolution reactions in this step.",
+
+    # Adjudication Step 5 & 6: Status Changes + Post-Resolution Reactions
+    "Handle critical status changes: Check if anyone dropped to 0 HP (PCs fall unconscious, NPCs typically die). Then provide post-resolution reaction window: Ask if anyone wants to use a Reaction in response to the outcome. If a reaction is declared, create reaction turn(s). DO NOT ask about additional actions in this step.",
 
     # Step D: Confirm End of Turn
-    "Ask the active participant: 'Would you like to do anything else on your turn?' (bonus action, movement, item interaction). Wait for response. If they declare another action, process it. Otherwise proceed. DO NOT check turn-end effects yet.",
+    "Ask the active participant: 'Would you like to do anything else on your turn?' Options include: bonus action, movement, free object interaction, or additional actions from features. If they declare another action, return to step 1 of this turn. DO NOT check for turn-end effects in this step.",
 
-    # Step E: Check for Turn-End Effects
-    # "Check for turn-end effects: Apply ongoing damage, conditions, or trigger Legendary Actions if applicable. If none apply, acknowledge and proceed. DO NOT announce next turn yet.",
+    # Step E: Turn-End Effects (Index 6 - Resolution step for turn-end effects)
+    "Check for turn-end effects: Apply effects that trigger at the end of this turn (saving throws against conditions, concentration checks, Legendary Actions if facing a legendary creature). Resolve any triggered effects. DO NOT announce the next turn in this step.",
 
     # Step F: Announce Next Turn
-    "Announce the end of current participant's turn and state which participant is next in initiative order. Prompt them for their intended action."
+    "Announce the end of current participant's turn. State which participant is next in initiative order and prompt them for their intended action. If this was the last turn in the round, also announce the start of the new round. DO NOT begin processing the next participant's actions in this step."
 ]
 
-# Reaction steps (Adjudication sub-routine only)
+# Legacy alias for backward compatibility
+DEMO_MAIN_ACTION_STEPS = COMBAT_TURN_STEPS
+
+# =============================================================================
+# PHASE 2: REACTION STEPS (Adjudication Sub-Routine)
+# =============================================================================
 # Used when reactions are declared during pre-resolution or post-resolution windows
+# This is a recursive routine - reactions can trigger other reactions
+
 DEMO_REACTION_STEPS = [
     # Adjudication Step 1: Receive and Interpret
-    "Receive and interpret the declared reaction. VALIDATE character capability: check if character has this reaction ability based on their character sheet (class features, spells, etc.). If invalid, explain why and ask for a different choice. If valid, confirm what reaction they are using, its trigger, and verify it's valid for the current situation. DO NOT confirm reaction cost yet.",
+    "Receive and interpret the declared reaction. VALIDATE character capability: check if character has this reaction ability based on their character sheet (class features, spells like Shield or Counterspell, opportunity attacks, etc.). If invalid, explain why and ask for a different choice. If valid, confirm what reaction they are using, its trigger, and verify it's valid for the current situation. DO NOT confirm reaction cost in this step.",
 
     # Adjudication Step 2: Confirm Reaction Cost
-    "Confirm this uses their Reaction for this round. Verify they have a Reaction available (haven't used it this round). If valid, proceed. If not, inform them and ask for a different choice. DO NOT provide reaction window yet.",
+    "Confirm this uses their Reaction for this round. Verify they have a Reaction available (haven't used it this round). If valid, mark their reaction as used. If not, inform them and ask for a different choice. DO NOT check for nested reactions in this step.",
 
     # Adjudication Step 3: Pre-Resolution Reaction Window (Recursive)
-    "Provide pre-resolution reaction window: Ask if anyone ELSE wants to use a Reaction in response to this reaction before it resolves. Wait for response. If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s). DO NOT resolve the reaction yet.",
+    "Provide pre-resolution reaction window: Ask if anyone ELSE wants to use a Reaction in response to this reaction before it resolves. Wait for response. If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s). DO NOT resolve this reaction in this step.",
 
-    # Adjudication Step 4: Resolve Reaction
-    "Resolve the declared reaction: Validate, call for necessary rolls, determine outcome, and narrate how the reaction affects the triggering action or its outcome. DO NOT check for status changes yet.",
+    # Adjudication Step 4: Resolve Reaction (Index 3 - Resolution step)
+    "Resolve the declared reaction: Validate, call for necessary rolls, determine outcome, and narrate how the reaction affects the triggering action or its outcome. DO NOT handle status changes in this step.",
 
     # Adjudication Step 5: Handle Critical Status Changes
-    "Handle critical status changes from the reaction: Check if the reaction caused anyone to drop to 0 HP. Apply consequences immediately (unconscious/death). DO NOT provide reaction window yet.",
+    "Handle critical status changes from the reaction: Check if the reaction caused anyone to drop to 0 HP. Apply consequences immediately (unconscious for PCs, death for most NPCs). DO NOT check for post-resolution reactions in this step.",
 
     # Adjudication Step 6: Post-Resolution Reaction Window (Recursive)
-    "Provide post-resolution reaction window: Ask if anyone wants to use a Reaction in response to this reaction's outcome. Wait for response. If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s)."
+    "Provide post-resolution reaction window: Ask if anyone wants to use a Reaction in response to this reaction's outcome. Wait for response. If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s). DO NOT return to the parent turn in this step."
 ]
 
-# Initial setup steps (before main combat loop)
-DEMO_SETUP_STEPS = [
-    "Greet the players and describe the initial combat scene. Set the stage for combat.",
+# =============================================================================
+# PHASE 3: COMBAT END
+# =============================================================================
+# Used when combat concludes
 
-    # "Call for initiative rolls from all participants. Wait for players to provide their initiative rolls. DO NOT proceed until all rolls are received.",
+COMBAT_END_STEPS = [
+    # Step 1: Determine Conclusion
+    "Determine if combat conclusion conditions are met: One side is entirely neutralized (incapacitated, killed, or fled), OR a pre-determined objective has been achieved, OR both sides agree to cease hostilities. DO NOT announce combat has ended in this step.",
 
-    # "Announce the complete initiative order from highest to lowest. Then announce whose turn is first and prompt them for their action."
+    # Step 2: Announce End
+    "Formally announce that the structured combat encounter has concluded. Make the transition clear and dramatic. DO NOT summarize the outcome in this step.",
+
+    # Step 3: Summarize Outcome
+    "Provide a concise summary of the combat outcome: Who won/lost, casualties on both sides, any significant events that occurred, and the immediate aftermath. DO NOT report lasting effects in this step.",
+
+    # Step 4: Report Lasting Effects
+    "Identify and announce any ongoing effects that will persist beyond combat: Lingering spell effects with remaining duration, conditions that don't end with combat (exhaustion, curses), concentration spells still maintained, and any time-sensitive effects. DO NOT transition to exploration mode in this step."
 ]
 
-# Resolution step indices - state extraction triggers after these steps
-MAIN_ACTION_RESOLUTION_INDICES = {3}  # Index 3: "Resolve the declared action..."
-REACTION_RESOLUTION_INDICES = {3}     # Index 3: "Resolve the declared reaction..."
+# =============================================================================
+# RESOLUTION STEP INDICES
+# =============================================================================
+# State extraction triggers after these steps (where game state changes occur)
+
+# For combat turns: Resolution happens at multiple steps
+# - Index 0: Turn-start effects (ongoing damage, spell effects, concentration)
+# - Index 3: Main action resolution (attacks, spells, abilities)
+# - Index 6: Turn-end effects (saving throws, Legendary Actions)
+COMBAT_TURN_RESOLUTION_INDICES = {0, 3, 6}
+MAIN_ACTION_RESOLUTION_INDICES = COMBAT_TURN_RESOLUTION_INDICES  # Legacy alias
+
+# For reactions: Resolution happens at step index 3 (Resolve Reaction)
+REACTION_RESOLUTION_INDICES = {3}
+
+# Combat start doesn't have resolution steps (no game state changes)
+COMBAT_START_RESOLUTION_INDICES = set()
+
+# Combat end doesn't have resolution steps (summarizing, not changing state)
+COMBAT_END_RESOLUTION_INDICES = set()
+
 
 def is_resolution_step_index(step_index: int, step_list: list[str]) -> bool:
     """
@@ -87,13 +139,34 @@ def is_resolution_step_index(step_index: int, step_list: list[str]) -> bool:
 
     Args:
         step_index: The current step index
-        step_list: The step list being used (DEMO_MAIN_ACTION_STEPS or DEMO_REACTION_STEPS)
+        step_list: The step list being used
 
     Returns:
         True if this step index is a resolution step
     """
-    if step_list is DEMO_MAIN_ACTION_STEPS:
-        return step_index in MAIN_ACTION_RESOLUTION_INDICES
+    if step_list is COMBAT_TURN_STEPS or step_list is DEMO_MAIN_ACTION_STEPS:
+        return step_index in COMBAT_TURN_RESOLUTION_INDICES
     elif step_list is DEMO_REACTION_STEPS:
         return step_index in REACTION_RESOLUTION_INDICES
+    elif step_list is COMBAT_START_STEPS:
+        return step_index in COMBAT_START_RESOLUTION_INDICES
+    elif step_list is COMBAT_END_STEPS:
+        return step_index in COMBAT_END_RESOLUTION_INDICES
     return False
+
+
+def get_step_list_name(step_list: list[str]) -> str:
+    """Get a human-readable name for a step list."""
+    if step_list is COMBAT_START_STEPS:
+        return "Combat Start"
+    elif step_list is COMBAT_TURN_STEPS or step_list is DEMO_MAIN_ACTION_STEPS:
+        return "Combat Turn"
+    elif step_list is DEMO_REACTION_STEPS:
+        return "Reaction"
+    elif step_list is COMBAT_END_STEPS:
+        return "Combat End"
+    return "Unknown"
+
+
+# Legacy alias for backward compatibility
+DEMO_SETUP_STEPS = COMBAT_START_STEPS[:2]  # Just the intro steps
