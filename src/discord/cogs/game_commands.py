@@ -453,6 +453,113 @@ class GameCommands(commands.Cog):
     #             f"**{first_char}** goes first!"
     #         )
 
+    @app_commands.command(name="config", description="Configure session settings")
+    @app_commands.describe(
+        setting="Setting to configure: timeouts",
+        value="New value for the setting"
+    )
+    async def config(
+        self,
+        interaction: discord.Interaction,
+        setting: Optional[str] = None,
+        value: Optional[str] = None
+    ):
+        """Configure session settings like timeouts."""
+        session_context, error = self._get_session_or_error(interaction)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        timeouts = session_context.timeouts
+
+        # No setting specified - show current config
+        if setting is None:
+            config_text = (
+                "**Session Configuration**\n\n"
+                "**Timeouts (seconds):**\n"
+                f"• Initiative: {timeouts.initiative}s\n"
+                f"• Saving Throw: {timeouts.saving_throw}s\n"
+                f"• Reaction: {timeouts.reaction}s\n"
+                f"• Action: {timeouts.action}s\n\n"
+                "**To change a timeout:**\n"
+                "`/config timeouts initiative=60`\n"
+                "`/config timeouts saving_throw=30`\n"
+                "`/config timeouts reaction=15`\n"
+                "`/config timeouts action=180`"
+            )
+            await interaction.response.send_message(config_text, ephemeral=True)
+            return
+
+        # Handle timeout configuration
+        if setting.lower() == "timeouts":
+            if not value:
+                await interaction.response.send_message(
+                    "**Current Timeouts:**\n"
+                    f"• initiative={timeouts.initiative}\n"
+                    f"• saving_throw={timeouts.saving_throw}\n"
+                    f"• reaction={timeouts.reaction}\n"
+                    f"• action={timeouts.action}\n\n"
+                    "Usage: `/config timeouts <type>=<seconds>`",
+                    ephemeral=True
+                )
+                return
+
+            # Parse value (e.g., "initiative=60" or "reaction=15")
+            if "=" not in value:
+                await interaction.response.send_message(
+                    f"Invalid format. Use: `/config timeouts <type>=<seconds>`\n"
+                    f"Example: `/config timeouts initiative=60`",
+                    ephemeral=True
+                )
+                return
+
+            timeout_type, timeout_value = value.split("=", 1)
+            timeout_type = timeout_type.strip().lower()
+
+            try:
+                new_timeout = float(timeout_value.strip())
+                if new_timeout < 5:
+                    await interaction.response.send_message(
+                        "Timeout must be at least 5 seconds.",
+                        ephemeral=True
+                    )
+                    return
+                if new_timeout > 600:
+                    await interaction.response.send_message(
+                        "Timeout cannot exceed 600 seconds (10 minutes).",
+                        ephemeral=True
+                    )
+                    return
+            except ValueError:
+                await interaction.response.send_message(
+                    f"Invalid timeout value: `{timeout_value}`. Must be a number.",
+                    ephemeral=True
+                )
+                return
+
+            # Update the appropriate timeout
+            valid_types = ["initiative", "saving_throw", "reaction", "action"]
+            if timeout_type not in valid_types:
+                await interaction.response.send_message(
+                    f"Invalid timeout type: `{timeout_type}`\n"
+                    f"Valid types: {', '.join(valid_types)}",
+                    ephemeral=True
+                )
+                return
+
+            setattr(timeouts, timeout_type, new_timeout)
+            await interaction.response.send_message(
+                f"Updated **{timeout_type}** timeout to **{new_timeout}s**",
+                ephemeral=True
+            )
+
+        else:
+            await interaction.response.send_message(
+                f"Unknown setting: `{setting}`\n"
+                f"Available settings: `timeouts`",
+                ephemeral=True
+            )
+
     @app_commands.command(name="help", description="Show available commands and how to play")
     async def show_help(self, interaction: discord.Interaction):
         """Show help information."""
@@ -478,6 +585,7 @@ class GameCommands(commands.Cog):
             "• `/stats` - Show turn manager statistics\n"
             "• `/context` - View DM context (debug)\n"
             "• `/usage` - Show token usage\n"
+            "• `/config` - Configure session settings (timeouts)\n"
             "• `/help` - Show this help message\n\n"
             "**How to Play:**\n"
             "1. Start a session with `/start`\n"
