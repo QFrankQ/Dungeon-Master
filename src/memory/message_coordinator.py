@@ -42,23 +42,21 @@ class MessageCoordinator:
     """
     Central message routing based on game state - acts as gatekeeper.
 
-    Responsibilities:
-    - Track combat mode vs exploration mode
-    - Validate if a character is expected to respond
-    - Manage response collection for multi-response scenarios
-    - Track DM processing state to handle mid-processing messages
+    Validates who can send messages based on current game state:
+    - Exploration mode: All messages accepted
+    - Combat mode: Only expected characters can respond
+
+    Used by Discord cogs and demo_terminal to enforce turn order.
 
     Attributes:
         combat_mode: When True, strict turn enforcement is enabled
         current_expectation: The current ResponseExpectation from DM
         response_collector: Collects responses for multi-response modes
-        dm_processing: Lock flag while DM is generating a response
     """
 
     combat_mode: bool = False
     current_expectation: Optional[ResponseExpectation] = None
     response_collector: Optional[ResponseCollector] = None
-    dm_processing: bool = False
 
     def validate_responder(self, character_name: str) -> ValidationResponse:
         """
@@ -237,25 +235,6 @@ class MessageCoordinator:
         self.combat_mode = False
         self.current_expectation = None
         self.response_collector = None
-
-    def start_dm_processing(self):
-        """Mark that DM is currently generating a response."""
-        self.dm_processing = True
-
-    def end_dm_processing(self):
-        """Mark that DM has finished generating a response."""
-        self.dm_processing = False
-
-    def is_dm_processing(self) -> bool:
-        """Check if DM is currently generating a response."""
-        return self.dm_processing
-
-    def reset(self):
-        """Reset coordinator to initial state."""
-        self.combat_mode = False
-        self.current_expectation = None
-        self.response_collector = None
-        self.dm_processing = False
 
 
 def create_message_coordinator() -> MessageCoordinator:
