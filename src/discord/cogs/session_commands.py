@@ -254,6 +254,11 @@ class SessionCommands(commands.Cog):
                 if coordinator and coordinator.combat_mode:
                     awaiting = result.get("awaiting_response")
                     if awaiting:
+                        # Show warning if characters were filtered (Milestone 6)
+                        filtered_warning = result.get("filtered_characters_warning")
+                        if filtered_warning:
+                            await message.channel.send(f"⚠️ *{filtered_warning}*")
+
                         await self._show_response_ui(
                             message.channel,
                             awaiting,
@@ -455,6 +460,11 @@ class SessionCommands(commands.Cog):
                 if coordinator and coordinator.combat_mode:
                     awaiting = result.get("awaiting_response")
                     if awaiting:
+                        # Show warning if characters were filtered (Milestone 6)
+                        filtered_warning = result.get("filtered_characters_warning")
+                        if filtered_warning:
+                            await channel.send(f"⚠️ *{filtered_warning}*")
+
                         await self._show_response_ui(channel, awaiting, session_context)
 
         except Exception as e:
@@ -477,6 +487,10 @@ class SessionCommands(commands.Cog):
 
         This is a key principle from the multiplayer coordination design:
         The system selects UI based on ResponseType, NOT text parsing.
+
+        Character validation happens at parse time in ResponseExpectation's
+        model_validator, so by the time we get here, the expectation is already
+        validated and any unknown characters have been filtered out.
         """
         if expectation is None:
             return
@@ -486,6 +500,9 @@ class SessionCommands(commands.Cog):
 
         def get_character_for_user(user_id: int) -> Optional[str]:
             return registry.get_character_id_by_player_id(str(user_id))
+
+        # Get configurable timeouts (Milestone 6)
+        timeouts = session_context.timeouts
 
         # Get helper to get character stats
         state_manager = session_context.session_manager.state_manager
@@ -558,7 +575,7 @@ class SessionCommands(commands.Cog):
             # Show initiative view with roll button
             view = InitiativeView(
                 expected_characters=expectation.characters,
-                timeout=120.0,
+                timeout=timeouts.initiative,  # Configurable (default 120s)
                 get_character_for_user=get_character_for_user,
                 get_dex_modifier=get_dex_modifier,
                 on_complete=on_initiative_complete,
@@ -579,7 +596,7 @@ class SessionCommands(commands.Cog):
                 prompt=prompt,
                 save_type=save_type,
                 dc=dc,
-                timeout=60.0,
+                timeout=timeouts.saving_throw,  # Configurable (default 60s)
                 get_character_for_user=get_character_for_user,
                 get_save_modifier=get_save_modifier,
                 on_complete=on_save_complete,
@@ -592,7 +609,7 @@ class SessionCommands(commands.Cog):
             view = ReactionView(
                 expected_characters=expectation.characters,
                 prompt=prompt,
-                timeout=30.0,
+                timeout=timeouts.reaction,  # Configurable (default 30s)
                 get_character_for_user=get_character_for_user,
                 on_complete=on_reaction_complete,
             )
