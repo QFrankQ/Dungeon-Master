@@ -10,6 +10,7 @@ import asyncio
 
 from ..models.dm_response import DungeonMasterResponse
 from ..models.chat_message import ChatMessage
+from ..models.response_expectation import character_registry_context
 from ..agents.state_extraction_orchestrator import (
     StateExtractionOrchestrator,
     create_state_extraction_orchestrator
@@ -598,11 +599,16 @@ class SessionManager:
             # new_message_entries=None  # No longer needed - groups detected automatically
         )
 
+        # Set registered characters for ResponseExpectation validation (Milestone 6)
+        # This allows the DM to get immediate feedback if it references invalid characters
+        registered_chars = set(self.player_character_registry.get_all_character_names())
+
         # Run DM agent and get result (with usage tracking)
         # Pass deps if available (for DM tools like query_rules_database)
         #TODO: if exception, roll back the added messages.
         deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
-        dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
+        with character_registry_context(registered_chars):
+            dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
         dungeon_master_response: DungeonMasterResponse = dm_result.output
 
         # Track usage from this run
@@ -665,7 +671,8 @@ class SessionManager:
                     # new_message_entries=None  # All messages already added
                 )
                 deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
-                dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
+                with character_registry_context(registered_chars):
+                    dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
                 dungeon_master_response = dm_result.output
 
                 # Track usage from re-run
@@ -687,6 +694,13 @@ class SessionManager:
 
                 # Continue loop if DM still signals step completion
 
+        # Get filtered characters warning if any were removed during validation
+        filtered_warning = None
+        if dungeon_master_response.awaiting_response:
+            filtered = dungeon_master_response.awaiting_response.get_filtered_characters()
+            if filtered:
+                filtered_warning = f"Skipped unknown characters: {', '.join(filtered)}"
+
         return {
             "responses": response_queue,
             "usage": {
@@ -696,7 +710,8 @@ class SessionManager:
                 "requests": total_requests
             },
             "state_results": state_results,  # State extraction results
-            "awaiting_response": dungeon_master_response.awaiting_response  # Multiplayer coordination
+            "awaiting_response": dungeon_master_response.awaiting_response,  # Multiplayer coordination
+            "filtered_characters_warning": filtered_warning  # Milestone 6: Warning if chars were filtered
         }
 
     def demo_process_player_input_sync(
