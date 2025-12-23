@@ -14,6 +14,15 @@ from pathlib import Path
 
 
 @dataclass
+class SessionTimeouts:
+    """Configurable timeout values for response collection (in seconds)."""
+    initiative: float = 120.0
+    saving_throw: float = 60.0
+    reaction: float = 30.0
+    action: float = 300.0  # 5 minutes for regular turns
+
+
+@dataclass
 class SessionContext:
     """Context for an active game session in a Discord channel."""
     session_manager: 'SessionManager'  # Type: ignore
@@ -22,6 +31,12 @@ class SessionContext:
     session_db_id: uuid.UUID  # Database session ID (Phase 2)
     temp_character_dir: Optional[str] = None
     message_coordinator: Optional['MessageCoordinator'] = None  # Milestone 5: Multiplayer coordination
+    timeouts: SessionTimeouts = None  # Milestone 6: Configurable timeouts
+
+    def __post_init__(self):
+        """Initialize default timeouts if not provided."""
+        if self.timeouts is None:
+            self.timeouts = SessionTimeouts()
 
 
 class SessionPool:
