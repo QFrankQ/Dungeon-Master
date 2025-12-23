@@ -119,11 +119,20 @@ class PlayerCharacterRegistry:
     def get_all_player_character_mappings(self) -> Dict[str, str]:
         """
         Get all player-character mappings.
-        
+
         Returns:
             Dictionary of player_id -> character_id mappings
         """
         return self.player_to_character.copy()
+
+    def get_all_character_names(self) -> List[str]:
+        """
+        Get all registered character names/IDs.
+
+        Returns:
+            List of character names currently registered
+        """
+        return list(self.character_to_player.keys())
     
     def remove_player_character_mapping(self, player_id: str) -> bool:
         """
