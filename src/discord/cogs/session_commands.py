@@ -309,6 +309,163 @@ class SessionCommands(commands.Cog):
                 delete_after=10
             )
 
+    async def _route_view_results_to_dm(
+        self,
+        channel: discord.TextChannel,
+        session_context: SessionContext,
+        response_type: str,
+        results: dict
+    ) -> None:
+        """
+        Route collected view results to the DM for processing.
+
+        This is the integration point between Discord UI views and the DM agent.
+        Collected responses (initiative rolls, saves, reactions) are formatted
+        as a system message and sent to the DM for narrative continuation.
+
+        Args:
+            channel: Discord channel to send DM response to
+            session_context: Current session context
+            response_type: Type of response (initiative, save, reaction)
+            results: Collected results from the view
+        """
+        from src.models.chat_message import ChatMessage
+
+        session_manager = session_context.session_manager
+        coordinator = session_context.message_coordinator
+
+        # Format results as a system summary message for the DM
+        if response_type == "initiative":
+            # Format initiative results
+            order = results.get("order", [])
+            rolls = results.get("rolls", {})
+            timed_out = results.get("timed_out", False)
+
+            summary_lines = ["**Initiative Results:**"]
+            for i, char in enumerate(order):
+                roll_info = rolls.get(char, {})
+                roll = roll_info.get("roll", "?")
+                source = roll_info.get("source", "")
+                flavor = roll_info.get("flavor", "")
+                summary_lines.append(f"{i+1}. **{char}**: {roll}")
+                if flavor:
+                    summary_lines.append(f"   *{flavor}*")
+
+            if timed_out:
+                summary_lines.append("\n*Some rolls were auto-generated due to timeout.*")
+
+            summary_text = "\n".join(summary_lines)
+
+        elif response_type == "save":
+            # Format saving throw results
+            rolls = results.get("rolls", {})
+            successes = results.get("successes", [])
+            failures = results.get("failures", [])
+            save_type = results.get("save_type", "?")
+            dc = results.get("dc")
+            timed_out = results.get("timed_out", False)
+
+            summary_lines = [f"**{save_type} Saving Throw Results:**"]
+            if dc:
+                summary_lines[0] += f" (DC {dc})"
+
+            for char, info in rolls.items():
+                roll = info.get("roll", "?")
+                success = info.get("success")
+                result_text = ""
+                if success is True:
+                    result_text = " ✅ SUCCESS"
+                elif success is False:
+                    result_text = " ❌ FAILURE"
+                summary_lines.append(f"• **{char}**: {roll}{result_text}")
+
+            if successes:
+                summary_lines.append(f"\n**Successes:** {', '.join(successes)}")
+            if failures:
+                summary_lines.append(f"**Failures:** {', '.join(failures)}")
+
+            if timed_out:
+                summary_lines.append("\n*Some rolls were auto-generated due to timeout.*")
+
+            summary_text = "\n".join(summary_lines)
+
+        elif response_type == "reaction":
+            # Format reaction results
+            passed = results.get("passed", [])
+            reactions = results.get("reactions", {})
+            timed_out = results.get("timed_out", False)
+
+            summary_lines = ["**Reaction Window Results:**"]
+
+            if reactions:
+                for char, info in reactions.items():
+                    summary_lines.append(f"• **{char}** wants to use a reaction!")
+
+            if passed:
+                summary_lines.append(f"• Passed: {', '.join(passed)}")
+
+            if timed_out:
+                summary_lines.append("\n*Window timed out - non-responders treated as passing.*")
+
+            summary_text = "\n".join(summary_lines)
+
+        else:
+            summary_text = f"**{response_type} Results:** {results}"
+
+        # Create a system message with the results
+        system_message = ChatMessage.create_system_message(
+            text=summary_text,
+            metadata={"response_type": response_type, "results": results}
+        )
+
+        try:
+            # Show typing indicator while processing
+            async with channel.typing():
+                # Process through SessionManager
+                result = await session_manager.demo_process_player_input(
+                    new_messages=[system_message]
+                )
+
+                # Update expectation after DM response
+                if coordinator:
+                    awaiting = result.get("awaiting_response")
+                    coordinator.set_expectation(awaiting)
+
+                # Send DM responses
+                for response_text in result["responses"]:
+                    formatted_response = f"**DM:** {response_text}"
+
+                    if len(formatted_response) > 2000:
+                        chunks = [formatted_response[i:i+1900] for i in range(0, len(formatted_response), 1900)]
+                        for chunk in chunks:
+                            await channel.send(chunk)
+                    else:
+                        await channel.send(formatted_response)
+
+                # Display state change notification if any
+                if result.get("state_results") and result["state_results"].get("success"):
+                    state_info = result["state_results"]
+                    if state_info.get("commands_executed", 0) > 0:
+                        await channel.send(
+                            f"💫 {state_info['commands_executed']} state changes applied\n"
+                            f"Type `/character` to see updated character status"
+                        )
+
+                # Show next UI if needed
+                if coordinator and coordinator.combat_mode:
+                    awaiting = result.get("awaiting_response")
+                    if awaiting:
+                        await self._show_response_ui(channel, awaiting, session_context)
+
+        except Exception as e:
+            await channel.send(
+                f"❌ Error processing {response_type} results: {str(e)}\n"
+                f"Please try again or use `/end` to restart the session."
+            )
+            print(f"Error routing view results to DM: {e}")
+            import traceback
+            traceback.print_exc()
+
     async def _show_response_ui(
         self,
         channel: discord.TextChannel,
@@ -370,6 +527,23 @@ class SessionCommands(commands.Cog):
                 pass
             return 0
 
+        # Create on_complete callbacks that route results to the DM
+        # These closures capture channel and session_context for async routing
+        async def on_initiative_complete(results: dict):
+            await self._route_view_results_to_dm(
+                channel, session_context, "initiative", results
+            )
+
+        async def on_save_complete(results: dict):
+            await self._route_view_results_to_dm(
+                channel, session_context, "save", results
+            )
+
+        async def on_reaction_complete(results: dict):
+            await self._route_view_results_to_dm(
+                channel, session_context, "reaction", results
+            )
+
         # Select and show UI based on response type
         if expectation.response_type == ResponseType.NONE:
             # DM narrating - no UI needed
@@ -387,6 +561,7 @@ class SessionCommands(commands.Cog):
                 timeout=120.0,
                 get_character_for_user=get_character_for_user,
                 get_dex_modifier=get_dex_modifier,
+                on_complete=on_initiative_complete,
             )
             await channel.send(
                 "🎲 **Roll for Initiative!**\n"
@@ -407,6 +582,7 @@ class SessionCommands(commands.Cog):
                 timeout=60.0,
                 get_character_for_user=get_character_for_user,
                 get_save_modifier=get_save_modifier,
+                on_complete=on_save_complete,
             )
             await channel.send(f"🎲 **{prompt}**", view=view)
 
@@ -418,6 +594,7 @@ class SessionCommands(commands.Cog):
                 prompt=prompt,
                 timeout=30.0,
                 get_character_for_user=get_character_for_user,
+                on_complete=on_reaction_complete,
             )
             await channel.send(f"⚡ {prompt}", view=view)
 
