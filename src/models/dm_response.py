@@ -17,9 +17,13 @@ from src.models.response_expectation import ResponseExpectation
 class DungeonMasterResponse(BaseModel):
     """
     Simple structured response from the DM agent.
-    
+
     Contains the narrative response and optional basic tool calls.
     State extraction will be handled by a separate agent.
+
+    Character validation for awaiting_response happens automatically via
+    ResponseExpectation's model_validator when ResponseExpectation.registered_characters
+    is set (use character_registry_context before calling the DM agent).
     """
     narrative: str = Field(..., description="The game narrative and your message to the active player(s)")
     # tool_calls: Optional[List[ToolCall]] = Field(None, description="Optional list of tool calls to execute")
