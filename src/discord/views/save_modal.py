@@ -252,7 +252,7 @@ class SaveView(View):
             SaveModal(self, character, self.save_type, modifier, self.dc)
         )
 
-
+#NOTE: may need a better implementation in the future
 def parse_save_from_prompt(prompt: str) -> tuple[str, Optional[int]]:
     """
     Parse save type and DC from a prompt string.
