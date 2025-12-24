@@ -47,9 +47,15 @@ class GameCommands(commands.Cog):
 
         current_turn = turn_manager.get_current_turn_context()
 
+        # Get current game phase
+        game_phase = turn_manager.get_current_phase()
+        combat_phase = turn_manager.get_combat_phase()
+
         # Build turn info message
         turn_info = (
             f"**📋 Current Turn Info**\n\n"
+            f"**Game Phase:** {game_phase.value}\n"
+            f"**Combat Phase:** {combat_phase.value}\n"
             f"**Turn ID:** {current_turn.turn_id}\n"
             f"**Turn Level:** {current_turn.turn_level}\n"
             f"**Active Character:** {current_turn.active_character}\n"
@@ -63,6 +69,23 @@ class GameCommands(commands.Cog):
             for msg in current_turn.messages[-3:]:
                 content_preview = msg.content[:60] + "..." if len(msg.content) > 60 else msg.content
                 turn_info += f"• [{msg.speaker}]: {content_preview}\n"
+
+        # Add MessageCoordinator status for debugging
+        coordinator = session_context.message_coordinator
+        if coordinator:
+            turn_info += f"\n**🔧 Message Coordinator Debug:**\n"
+            turn_info += f"• Combat Mode: {coordinator.combat_mode}\n"
+            turn_info += f"• Status: {coordinator.get_status_message()}\n"
+
+            if coordinator.current_expectation:
+                exp = coordinator.current_expectation
+                turn_info += f"• Response Type: {exp.response_type.value}\n"
+                turn_info += f"• Expected Characters: {exp.characters or 'None'}\n"
+                turn_info += f"• Collection Mode: {exp.get_collection_mode()}\n"
+                if exp.prompt:
+                    turn_info += f"• Prompt: {exp.prompt}\n"
+            else:
+                turn_info += f"• Current Expectation: None\n"
 
         await interaction.response.send_message(turn_info)
 
@@ -248,7 +271,7 @@ class GameCommands(commands.Cog):
 
             # Get all registered characters for this session
             registry = session_context.session_manager.player_character_registry
-            player_chars = list(registry._character_by_player.values())
+            player_chars = list(registry.player_to_character.values())
 
             if not player_chars:
                 await interaction.response.send_message(
@@ -263,8 +286,16 @@ class GameCommands(commands.Cog):
             all_participants = player_chars + enemies
 
             # Enter combat via TurnManager
+            # Note: We explicitly ensure combat_mode is OFF during COMBAT_START.
+            # Combat mode (strict turn enforcement) will be enabled when the DM
+            # transitions to COMBAT_ROUNDS phase and sets ResponseExpectations.
+            # During COMBAT_START, the DM is just setting up - no strict enforcement yet.
             turn_manager.enter_combat(all_participants, "Combat Encounter")
-            coordinator.enter_combat_mode()
+
+            # Ensure combat_mode is OFF for COMBAT_START phase
+            # (user may have toggled it on accidentally with /combat)
+            if coordinator.combat_mode:
+                coordinator.exit_combat_mode()
 
             # Build combat announcement
             player_list = ", ".join(player_chars) if player_chars else "No players"
@@ -274,9 +305,8 @@ class GameCommands(commands.Cog):
                 "⚔️ **COMBAT INITIATED!**\n\n"
                 f"**Players:** {player_list}\n"
                 f"**Enemies:** {enemy_list}\n\n"
-                "🎲 **Roll for Initiative!**\n"
-                "Use `/initiative <roll>` to submit your initiative roll.\n"
-                "Example: `/initiative 15`"
+                f"**Phase:** Combat Start\n"
+                f"The DM will guide you through the combat flow."
             )
 
         elif action.lower() == "end":
