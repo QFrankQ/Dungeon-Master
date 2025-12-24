@@ -94,6 +94,7 @@ class SessionPool:
         from src.persistence.repositories.guild_repo import GuildRepository
         from src.persistence.repositories.session_repo import SessionRepository
         from src.services.byok_service import get_api_key_for_guild
+        from src.prompts.demo_combat_steps import GamePhase
 
         # Phase 3: Get guild's API key (strict BYOK - no fallback)
         guild_api_key = await get_api_key_for_guild(guild_id)
@@ -109,10 +110,13 @@ class SessionPool:
             api_key=guild_api_key  # Pass guild's API key for BYOK
         )
 
-        # Initialize first turn (like demo_terminal.py:150-158)
+        # Initialize first turn in EXPLORATION mode
         # This ensures there's an active turn before first player message
+        # Using GamePhase.EXPLORATION so the DM responds naturally instead of
+        # trying to announce combat turns
         session_manager.turn_manager.start_and_queue_turns(
-            actions=[ActionDeclaration(speaker="System", content="Discord session started")]
+            actions=[ActionDeclaration(speaker="System", content="Discord session started")],
+            phase=GamePhase.EXPLORATION
         )
         session_manager.turn_manager.update_processing_turn_to_current()
         session_manager.turn_manager.mark_new_messages_as_responded()
