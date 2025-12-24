@@ -24,16 +24,18 @@ class DMContextBuilder:
     - Chronological order preservation
     """
     
-    def __init__(self, state_manager=None, rules_cache_service=None):
+    def __init__(self, state_manager=None, rules_cache_service=None, player_character_registry=None):
         """
         Initialize the DM context builder.
 
         Args:
             state_manager: Optional StateManager for loading character information
             rules_cache_service: Optional RulesCacheService for accessing cached rules
+            player_character_registry: Optional PlayerCharacterRegistry for registered character names
         """
         self.state_manager = state_manager
         self.rules_cache_service = rules_cache_service
+        self.player_character_registry = player_character_registry
     
     def build_context(
         self,
@@ -297,6 +299,16 @@ class DMContextBuilder:
         """
         context_parts = []
         completed_turns = turn_manager_snapshots.completed_turns
+
+        # Add registered player characters (CRITICAL: DM must only use these names in awaiting_response)
+        if self.player_character_registry:
+            registered_chars = list(self.player_character_registry.get_all_character_names())
+            if registered_chars:
+                context_parts.append("<registered_player_characters>")
+                context_parts.append("IMPORTANT: Only use these exact character names in awaiting_response.characters:")
+                context_parts.append(", ".join(registered_chars))
+                context_parts.append("</registered_player_characters>")
+                context_parts.append("")
 
         # Add current step objective
         context_parts.append("<step_objective>")
