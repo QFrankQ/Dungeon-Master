@@ -9,6 +9,7 @@ import os
 import sys
 import asyncio
 import discord
+import logging
 from discord.ext import commands
 from dotenv import load_dotenv
 from pathlib import Path
@@ -19,6 +20,22 @@ sys.path.insert(0, str(project_root))
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # Log to stdout
+    ]
+)
+
+# Set discord.py logging to WARNING to reduce noise
+logging.getLogger('discord').setLevel(logging.WARNING)
+logging.getLogger('discord.http').setLevel(logging.WARNING)
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
 
 def create_bot() -> commands.Bot:
