@@ -2,7 +2,7 @@
 Simple structured response class for DM agent.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List
 from pydantic import BaseModel, Field
 
 from src.models.response_expectation import ResponseExpectation
@@ -29,15 +29,16 @@ class DungeonMasterResponse(BaseModel):
     # tool_calls: Optional[List[ToolCall]] = Field(None, description="Optional list of tool calls to execute")
     game_step_completed: bool = Field(..., description='''"True" only if current game step objectives are met; "False" if game step objectives are not met or if you're asking the players for more information.''')
 
-    # Multiplayer coordination
-    awaiting_response: Optional[ResponseExpectation] = Field(
-        default=None,
+    # Multiplayer coordination - REQUIRED field
+    awaiting_response: ResponseExpectation = Field(
+        ...,
         description=(
-            "Specifies who should respond next and what kind of response is expected. "
+            "REQUIRED: Specifies who should respond next and what kind of response is expected. "
             "Set characters to the list of character names who should respond. "
             "Set response_type to: 'action' for normal turns, 'initiative' for initiative rolls, "
             "'saving_throw' for saves, 'reaction' for reaction opportunities, "
-            "'free_form' for exploration, 'none' when narrating without expecting a response."
+            "'free_form' for exploration, 'none' when narrating without expecting a response. "
+            "You MUST always include this field in every response."
         )
     )
 
