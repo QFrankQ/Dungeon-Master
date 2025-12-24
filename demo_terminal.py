@@ -11,7 +11,7 @@ import tempfile
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from pathlib import Path
-from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS, COMBAT_START_STEPS, COMBAT_TURN_STEPS, COMBAT_END_STEPS
+from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS, COMBAT_START_STEPS, COMBAT_TURN_STEPS, COMBAT_END_STEPS, EXPLORATION_STEPS, GamePhase
 from src.memory.turn_manager import ActionDeclaration
 from src.models.response_expectation import ResponseExpectation, ResponseType
 from src.models.combat_state import CombatPhase
@@ -217,13 +217,14 @@ class DemoTerminal:
             else:
                 print(f"[SYSTEM] ⚠ Could not auto-register default character. Use /register <character_id> to register.")
 
-        # Start first turn with default objective
-        # Use the first step from DEMO_MAIN_ACTION_STEPS as the initial objective
-        # Note: game_step_list is automatically determined by turn_level (0 = main action, 1+ = reaction)
+        # Start first turn in EXPLORATION mode
+        # Using GamePhase.EXPLORATION so the DM responds naturally to player input
+        # instead of trying to announce combat turns
         self.session_manager.turn_manager.start_and_queue_turns(
-            actions=[ActionDeclaration(speaker=self.current_character_name, content="I'm ready to begin the adventure!")]
+            actions=[ActionDeclaration(speaker=self.current_character_name, content="I'm ready to begin the adventure!")],
+            phase=GamePhase.EXPLORATION
         )
-        initial_objective = DEMO_MAIN_ACTION_STEPS[0]
+        initial_objective = EXPLORATION_STEPS[0]
 
         # Mark the initialization message as responded so it doesn't appear as "new"
         # Set processing turn reference first, then mark as responded
