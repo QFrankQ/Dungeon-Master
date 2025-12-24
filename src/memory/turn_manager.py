@@ -143,7 +143,8 @@ from ..models.combat_state import CombatState, CombatPhase, InitiativeEntry, cre
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
 from ..prompts.demo_combat_steps import (
     DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS,
-    COMBAT_START_STEPS, COMBAT_TURN_STEPS, COMBAT_END_STEPS
+    COMBAT_START_STEPS, COMBAT_TURN_STEPS, COMBAT_END_STEPS,
+    EXPLORATION_STEPS, GamePhase, get_steps_for_phase
 )
 
 
@@ -241,6 +242,10 @@ class TurnManager:
         # the correct turn's step even if tools create subturns during processing
         self._processing_turn: Optional[TurnContext] = None
 
+        # Current game phase - determines which step list new turns use
+        # Starts in EXPLORATION mode, transitions through combat phases
+        self._current_game_phase: GamePhase = GamePhase.EXPLORATION
+
         # Combat state - tracks phase progression and initiative order
         self.combat_state: CombatState = create_combat_state()
     
@@ -254,20 +259,28 @@ class TurnManager:
     #TODO: using prepare_tools keyword argument in agent calls to control when this tool is available
     def start_and_queue_turns(
         self,
-        actions: List[ActionDeclaration]
+        actions: List[ActionDeclaration],
+        phase: Optional[GamePhase] = None
     ) -> Dict[str, Any]:
         """
         Start one or more turns as an action queue with hierarchical turn ID generation.
 
-        Automatically determines the appropriate step list based on turn level:
-        - Level 0 (main turn): Uses DEMO_MAIN_ACTION_STEPS
-        - Level 1+ (sub-turn/reaction): Uses DEMO_REACTION_STEPS
+        Determines the appropriate step list based on:
+        1. If phase is explicitly provided, uses the step list for that phase
+        2. Otherwise, auto-determines based on turn level:
+           - Level 0 (main turn): Uses DEMO_MAIN_ACTION_STEPS (combat turns)
+           - Level 1+ (sub-turn/reaction): Uses DEMO_REACTION_STEPS
 
         Args:
             actions: List of ActionDeclaration objects with speaker and content fields
                 Example: [ActionDeclaration(speaker="Alice", content="I attack the orc")]
                 For reactions: [ActionDeclaration(speaker="Bob", content="I cast Counterspell"),
                                ActionDeclaration(speaker="Carol", content="I use Shield")]
+            phase: Optional GamePhase to explicitly set the step list.
+                Use GamePhase.EXPLORATION for non-combat sessions.
+                Use GamePhase.COMBAT_START for Phase 1 combat setup.
+                Use GamePhase.COMBAT_ROUNDS for Phase 2 combat turns.
+                Use GamePhase.COMBAT_END for Phase 3 combat conclusion.
 
         Returns:
             Dictionary with:
@@ -280,9 +293,16 @@ class TurnManager:
         turn_level = len(self.turn_stack)  # Stack depth determines nesting level
         created_turn_ids = []
 
-        # Automatically determine game_step_list based on turn level
-        # Level 0 = main action, Level 1+ = reaction
-        game_step_list = DEMO_MAIN_ACTION_STEPS if turn_level == 0 else DEMO_REACTION_STEPS
+        # Determine game_step_list based on phase, current game phase, or turn level
+        if phase is not None:
+            # Explicit phase provided - use corresponding step list
+            game_step_list = get_steps_for_phase(phase)
+        elif turn_level > 0:
+            # Sub-turn/reaction - always use reaction steps regardless of game phase
+            game_step_list = DEMO_REACTION_STEPS
+        else:
+            # Level 0 turn - use current game phase to determine step list
+            game_step_list = get_steps_for_phase(self._current_game_phase)
 
         # Get parent turn for subturns
         parent_turn = None
@@ -839,20 +859,24 @@ class TurnManager:
         if self.combat_state.phase != CombatPhase.NOT_IN_COMBAT:
             raise ValueError(f"Cannot enter combat: already in phase {self.combat_state.phase}")
 
+        # Transition game phase to COMBAT_START
+        self._current_game_phase = GamePhase.COMBAT_START
+
         # Initialize combat state
         self.combat_state.start_combat(participants, encounter_name)
 
-        # Create Phase 1 turn for initiative collection
-        # Use SYSTEM as speaker since this is a system-initiated phase
+        # Create Phase 1 turn for initiative collection using current game phase
         self._turn_counter += 1
         turn_id = str(self._turn_counter)
 
+        # Use get_steps_for_phase to ensure consistency
+        step_list = get_steps_for_phase(self._current_game_phase)
         combat_start_turn = TurnContext(
             turn_id=turn_id,
             turn_level=0,
-            current_step_objective=COMBAT_START_STEPS[0],
+            current_step_objective=step_list[0],
             active_character="SYSTEM",
-            game_step_list=COMBAT_START_STEPS,
+            game_step_list=step_list,
             current_step_index=0
         )
 
@@ -933,6 +957,9 @@ class TurnManager:
         """
         if self.combat_state.phase != CombatPhase.COMBAT_START:
             raise ValueError(f"Cannot finalize initiative in phase {self.combat_state.phase}")
+
+        # Transition game phase to COMBAT_ROUNDS
+        self._current_game_phase = GamePhase.COMBAT_ROUNDS
 
         # Finalize the initiative order in combat state
         self.combat_state.finalize_initiative()
@@ -1065,22 +1092,27 @@ class TurnManager:
         if self.combat_state.phase != CombatPhase.COMBAT_ROUNDS:
             raise ValueError(f"Cannot end combat from phase {self.combat_state.phase}")
 
+        # Transition game phase to COMBAT_END
+        self._current_game_phase = GamePhase.COMBAT_END
+
         # Transition combat state
         self.combat_state.start_combat_end()
 
         # Clear any remaining combat turns
         self.turn_stack = []
 
-        # Create Phase 3 turn for conclusion
+        # Create Phase 3 turn for conclusion using current game phase
         self._turn_counter += 1
         turn_id = str(self._turn_counter)
 
+        # Use get_steps_for_phase to ensure consistency
+        step_list = get_steps_for_phase(self._current_game_phase)
         combat_end_turn = TurnContext(
             turn_id=turn_id,
             turn_level=0,
-            current_step_objective=COMBAT_END_STEPS[0],
+            current_step_objective=step_list[0],
             active_character="SYSTEM",
-            game_step_list=COMBAT_END_STEPS,
+            game_step_list=step_list,
             current_step_index=0
         )
 
@@ -1104,7 +1136,7 @@ class TurnManager:
             "players_remaining": players_remaining,
             "enemies_remaining": enemies_remaining,
             "reason": reason,
-            "step_objective": COMBAT_END_STEPS[0]
+            "step_objective": step_list[0]
         }
 
     def finish_combat(self) -> Dict[str, Any]:
@@ -1118,6 +1150,9 @@ class TurnManager:
         """
         if self.combat_state.phase != CombatPhase.COMBAT_END:
             raise ValueError(f"Cannot finish combat from phase {self.combat_state.phase}")
+
+        # Transition game phase back to EXPLORATION
+        self._current_game_phase = GamePhase.EXPLORATION
 
         # Capture summary before clearing
         summary = {
@@ -1152,10 +1187,33 @@ class TurnManager:
         """Check if currently in any combat phase."""
         return self.combat_state.phase != CombatPhase.NOT_IN_COMBAT
 
+    def get_current_phase(self) -> GamePhase:
+        """
+        Get the current game phase.
+
+        Returns:
+            The current GamePhase (EXPLORATION, COMBAT_START, COMBAT_ROUNDS, COMBAT_END, or REACTION)
+        """
+        return self._current_game_phase
+
+    def set_phase(self, phase: GamePhase) -> None:
+        """
+        Explicitly set the current game phase.
+
+        Use this for manual phase transitions (e.g., from Discord commands).
+        For combat phase transitions, prefer using enter_combat(), finalize_initiative(),
+        start_combat_end(), and finish_combat() methods.
+
+        Args:
+            phase: The GamePhase to transition to
+        """
+        self._current_game_phase = phase
+
     def get_combat_summary(self) -> Dict[str, Any]:
         """Get a summary of the current combat state."""
         return {
             "phase": self.combat_state.phase.value,
+            "game_phase": self._current_game_phase.value,
             "round_number": self.combat_state.round_number,
             "current_participant": self.combat_state.get_current_participant(),
             "participants_count": len(self.combat_state.participants),
