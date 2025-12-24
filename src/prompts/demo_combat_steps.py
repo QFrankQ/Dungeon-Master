@@ -43,7 +43,7 @@ class GamePhase(str, Enum):
 
 EXPLORATION_STEPS = [
     # Step 1: Receive and Respond
-    "Receive player input and respond appropriately as the Dungeon Master. Describe the environment, NPCs, or situation. Respond to player questions, actions, or roleplay. Maintain narrative flow and engagement. If players encounter danger or hostiles, you may transition to combat by describing the threat.",
+    "Receive player input and respond appropriately as the Dungeon Master. Describe the environment, NPCs, or situation. Respond to player questions, actions, or roleplay. Maintain narrative flow and engagement. If players encounter danger or hostiles, you may transition to combat by describing the threat. Set awaiting_response with response_type='free_form' and characters=[all player character names] to allow any player to respond.",
 ]
 
 # =============================================================================
@@ -53,19 +53,19 @@ EXPLORATION_STEPS = [
 
 COMBAT_START_STEPS = [
     # Step 1: Announce Combat Initiation
-    "Announce combat initiation. Describe the encounter, identify all hostile participants, and set the stage for battle. Make the transition from exploration to combat dramatic and clear. DO NOT call for initiative rolls in this step.",
+    "Announce combat initiation. Describe the encounter, identify all hostile participants, and set the stage for battle. Make the transition from exploration to combat dramatic and clear. DO NOT call for initiative rolls in this step. Set awaiting_response with response_type='none' (you are narrating).",
 
     # Step 2: Determine Surprise and Initiative Modifiers
-    "Determine surprise and initiative modifiers. Assess which sides were aware of each other before combat. Per 2024 PHB: Surprised creatures roll initiative with DISADVANTAGE (they do NOT skip their first turn). Determine if anyone gets advantage on initiative from initiating combat. DO NOT call for rolls in this step - only determine modifiers.",
+    "Determine surprise and initiative modifiers. Assess which sides were aware of each other before combat. Per 2024 PHB: Surprised creatures roll initiative with DISADVANTAGE (they do NOT skip their first turn). Determine if anyone gets advantage on initiative from initiating combat. DO NOT call for rolls in this step - only determine modifiers. Set awaiting_response with response_type='none' (you are narrating).",
 
     # Step 3: Call for Initiative Rolls
-    "Call for initiative rolls from ALL participants. Specify any advantage or disadvantage determined in the previous step (surprised = disadvantage). For NPCs, roll their initiative. DO NOT announce initiative order in this step - wait for all rolls to be collected.",
+    "Call for initiative rolls from ALL participants. Specify any advantage or disadvantage determined in the previous step (surprised = disadvantage). For NPCs, roll their initiative. DO NOT announce initiative order in this step - wait for all rolls to be collected. IMPORTANT: Set awaiting_response with response_type='initiative' and characters=[list of ALL player character names who need to roll].",
 
     # Step 4: Announce and Verify Initiative Order
-    "Announce the initial initiative order from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step.",
+    "Announce the initial initiative order from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step. Set awaiting_response with response_type='free_form' and characters=[all player character names] to allow objections.",
 
     # Step 5: Finalize Order and Begin Combat
-    "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step."
+    "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step. Set awaiting_response with response_type='none' (you are concluding setup)."
 ]
 
 # =============================================================================
