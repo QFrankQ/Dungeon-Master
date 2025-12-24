@@ -1,13 +1,50 @@
 """
-Demo combat step objectives for mock Game Director.
+Demo step objectives for mock Game Director.
 
 Based on combat_flow.txt with three distinct phases:
 - Phase 1: Combat Start (initiative collection, order finalization)
 - Phase 2: Combat Rounds (main combat loop with turns)
 - Phase 3: Combat End (conclusion and cleanup)
 
-These objectives guide the DM through proper combat flow without an actual GD agent.
+Plus exploration mode for non-combat interactions.
+
+These objectives guide the DM through proper game flow without an actual GD agent.
 """
+
+from enum import Enum
+
+
+class GamePhase(str, Enum):
+    """
+    Game phases that determine which step list to use.
+
+    Each phase has its own step progression appropriate for that context.
+    """
+    EXPLORATION = "exploration"
+    """Free-form exploration and roleplay mode."""
+
+    COMBAT_START = "combat_start"
+    """Phase 1: Initiative collection and combat setup."""
+
+    COMBAT_ROUNDS = "combat_rounds"
+    """Phase 2: Main combat loop with turn-based actions."""
+
+    COMBAT_END = "combat_end"
+    """Phase 3: Combat conclusion and transition back to exploration."""
+
+    REACTION = "reaction"
+    """Sub-phase: Processing a declared reaction during combat."""
+
+
+# =============================================================================
+# EXPLORATION MODE STEPS
+# =============================================================================
+# Used for non-combat exploration, roleplay, and general interaction
+
+EXPLORATION_STEPS = [
+    # Step 1: Receive and Respond
+    "Receive player input and respond appropriately as the Dungeon Master. Describe the environment, NPCs, or situation. Respond to player questions, actions, or roleplay. Maintain narrative flow and engagement. If players encounter danger or hostiles, you may transition to combat by describing the threat.",
+]
 
 # =============================================================================
 # PHASE 1: COMBAT START
@@ -152,12 +189,16 @@ def is_resolution_step_index(step_index: int, step_list: list[str]) -> bool:
         return step_index in COMBAT_START_RESOLUTION_INDICES
     elif step_list is COMBAT_END_STEPS:
         return step_index in COMBAT_END_RESOLUTION_INDICES
+    elif step_list is EXPLORATION_STEPS:
+        return step_index in EXPLORATION_RESOLUTION_INDICES
     return False
 
 
 def get_step_list_name(step_list: list[str]) -> str:
     """Get a human-readable name for a step list."""
-    if step_list is COMBAT_START_STEPS:
+    if step_list is EXPLORATION_STEPS:
+        return "Exploration"
+    elif step_list is COMBAT_START_STEPS:
         return "Combat Start"
     elif step_list is COMBAT_TURN_STEPS or step_list is DEMO_MAIN_ACTION_STEPS:
         return "Combat Turn"
@@ -170,3 +211,30 @@ def get_step_list_name(step_list: list[str]) -> str:
 
 # Legacy alias for backward compatibility
 DEMO_SETUP_STEPS = COMBAT_START_STEPS[:2]  # Just the intro steps
+
+# Exploration doesn't have resolution steps (no game state changes from DM narration)
+EXPLORATION_RESOLUTION_INDICES = set()
+
+
+def get_steps_for_phase(phase: GamePhase) -> list[str]:
+    """
+    Get the appropriate step list for a game phase.
+
+    Args:
+        phase: The current game phase
+
+    Returns:
+        The step list appropriate for that phase
+    """
+    if phase == GamePhase.EXPLORATION:
+        return EXPLORATION_STEPS
+    elif phase == GamePhase.COMBAT_START:
+        return COMBAT_START_STEPS
+    elif phase == GamePhase.COMBAT_ROUNDS:
+        return COMBAT_TURN_STEPS
+    elif phase == GamePhase.COMBAT_END:
+        return COMBAT_END_STEPS
+    elif phase == GamePhase.REACTION:
+        return DEMO_REACTION_STEPS
+    else:
+        return EXPLORATION_STEPS  # Default to exploration
