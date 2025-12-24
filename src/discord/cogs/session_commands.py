@@ -9,6 +9,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from typing import Optional, List
+import logging
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 from src.discord.utils.session_pool import get_session_pool, SessionContext
 from src.discord.utils.message_converter import discord_to_chat_message
@@ -18,6 +22,7 @@ from src.models.response_expectation import ResponseExpectation, ResponseType
 from src.discord.views.reaction_view import ReactionView
 from src.discord.views.initiative_modal import InitiativeView
 from src.discord.views.save_modal import SaveView, parse_save_from_prompt
+from src.prompts.demo_combat_steps import GamePhase
 
 
 class SessionCommands(commands.Cog):
@@ -26,6 +31,33 @@ class SessionCommands(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.session_pool = get_session_pool()
+
+    def _sync_combat_mode_with_phase(self, session_context: SessionContext) -> None:
+        """
+        Automatically sync combat_mode with the current game phase.
+
+        - COMBAT_ROUNDS: Enable combat_mode (strict turn enforcement)
+        - All other phases: Disable combat_mode (free chat)
+
+        This ensures:
+        - Players can chat freely during EXPLORATION, COMBAT_START, COMBAT_END
+        - Only the active character can act during COMBAT_ROUNDS
+        """
+        coordinator = session_context.message_coordinator
+        turn_manager = session_context.session_manager.turn_manager
+
+        if not coordinator or not turn_manager:
+            return
+
+        current_phase = turn_manager.get_current_phase()
+
+        # Only COMBAT_ROUNDS requires strict turn enforcement
+        should_be_combat_mode = (current_phase == GamePhase.COMBAT_ROUNDS)
+
+        if should_be_combat_mode and not coordinator.combat_mode:
+            coordinator.enter_combat_mode()
+        elif not should_be_combat_mode and coordinator.combat_mode:
+            coordinator.exit_combat_mode()
 
     @app_commands.command(name="start", description="Start a D&D game session in this channel")
     async def start_session(self, interaction: discord.Interaction):
@@ -180,7 +212,8 @@ class SessionCommands(commands.Cog):
                 chat_message = discord_to_chat_message(message, character_name)
 
                 # Milestone 5: Multi-response collection for combat mode
-                if coordinator and coordinator.combat_mode:
+                # Only use collection logic when there's an active expectation with a collector
+                if coordinator and coordinator.combat_mode and coordinator.current_expectation:
                     # Add response to collector
                     add_result = coordinator.add_response(character_name, chat_message)
 
@@ -214,13 +247,17 @@ class SessionCommands(commands.Cog):
                     # Collection complete - gather all messages for batch processing
                     collected_messages = list(coordinator.get_collected_responses().values())
                 else:
-                    # Exploration mode or no coordinator - single message processing
+                    # Exploration mode, no coordinator, or no expectation set - single message processing
                     collected_messages = [chat_message]
 
                 # Process through SessionManager
                 result = await session_manager.demo_process_player_input(
                     new_messages=collected_messages
                 )
+
+                # Sync combat_mode with current game phase after DM processing
+                # (phase may have changed during processing, e.g., entering COMBAT_ROUNDS)
+                self._sync_combat_mode_with_phase(session_context)
 
                 # Milestone 5: Update expectation after DM response and show UI
                 if coordinator:
@@ -251,28 +288,28 @@ class SessionCommands(commands.Cog):
                         )
 
                 # Milestone 5: System-driven UI selection based on ResponseType
-                if coordinator and coordinator.combat_mode:
-                    awaiting = result.get("awaiting_response")
-                    if awaiting:
-                        # Show warning if characters were filtered (Milestone 6)
-                        filtered_warning = result.get("filtered_characters_warning")
-                        if filtered_warning:
-                            await message.channel.send(f"⚠️ *{filtered_warning}*")
+                # Show UI whenever there's a ResponseExpectation, regardless of combat_mode
+                # combat_mode only controls validation (blocking wrong players), not UI display
+                # This allows initiative modals during COMBAT_START even with combat_mode=False
+                awaiting = result.get("awaiting_response")
+                if coordinator and awaiting:
+                    # Show warning if characters were filtered (Milestone 6)
+                    filtered_warning = result.get("filtered_characters_warning")
+                    if filtered_warning:
+                        await message.channel.send(f"⚠️ *{filtered_warning}*")
 
-                        await self._show_response_ui(
-                            message.channel,
-                            awaiting,
-                            session_context
-                        )
+                    await self._show_response_ui(
+                        message.channel,
+                        awaiting,
+                        session_context
+                    )
 
         except Exception as e:
             await message.channel.send(
                 f"❌ Error processing message: {str(e)}\n"
                 f"Please try again or use `/end` to restart the session."
             )
-            print(f"Error in on_message: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error in on_message: {e}")
 
     async def _send_validation_feedback(
         self,
@@ -418,10 +455,7 @@ class SessionCommands(commands.Cog):
             summary_text = f"**{response_type} Results:** {results}"
 
         # Create a system message with the results
-        system_message = ChatMessage.create_system_message(
-            text=summary_text,
-            metadata={"response_type": response_type, "results": results}
-        )
+        system_message = ChatMessage.create_system_message(text=summary_text)
 
         try:
             # Show typing indicator while processing
@@ -430,6 +464,9 @@ class SessionCommands(commands.Cog):
                 result = await session_manager.demo_process_player_input(
                     new_messages=[system_message]
                 )
+
+                # Sync combat_mode with current game phase after DM processing
+                self._sync_combat_mode_with_phase(session_context)
 
                 # Update expectation after DM response
                 if coordinator:
@@ -457,24 +494,22 @@ class SessionCommands(commands.Cog):
                         )
 
                 # Show next UI if needed
-                if coordinator and coordinator.combat_mode:
-                    awaiting = result.get("awaiting_response")
-                    if awaiting:
-                        # Show warning if characters were filtered (Milestone 6)
-                        filtered_warning = result.get("filtered_characters_warning")
-                        if filtered_warning:
-                            await channel.send(f"⚠️ *{filtered_warning}*")
+                # Show UI whenever there's a ResponseExpectation, regardless of combat_mode
+                awaiting = result.get("awaiting_response")
+                if coordinator and awaiting:
+                    # Show warning if characters were filtered (Milestone 6)
+                    filtered_warning = result.get("filtered_characters_warning")
+                    if filtered_warning:
+                        await channel.send(f"⚠️ *{filtered_warning}*")
 
-                        await self._show_response_ui(channel, awaiting, session_context)
+                    await self._show_response_ui(channel, awaiting, session_context)
 
         except Exception as e:
             await channel.send(
                 f"❌ Error processing {response_type} results: {str(e)}\n"
                 f"Please try again or use `/end` to restart the session."
             )
-            print(f"Error routing view results to DM: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error routing view results to DM: {e}")
 
     async def _show_response_ui(
         self,
