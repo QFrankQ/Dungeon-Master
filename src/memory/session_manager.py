@@ -105,7 +105,8 @@ class SessionManager:
         self.gd_context_builder = GDContextBuilder()
         self.dm_context_builder = DMContextBuilder(
             state_manager=self.state_manager,
-            rules_cache_service=self.rules_cache_service
+            rules_cache_service=self.rules_cache_service,
+            player_character_registry=self.player_character_registry
         )
         self.state_extractor_context_builder = StateExtractorContextBuilder()
 
@@ -640,7 +641,7 @@ class SessionManager:
             # WHILE loop for step completion
             # Processes multiple steps in same turn OR switches to subturns
             while dungeon_master_response.game_step_completed:
-                response_queue.append("\n[DM has indicated step completion - processing resolution...]\n")
+                # response_queue.append("\n[DM has indicated step completion - processing resolution...]\n")
 
                 # === STATE EXTRACTION BEFORE ADVANCING STEP ===
                 # Check if current step (before advancing) is a resolution step
@@ -648,9 +649,9 @@ class SessionManager:
 
                 # Advance the processing turn's step
                 # (This is the turn that was being processed when DM ran, even if tools created subturns)
-                response_queue.append("[Advancing turn step...]\n")
+                # response_queue.append("[Advancing turn step...]\n")
                 more_steps = self.turn_manager.advance_processing_turn_step()
-                response_queue.append(f"[New step objective: {self.turn_manager.get_current_step_objective()}]\n")
+                # response_queue.append(f"[New step objective: {self.turn_manager.get_current_step_objective()}]\n")
                 if not more_steps:
                     # Processing turn is complete - end it and get next
                     end_result = await self.turn_manager.end_turn_and_get_next_async()
