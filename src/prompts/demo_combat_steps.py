@@ -59,13 +59,13 @@ COMBAT_START_STEPS = [
     "Determine surprise and initiative modifiers. Assess which sides were aware of each other before combat. Per 2024 PHB: Surprised creatures roll initiative with DISADVANTAGE (they do NOT skip their first turn). Determine if anyone gets advantage on initiative from initiating combat. DO NOT call for rolls in this step - only determine modifiers. Set awaiting_response with response_type='none' (you are narrating).",
 
     # Step 3: Call for Initiative Rolls
-    "Call for initiative rolls from ALL participants. Specify any advantage or disadvantage determined in the previous step (surprised = disadvantage). For NPCs, roll their initiative. DO NOT announce initiative order in this step - wait for all rolls to be collected. IMPORTANT: Set awaiting_response with response_type='initiative' and characters=[list of ALL player character names who need to roll].",
+    "Call for initiative rolls from ALL participants. Specify any advantage or disadvantage determined in the previous step (surprised = disadvantage). For NPCs, roll their initiative. DO NOT announce initiative order in this step. TWO SCENARIOS: (1) If you are ASKING for initiative rolls, set game_step_completed=False and awaiting_response with response_type='initiative' and characters=[list of ALL player character names who need to roll]. (2) If you SEE 'Initiative Results' in the new messages showing all rolls have been collected, acknowledge receipt briefly and set game_step_completed=True to proceed to the next step.",
 
-    # Step 4: Announce and Verify Initiative Order
-    "Announce the initial initiative order from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step. Set awaiting_response with response_type='free_form' and characters=[all player character names] to allow objections.",
+    # Step 4: Announce and Verify Initiative Order (reached only after initiative results are received)
+    "You have received all initiative rolls. Announce the initial initiative order from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step. Set awaiting_response with response_type='free_form' and characters=[all player character names] to allow objections.",
 
     # Step 5: Finalize Order and Begin Combat
-    "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step. Set awaiting_response with response_type='none' (you are concluding setup)."
+    "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step. Set game_step_completed=True to signal that combat setup is complete. Set awaiting_response with response_type='none' (you are concluding setup)."
 ]
 
 # =============================================================================
@@ -91,7 +91,7 @@ COMBAT_TURN_STEPS = [
     "Handle critical status changes: Check if anyone dropped to 0 HP (PCs fall unconscious, NPCs typically die). Then provide post-resolution reaction window: Ask if anyone wants to use a Reaction in response to the outcome. If a reaction is declared, create reaction turn(s). DO NOT ask about additional actions in this step.",
 
     # Step D: Confirm End of Turn
-    "Ask the active participant: 'Would you like to do anything else on your turn?' Options include: bonus action, movement, free object interaction, or additional actions from features. If they declare another action, return to step 1 of this turn. DO NOT check for turn-end effects in this step.",
+    "Ask the active participant: 'Would you like to do anything else on your turn?' Options include: bonus action, movement, free object interaction, or additional actions from features. If they declare another action, resolve it immediately within this step (interpret, validate, resolve, narrate). If they have nothing more to do, set game_step_completed=True to proceed. DO NOT check for turn-end effects in this step.",
 
     # Step E: Turn-End Effects (Index 6 - Resolution step for turn-end effects)
     "Check for turn-end effects: Apply effects that trigger at the end of this turn (saving throws against conditions, concentration checks, Legendary Actions if facing a legendary creature). Resolve any triggered effects. DO NOT announce the next turn in this step.",
