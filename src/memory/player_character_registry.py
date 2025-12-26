@@ -125,15 +125,52 @@ class PlayerCharacterRegistry:
         """
         return self.player_to_character.copy()
 
-    def get_all_character_names(self) -> List[str]:
+    def get_all_character_ids(self) -> List[str]:
         """
-        Get all registered character names/IDs.
+        Get all registered character IDs.
 
         Returns:
-            List of character names currently registered
+            List of character IDs currently registered (e.g., ["fighter", "wizard"])
         """
         return list(self.character_to_player.keys())
-    
+
+    def get_all_character_names(self) -> List[str]:
+        """
+        Get names for all registered characters.
+
+        Loads each character to get their info.name for narrative use.
+        Falls back to character_id if character can't be loaded.
+
+        Returns:
+            List of character names (e.g., ["Tharion Stormwind", "Elara"])
+        """
+        names = []
+        for character_id in self.character_to_player.keys():
+            character = self._load_character(character_id)
+            if character and character.info and character.info.name:
+                names.append(character.info.name)
+            else:
+                names.append(character_id)
+        return names
+
+    def get_character_id_to_name_map(self) -> Dict[str, str]:
+        """
+        Get a mapping from character_id to character name.
+
+        Useful for converting between system IDs and narrative names.
+
+        Returns:
+            Dict mapping character_id -> name
+        """
+        mapping = {}
+        for character_id in self.character_to_player.keys():
+            character = self._load_character(character_id)
+            if character and character.info and character.info.name:
+                mapping[character_id] = character.info.name
+            else:
+                mapping[character_id] = character_id
+        return mapping
+
     def remove_player_character_mapping(self, player_id: str) -> bool:
         """
         Remove a player-character mapping.
