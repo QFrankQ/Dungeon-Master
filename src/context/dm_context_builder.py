@@ -300,13 +300,23 @@ class DMContextBuilder:
         context_parts = []
         completed_turns = turn_manager_snapshots.completed_turns
 
-        # Add registered player characters (CRITICAL: DM must only use these names in awaiting_response)
+        # Add registered player characters
+        # Show both IDs (for awaiting_response) and names (for narrative)
         if self.player_character_registry:
-            registered_chars = list(self.player_character_registry.get_all_character_names())
-            if registered_chars:
+            registered_ids = list(self.player_character_registry.get_all_character_ids())
+            id_to_name_map = self.player_character_registry.get_character_id_to_name_map()
+            if registered_ids:
                 context_parts.append("<registered_player_characters>")
-                context_parts.append("IMPORTANT: Only use these exact character names in awaiting_response.characters:")
-                context_parts.append(", ".join(registered_chars))
+                # Show clear ID → Name mapping
+                for char_id in registered_ids:
+                    name = id_to_name_map.get(char_id, char_id)
+                    context_parts.append(f"  {char_id} → {name}")
+                context_parts.append("")
+                # Instructions for usage
+                id_list = ", ".join(registered_ids)
+                name_list = ", ".join(id_to_name_map.get(cid, cid) for cid in registered_ids)
+                context_parts.append(f"IMPORTANT: Use character IDs ({id_list}) in awaiting_response.characters")
+                context_parts.append(f"Use character names ({name_list}) in narrative and dialogue")
                 context_parts.append("</registered_player_characters>")
                 context_parts.append("")
 
