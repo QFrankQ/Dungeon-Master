@@ -320,7 +320,8 @@ class DMContextBuilder:
         if completed_turns:
             context_parts.append("<history_turns>")
             for turn in completed_turns[-3:]:  # Last 3 completed turns
-                context_parts.append(turn.get_turn_summary())
+                # Use to_xml_context for consistent formatting
+                context_parts.append(turn.to_xml_context())
             context_parts.append("</history_turns>")
             context_parts.append("")
 
