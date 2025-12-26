@@ -175,6 +175,7 @@ class TurnManagerSnapshot:
     turn_counter: int
     active_turns_by_level: List[TurnContext]  # First TurnContext from each level for context building
 
+
 class TurnManager:
     """
     Manages hierarchical turn tracking with queue-based reaction processing and context isolation.
@@ -517,10 +518,21 @@ class TurnManager:
         # Add completed global turns (level 0) to history
         if completed_turn.turn_level == 0:
             self.completed_turns.append(completed_turn)
-        
+
+        # Check for phase transitions based on completed turn's step list
+        # When COMBAT_START turn ends, transition to COMBAT_ROUNDS
+        if (completed_turn.game_step_list is COMBAT_START_STEPS and
+            self._current_game_phase == GamePhase.COMBAT_START):
+            try:
+                # Pass True since we already handled turn completion above
+                self.finalize_initiative(combat_start_turn_already_ended=True)
+                print(f"[SYSTEM] Phase transitioned: COMBAT_START -> COMBAT_ROUNDS")
+            except ValueError as e:
+                print(f"[SYSTEM] Could not finalize initiative: {e}")
+
         # Clear current messages after processing
         # self._current_messages = []
-        
+
         return {
             "turn_id": completed_turn.turn_id,
             "turn_level": completed_turn.turn_level,
@@ -946,11 +958,15 @@ class TurnManager:
             "all_collected": len(missing) == 0
         }
 
-    def finalize_initiative(self) -> Dict[str, Any]:
+    def finalize_initiative(self, combat_start_turn_already_ended: bool = False) -> Dict[str, Any]:
         """
         Finalize initiative order and transition Phase 1 → Phase 2.
 
         Sorts the initiative order and queues the first round of combat turns.
+
+        Args:
+            combat_start_turn_already_ended: If True, skip ending the combat start turn
+                (used when called from end_turn() which already handled turn completion)
 
         Returns:
             Dictionary with initiative order and first turn info
@@ -964,8 +980,8 @@ class TurnManager:
         # Finalize the initiative order in combat state
         self.combat_state.finalize_initiative()
 
-        # End the combat start turn if one exists
-        if self.turn_stack and self.turn_stack[-1]:
+        # End the combat start turn if one exists and not already ended
+        if not combat_start_turn_already_ended and self.turn_stack and self.turn_stack[-1]:
             combat_start_turn = self.turn_stack[-1][0]
             combat_start_turn.end_time = datetime.now()
             self.turn_stack[-1].pop(0)
