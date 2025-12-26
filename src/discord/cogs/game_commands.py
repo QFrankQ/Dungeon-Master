@@ -187,23 +187,57 @@ class GameCommands(commands.Cog):
             system_prompt_tokens = 0
             total_tokens = context_tokens
 
-        # Format context for Discord (truncate if too long)
-        context_preview = context[:1800] + "\n...(truncated)" if len(context) > 1800 else context
-
-        context_msg = (
+        # Build token estimates message
+        token_msg = (
             f"**🔍 DM Context (Debug View)**\n\n"
-            f"```\n{context_preview}\n```\n\n"
             f"**Token Estimates:**\n"
             f"• Context: ~{context_tokens:,} tokens ({len(context):,} chars)\n"
         )
 
         if system_prompt_tokens:
-            context_msg += (
+            token_msg += (
                 f"• System Prompt: ~{system_prompt_tokens:,} tokens\n"
                 f"• **Total: ~{total_tokens:,} tokens**"
             )
 
-        await interaction.followup.send(context_msg, ephemeral=True)
+        # Send token estimates first
+        await interaction.followup.send(token_msg, ephemeral=True)
+
+        # Split context into chunks that fit in Discord messages (max 1900 chars per code block)
+        # Account for ```\n prefix and \n``` suffix (8 chars)
+        max_chunk_size = 1900
+
+        if len(context) <= max_chunk_size:
+            await interaction.followup.send(f"```\n{context}\n```", ephemeral=True)
+        else:
+            # Split by lines to avoid cutting mid-line
+            lines = context.split('\n')
+            current_chunk = ""
+            chunk_num = 1
+
+            for line in lines:
+                # Check if adding this line would exceed limit
+                if len(current_chunk) + len(line) + 1 > max_chunk_size:
+                    # Send current chunk
+                    if current_chunk:
+                        await interaction.followup.send(
+                            f"```\n{current_chunk}\n```",
+                            ephemeral=True
+                        )
+                        chunk_num += 1
+                    current_chunk = line
+                else:
+                    if current_chunk:
+                        current_chunk += '\n' + line
+                    else:
+                        current_chunk = line
+
+            # Send remaining chunk
+            if current_chunk:
+                await interaction.followup.send(
+                    f"```\n{current_chunk}\n```",
+                    ephemeral=True
+                )
 
     @app_commands.command(name="usage", description="Show token usage statistics")
     async def show_usage(self, interaction: discord.Interaction):
