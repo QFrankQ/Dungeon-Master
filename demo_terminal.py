@@ -1092,8 +1092,11 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
             shutil.copy2(source_file, temp_char_dir / char_file)
             print(f"[SYSTEM] Copied {char_file} to temp directory")
 
-    # Create player character registry in temp directory (per-session, not global)
-    registry_path = str(temp_char_dir / "player_character_registry.json")
+    # Create player character registry in a subdirectory (not in character_data_path)
+    # This prevents StateManager from trying to load registry as a character file
+    registry_dir = temp_char_dir / "registry"
+    registry_dir.mkdir(exist_ok=True)
+    registry_path = str(registry_dir / "player_character_registry.json")
     player_registry = create_player_character_registry(registry_file_path=registry_path)
     print(f"[SYSTEM] Created per-session player registry: {registry_path}")
 
