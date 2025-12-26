@@ -193,14 +193,17 @@ class SessionCommands(commands.Cog):
                     )
                     return
 
-                # Load character to get name
+                # Use character_id for system validation, character_name for DM narrative
+                # character_id: canonical identifier for turn tracking, validation, initiative
+                # character_name: display name for narrative flavor (e.g., "Tharion Stormwind")
                 character = session_manager.state_manager.get_character(character_id)
-                character_name = character.info.name if character else character_id
+                character_display_name = character.info.name if character else character_id
 
                 # Milestone 5: Validate responder via MessageCoordinator
+                # Use character_id for validation (matches turn tracking)
                 coordinator = session_context.message_coordinator
                 if coordinator:
-                    validation = coordinator.validate_responder(character_name)
+                    validation = coordinator.validate_responder(character_id)
                     if validation.result != MessageValidationResult.VALID:
                         if coordinator.combat_mode:
                             # In combat mode, reject invalid responders with feedback
@@ -209,13 +212,14 @@ class SessionCommands(commands.Cog):
                         # In exploration mode, let message through (validation passes)
 
                 # Convert Discord message to ChatMessage format
-                chat_message = discord_to_chat_message(message, character_name)
+                # Use display name for narrative (DM sees "Tharion Stormwind said...")
+                chat_message = discord_to_chat_message(message, character_display_name)
 
                 # Milestone 5: Multi-response collection for combat mode
                 # Only use collection logic when there's an active expectation with a collector
                 if coordinator and coordinator.combat_mode and coordinator.current_expectation:
-                    # Add response to collector
-                    add_result = coordinator.add_response(character_name, chat_message)
+                    # Add response to collector (use character_id for tracking)
+                    add_result = coordinator.add_response(character_id, chat_message)
 
                     if add_result == AddResult.DUPLICATE:
                         await message.reply(
@@ -232,13 +236,13 @@ class SessionCommands(commands.Cog):
 
                     # Check if collection is complete
                     if not coordinator.is_collection_complete():
-                        # Show progress
+                        # Show progress (use display name for user-facing message)
                         missing = coordinator.get_missing_responders()
                         collected_count = len(coordinator.get_collected_responses())
                         total_count = collected_count + len(missing)
                         await message.add_reaction("✅")
                         await message.channel.send(
-                            f"Got **{character_name}**'s response. "
+                            f"Got **{character_display_name}**'s response. "
                             f"({collected_count}/{total_count}) "
                             f"Waiting for: {', '.join(missing)}"
                         )
@@ -382,6 +386,23 @@ class SessionCommands(commands.Cog):
             order = results.get("order", [])
             rolls = results.get("rolls", {})
             timed_out = results.get("timed_out", False)
+
+            # Add initiative rolls to turn manager (finalization happens after step 5 completes)
+            turn_manager = session_manager.turn_manager
+            if turn_manager:
+                for char_name, roll_info in rolls.items():
+                    roll_value = roll_info.get("roll", 0)
+                    dex_mod = roll_info.get("dex_modifier", 0)
+                    try:
+                        turn_manager.add_initiative_roll(
+                            character_name=char_name,
+                            roll=roll_value,
+                            dex_modifier=dex_mod,
+                            is_player=True  # All Discord players are player characters
+                        )
+                        logger.info(f"Added initiative roll: {char_name} = {roll_value}")
+                    except Exception as e:
+                        logger.warning(f"Could not add initiative roll for {char_name}: {e}")
 
             summary_lines = ["**Initiative Results:**"]
             for i, char in enumerate(order):
@@ -530,11 +551,18 @@ class SessionCommands(commands.Cog):
         if expectation is None:
             return
 
-        # Get helper to resolve user ID -> character name
+        # Get helper to resolve user ID -> character ID
         registry = session_context.session_manager.player_character_registry
 
         def get_character_for_user(user_id: int) -> Optional[str]:
             return registry.get_character_id_by_player_id(str(user_id))
+
+        # Get character ID to name mapping for display purposes
+        id_to_name_map = registry.get_character_id_to_name_map()
+
+        def get_display_names(character_ids: List[str]) -> List[str]:
+            """Convert character IDs to display names for user-facing messages."""
+            return [id_to_name_map.get(cid, cid) for cid in character_ids]
 
         # Get configurable timeouts (Milestone 6)
         timeouts = session_context.timeouts
@@ -602,9 +630,10 @@ class SessionCommands(commands.Cog):
             return
 
         elif expectation.response_type == ResponseType.ACTION:
-            # Standard turn - just announce whose turn it is
-            active = expectation.characters[0] if expectation.characters else "Unknown"
-            await channel.send(f"⚔️ **{active}'s turn.** What do you do?")
+            # Standard turn - just announce whose turn it is (use display name)
+            active_id = expectation.characters[0] if expectation.characters else "Unknown"
+            active_name = id_to_name_map.get(active_id, active_id)
+            await channel.send(f"⚔️ **{active_name}'s turn.** What do you do?")
 
         elif expectation.response_type == ResponseType.INITIATIVE:
             # Show initiative view with roll button
@@ -615,9 +644,10 @@ class SessionCommands(commands.Cog):
                 get_dex_modifier=get_dex_modifier,
                 on_complete=on_initiative_complete,
             )
+            display_names = get_display_names(expectation.characters)
             await channel.send(
                 "🎲 **Roll for Initiative!**\n"
-                f"Waiting for: {', '.join(expectation.characters)}",
+                f"Waiting for: {', '.join(display_names)}",
                 view=view
             )
 
@@ -651,8 +681,12 @@ class SessionCommands(commands.Cog):
             await channel.send(f"⚡ {prompt}", view=view)
 
         elif expectation.response_type == ResponseType.FREE_FORM:
-            # Exploration mode - anyone can respond
-            chars = ', '.join(expectation.characters) if expectation.characters else "Anyone"
+            # Exploration mode - anyone can respond (use display names)
+            if expectation.characters:
+                display_names = get_display_names(expectation.characters)
+                chars = ', '.join(display_names)
+            else:
+                chars = "Anyone"
             await channel.send(f"*{chars} may respond.*")
 
 
