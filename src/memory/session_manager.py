@@ -600,9 +600,9 @@ class SessionManager:
             # new_message_entries=None  # No longer needed - groups detected automatically
         )
 
-        # Set registered characters for ResponseExpectation validation (Milestone 6)
+        # Set registered character IDs for ResponseExpectation validation (Milestone 6)
         # This allows the DM to get immediate feedback if it references invalid characters
-        registered_chars = set(self.player_character_registry.get_all_character_names())
+        registered_chars = set(self.player_character_registry.get_all_character_ids())
 
         # Run DM agent and get result (with usage tracking)
         # Pass deps if available (for DM tools like query_rules_database)
