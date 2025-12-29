@@ -166,74 +166,18 @@ class DMContextBuilder:
         """
         Format character sheet information for DM context.
 
-        Provides essential character capabilities including class, level, HP,
-        spellcasting abilities, and equipment. Helps DM validate actions.
+        Uses Character's compact get_full_sheet() method which provides essential
+        stats and ability names without full descriptions. This is token-efficient
+        for routine context. The DM can use query_character_ability tool to get
+        detailed descriptions for specific features, spells, or equipment when needed.
 
         Args:
             character: Character object from state_manager
 
         Returns:
-            Formatted character sheet string
+            Formatted character sheet string (compact version)
         """
-        lines = []
-
-        # Basic info
-        classes_str = "/".join([c.value.title() for c in character.info.classes])
-        lines.append(f"Character: {character.info.name} ({classes_str} Level {character.info.level})")
-        lines.append(f"Race: {character.info.race.value.title()} | Background: {character.info.background}")
-        lines.append("")
-
-        # Hit Points
-        hp_current = character.hit_points.current_hp
-        hp_max = character.hit_points.maximum_hp
-        hp_temp = character.hit_points.temporary_hp
-        hp_line = f"HP: {hp_current}/{hp_max}"
-        if hp_temp > 0:
-            hp_line += f" (+{hp_temp} temp)"
-        lines.append(hp_line)
-        lines.append("")
-
-        # Ability Scores (for checking action feasibility)
-        lines.append("Ability Scores:")
-        for ability in ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]:
-            score = getattr(character.ability_scores, ability)
-            modifier = (score - 10) // 2
-            mod_str = f"+{modifier}" if modifier >= 0 else str(modifier)
-            lines.append(f"  {ability.upper()[:3]}: {score} ({mod_str})")
-        lines.append("")
-
-        # Spellcasting (critical for validating spell actions)
-        if character.spellcasting:
-            lines.append("Spellcasting:")
-            lines.append(f"  Ability: {character.spellcasting.spellcasting_ability.upper()}")
-            lines.append(f"  Spell Save DC: {character.spellcasting.spell_save_dc}")
-            lines.append(f"  Spell Attack: +{character.spellcasting.spell_attack_bonus}")
-
-            # Spell slots
-            if character.spellcasting.spell_slots:
-                lines.append("  Spell Slots:")
-                for level in range(1, 10):
-                    total_slots = character.spellcasting.spell_slots.get(level, 0)
-                    expended = character.spellcasting.spell_slots_expended.get(level, 0)
-                    if total_slots > 0:
-                        available = total_slots - expended
-                        lines.append(f"    Level {level}: {available}/{total_slots} available")
-            lines.append("")
-
-        # Active Conditions (affect action feasibility)
-        if character.conditions:
-            lines.append(f"Conditions: {', '.join(character.conditions)}")
-            lines.append("")
-
-        # Active Effects
-        if character.active_effects:
-            lines.append("Active Effects:")
-            for effect in character.active_effects:
-                duration_str = f" ({effect.duration} rounds)" if effect.duration else ""
-                lines.append(f"  - {effect.name}: {effect.summary}{duration_str}")
-            lines.append("")
-
-        return "\n".join(lines)
+        return character.get_full_sheet()
 
     #TODO: this should be generated directly from Character
     def _format_cached_rules(self, rules_cache: Dict[str, Any]) -> str:
