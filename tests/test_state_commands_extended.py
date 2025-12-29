@@ -14,18 +14,24 @@ from typing import Dict, Optional
 from src.characters.charactersheet import Character
 from src.characters.character_components import (
     CharacterInfo,
+    CharacterClassEntry,
     AbilityScores,
+    AbilityScoreEntry,
     HitPoints,
     HitDice,
     DeathSaves,
     CombatStats,
     SavingThrows,
     Skills,
-    Spellcasting,
+    SpellcastingMeta,
+    SpellSlotLevel,
+    Speed,
+    SpeedEntry,
+    Senses,
     DurationType,
     Effect,
 )
-from src.characters.dnd_enums import CharacterClass, Condition, AbilityScore
+from src.characters.dnd_enums import Condition
 from src.memory.state_command_executor import (
     StateCommandExecutor,
     CommandExecutionResult,
@@ -47,37 +53,42 @@ from src.models.state_commands_optimized import (
 def test_character():
     """Create a test character with various capabilities."""
     return Character(
+        character_id="test_hero",
         info=CharacterInfo(
             name="Test Hero",
-            player_name=None,
-            background=None,
-            alignment=None,
-            race=None,
-            classes=[CharacterClass.FIGHTER],
-            level=5,
-            experience_points=6500,
+            race="Human",
+            classes=[CharacterClassEntry(class_name="Fighter", level=5)],
+            total_level=5,
             proficiency_bonus=3,
         ),
         ability_scores=AbilityScores(
-            strength=16,
-            dexterity=14,
-            constitution=15,
-            intelligence=10,
-            wisdom=12,
-            charisma=8,
+            strength=AbilityScoreEntry(score=16),
+            dexterity=AbilityScoreEntry(score=14),
+            constitution=AbilityScoreEntry(score=15),
+            intelligence=AbilityScoreEntry(score=10),
+            wisdom=AbilityScoreEntry(score=12),
+            charisma=AbilityScoreEntry(score=8),
         ),
         saving_throws=SavingThrows(),
         skills=Skills(),
-        hit_points=HitPoints(maximum_hp=50, current_hp=30, temporary_hp=0),
-        hit_dice=HitDice(total=5, used=2, faces=10),
-        death_saves=DeathSaves(),
-        combat_stats=CombatStats(armor_class=16, initiative_bonus=2, speed=30),
-        spellcasting=Spellcasting(
-            spellcasting_ability=AbilityScore.INTELLIGENCE,
-            spell_save_dc=14,
-            spell_attack_bonus=6,
-            spell_slots={1: 4, 2: 3, 3: 2},
-            spell_slots_expended={1: 2, 2: 1, 3: 1},
+        combat_stats=CombatStats(
+            armor_class=16,
+            initiative_bonus=2,
+            speed=Speed(walk=SpeedEntry(value=30)),
+            senses=Senses(),
+            hit_points=HitPoints(maximum=50, current=30, temporary=0),
+            hit_dice=HitDice(total=5, used=2, die_type="d10"),
+            death_saves=DeathSaves(),
+        ),
+        spellcasting_meta=SpellcastingMeta(
+            ability="intelligence",
+            save_dc=14,
+            attack_bonus=6,
+            slots={
+                "1st": SpellSlotLevel(total=4, used=2),
+                "2nd": SpellSlotLevel(total=3, used=1),
+                "3rd": SpellSlotLevel(total=2, used=1),
+            },
         ),
     )
 
@@ -402,8 +413,8 @@ class TestRestCommandOrchestrator:
 
     def test_long_rest_restores_spell_slots(self, orchestrator, test_character, character_registry):
         """Test long rest restores all spell slots."""
-        # Character has used spell slots
-        initial_used_slots = test_character.spellcasting.spell_slots_expended.copy()
+        # Character has used spell slots (using new spellcasting_meta format)
+        initial_used_slots = {k: v.used for k, v in test_character.spellcasting_meta.slots.items()}
         assert sum(initial_used_slots.values()) > 0
 
         command = RestCommand(character_id="hero", rest_type="long")
@@ -412,8 +423,8 @@ class TestRestCommandOrchestrator:
 
         assert result.all_successful is True
         # All spell slots should be restored
-        for level in initial_used_slots:
-            assert test_character.spellcasting.spell_slots_expended.get(level, 0) == 0
+        for slot_key in initial_used_slots:
+            assert test_character.spellcasting_meta.slots[slot_key].used == 0
 
     def test_long_rest_removes_temporary_effects(
         self, orchestrator, test_character, character_registry

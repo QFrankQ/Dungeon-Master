@@ -11,16 +11,22 @@ from typing import Dict, Optional
 from src.characters.charactersheet import Character
 from src.characters.character_components import (
     CharacterInfo,
+    CharacterClassEntry,
     AbilityScores,
+    AbilityScoreEntry,
     HitPoints,
     HitDice,
     DeathSaves,
     CombatStats,
     SavingThrows,
     Skills,
-    Spellcasting,
+    SpellcastingMeta,
+    SpellSlotLevel,
+    Speed,
+    SpeedEntry,
+    Senses,
 )
-from src.characters.dnd_enums import CharacterClass, DamageType
+from src.characters.dnd_enums import DamageType
 from src.memory.state_command_executor import (
     StateCommandExecutor,
     CommandExecutionResult,
@@ -40,31 +46,33 @@ from src.models.state_commands_optimized import (
 def minimal_character():
     """Create a minimal valid character for basic testing."""
     return Character(
+        character_id="test_warrior",
         info=CharacterInfo(
             name="Test Warrior",
-            player_name=None,
-            background=None,
-            alignment=None,
-            race=None,
-            classes=[CharacterClass.FIGHTER],
-            level=5,
-            experience_points=6500,
+            race="Human",
+            classes=[CharacterClassEntry(class_name="Fighter", level=5)],
+            total_level=5,
             proficiency_bonus=3,
         ),
         ability_scores=AbilityScores(
-            strength=16,
-            dexterity=14,
-            constitution=15,
-            intelligence=10,
-            wisdom=12,
-            charisma=8,
+            strength=AbilityScoreEntry(score=16),
+            dexterity=AbilityScoreEntry(score=14),
+            constitution=AbilityScoreEntry(score=15),
+            intelligence=AbilityScoreEntry(score=10),
+            wisdom=AbilityScoreEntry(score=12),
+            charisma=AbilityScoreEntry(score=8),
         ),
         saving_throws=SavingThrows(),
         skills=Skills(),
-        hit_points=HitPoints(maximum_hp=50, current_hp=50, temporary_hp=0),
-        hit_dice=HitDice(total=5, used=0),
-        death_saves=DeathSaves(),
-        combat_stats=CombatStats(armor_class=16, initiative_bonus=2, speed=30),
+        combat_stats=CombatStats(
+            armor_class=16,
+            initiative_bonus=2,
+            speed=Speed(walk=SpeedEntry(value=30)),
+            senses=Senses(),
+            hit_points=HitPoints(maximum=50, current=50, temporary=0),
+            hit_dice=HitDice(total=5, used=0),
+            death_saves=DeathSaves(),
+        ),
     )
 
 
@@ -72,41 +80,42 @@ def minimal_character():
 def spellcaster_character():
     """Create a character with spellcasting abilities."""
     return Character(
+        character_id="test_wizard",
         info=CharacterInfo(
             name="Test Wizard",
-            player_name=None,
-            background=None,
-            alignment=None,
-            race=None,
-            classes=[CharacterClass.WIZARD],
-            level=5,
-            experience_points=6500,
+            race="Human",
+            classes=[CharacterClassEntry(class_name="Wizard", level=5)],
+            total_level=5,
             proficiency_bonus=3,
         ),
         ability_scores=AbilityScores(
-            strength=8,
-            dexterity=14,
-            constitution=12,
-            intelligence=18,
-            wisdom=12,
-            charisma=10,
+            strength=AbilityScoreEntry(score=8),
+            dexterity=AbilityScoreEntry(score=14),
+            constitution=AbilityScoreEntry(score=12),
+            intelligence=AbilityScoreEntry(score=18),
+            wisdom=AbilityScoreEntry(score=12),
+            charisma=AbilityScoreEntry(score=10),
         ),
         saving_throws=SavingThrows(),
         skills=Skills(),
-        hit_points=HitPoints(maximum_hp=30, current_hp=30, temporary_hp=0),
-        hit_dice=HitDice(total=5, used=0),
-        death_saves=DeathSaves(),
-        combat_stats=CombatStats(armor_class=12, initiative_bonus=2, speed=30),
-        spellcasting=Spellcasting(
-            spellcasting_ability="intelligence",
-            spell_save_dc=15,
-            spell_attack_bonus=7,
-            spell_slots={
-                1: 4,
-                2: 3,
-                3: 2,
+        combat_stats=CombatStats(
+            armor_class=12,
+            initiative_bonus=2,
+            speed=Speed(walk=SpeedEntry(value=30)),
+            senses=Senses(),
+            hit_points=HitPoints(maximum=30, current=30, temporary=0),
+            hit_dice=HitDice(total=5, used=0, die_type="d6"),
+            death_saves=DeathSaves(),
+        ),
+        spellcasting_meta=SpellcastingMeta(
+            ability="intelligence",
+            save_dc=15,
+            attack_bonus=7,
+            slots={
+                "1st": SpellSlotLevel(total=4, used=0),
+                "2nd": SpellSlotLevel(total=3, used=0),
+                "3rd": SpellSlotLevel(total=2, used=0),
             },
-            spell_slots_expended={},
         ),
     )
 
@@ -298,7 +307,7 @@ class TestSpellSlotCommand:
 
     def test_use_spell_slot(self, executor, spellcaster_character):
         """Test using a spell slot."""
-        initial_remaining = spellcaster_character.spellcasting.get_remaining_slots(3)
+        initial_remaining = spellcaster_character.spellcasting_meta.get_remaining_slots(3)
 
         command = SpellSlotCommand(
             character_id="wizard",
@@ -310,15 +319,15 @@ class TestSpellSlotCommand:
         result = executor.execute_command(command)
 
         assert result.success is True
-        assert spellcaster_character.spellcasting.get_remaining_slots(3) == initial_remaining - 1
+        assert spellcaster_character.spellcasting_meta.get_remaining_slots(3) == initial_remaining - 1
         assert "Fireball" in result.message
         assert result.details["spell_name"] == "Fireball"
         assert result.details["level"] == 3
 
     def test_use_spell_slot_when_none_available(self, executor, spellcaster_character):
         """Test using spell slot when none are available."""
-        # Expend all level 3 slots
-        spellcaster_character.spellcasting.spell_slots_expended[3] = 2
+        # Expend all level 3 slots (use the new SpellSlotLevel format)
+        spellcaster_character.spellcasting_meta.slots["3rd"].used = 2
 
         command = SpellSlotCommand(
             character_id="wizard",
@@ -347,9 +356,9 @@ class TestSpellSlotCommand:
     def test_restore_spell_slot(self, executor, spellcaster_character):
         """Test restoring a spell slot."""
         # Use some slots first
-        spellcaster_character.spellcasting.use_spell_slot(2)
-        spellcaster_character.spellcasting.use_spell_slot(2)
-        initial_remaining = spellcaster_character.spellcasting.get_remaining_slots(2)
+        spellcaster_character.spellcasting_meta.use_spell_slot(2)
+        spellcaster_character.spellcasting_meta.use_spell_slot(2)
+        initial_remaining = spellcaster_character.spellcasting_meta.get_remaining_slots(2)
 
         command = SpellSlotCommand(
             character_id="wizard",
@@ -361,7 +370,7 @@ class TestSpellSlotCommand:
         result = executor.execute_command(command)
 
         assert result.success is True
-        assert spellcaster_character.spellcasting.get_remaining_slots(2) == initial_remaining + 1
+        assert spellcaster_character.spellcasting_meta.get_remaining_slots(2) == initial_remaining + 1
         assert result.details["actual_restored"] == 1
 
     def test_restore_when_all_slots_available(self, executor, spellcaster_character):
@@ -381,8 +390,8 @@ class TestSpellSlotCommand:
     def test_restore_more_than_expended(self, executor, spellcaster_character):
         """Test restoring more slots than expended only restores what was used."""
         # Use 1 slot
-        spellcaster_character.spellcasting.use_spell_slot(2)
-        initial_remaining = spellcaster_character.spellcasting.get_remaining_slots(2)
+        spellcaster_character.spellcasting_meta.use_spell_slot(2)
+        initial_remaining = spellcaster_character.spellcasting_meta.get_remaining_slots(2)
 
         command = SpellSlotCommand(
             character_id="wizard",
@@ -396,7 +405,7 @@ class TestSpellSlotCommand:
         assert result.success is True
         assert result.details["requested_count"] == 5
         assert result.details["actual_restored"] == 1
-        assert spellcaster_character.spellcasting.get_remaining_slots(2) == initial_remaining + 1
+        assert spellcaster_character.spellcasting_meta.get_remaining_slots(2) == initial_remaining + 1
 
     def test_invalid_spell_level(self, executor, spellcaster_character):
         """Test using spell slot at level character doesn't have."""
@@ -413,7 +422,7 @@ class TestSpellSlotCommand:
 
     def test_multiple_slot_usage(self, executor, spellcaster_character):
         """Test using multiple spell slots in sequence."""
-        initial_slots = spellcaster_character.spellcasting.get_remaining_slots(1)
+        initial_slots = spellcaster_character.spellcasting_meta.get_remaining_slots(1)
 
         commands = [
             SpellSlotCommand(character_id="wizard", action="use", level=1, spell_name="Magic Missile"),
@@ -423,7 +432,7 @@ class TestSpellSlotCommand:
         batch_result = executor.execute_batch(commands)
 
         assert batch_result.all_successful is True
-        assert spellcaster_character.spellcasting.get_remaining_slots(1) == initial_slots - 2
+        assert spellcaster_character.spellcasting_meta.get_remaining_slots(1) == initial_slots - 2
 
 
 # ==================== HitDiceCommand Tests ====================
@@ -627,7 +636,7 @@ class TestBatchExecution:
         batch_result = executor.execute_batch(commands)
 
         assert batch_result.all_successful is True
-        assert spellcaster_character.spellcasting.get_remaining_slots(3) == 1  # Used 1 of 2
-        assert minimal_character.hit_points.current_hp == 35  # 50 - 15 damage
-        assert spellcaster_character.hit_points.current_hp == 22  # 30 - 8 damage
-        assert minimal_character.hit_dice.used == 1
+        assert spellcaster_character.spellcasting_meta.get_remaining_slots(3) == 1  # Used 1 of 2
+        assert minimal_character.combat_stats.hit_points.current == 35  # 50 - 15 damage
+        assert spellcaster_character.combat_stats.hit_points.current == 22  # 30 - 8 damage
+        assert minimal_character.combat_stats.hit_dice.used == 1
