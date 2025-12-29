@@ -533,15 +533,16 @@ class TestFactoryFunction:
             rules_cache_service=mock_rules_cache_service
         )
 
-        # Verify tools list
-        assert len(tools) == 1
-        assert tools[0] == query_rules_database
+        # Verify tools list (query_rules_database + query_character_ability)
+        assert len(tools) == 2
+        assert query_rules_database in tools
 
         # Verify dependencies
         assert isinstance(deps, DMToolsDependencies)
         assert deps.lance_service == mock_lance_service
         assert deps.turn_manager == mock_turn_manager
         assert deps.rules_cache_service == mock_rules_cache_service
+        assert deps.state_manager is None  # Optional, not provided
 
 
 # ==================== Integration Tests ====================

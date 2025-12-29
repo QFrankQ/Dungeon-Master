@@ -1,13 +1,15 @@
 """DM Agent Tools - Tools for Dungeon Master agent to query rules and cache results.
 
-Provides tools for DM to query LanceDB for D&D rules and cache results in current turn.
+Provides tools for DM to query LanceDB for D&D rules and cache results in current turn,
+as well as query detailed character ability information.
 """
 
-from typing import Optional
+from typing import Optional, Literal
 from pydantic_ai import RunContext
 
 from ..db.lance_rules_service import LanceRulesService
 from ..memory.turn_manager import TurnManager
+from ..memory.state_manager import StateManager
 from ..services.rules_cache_service import RulesCacheService
 
 
@@ -19,11 +21,13 @@ class DMToolsDependencies:
         self,
         lance_service: LanceRulesService,
         turn_manager: TurnManager,
-        rules_cache_service: RulesCacheService
+        rules_cache_service: RulesCacheService,
+        state_manager: Optional[StateManager] = None
     ):
         self.lance_service = lance_service
         self.turn_manager = turn_manager
         self.rules_cache_service = rules_cache_service
+        self.state_manager = state_manager
 
 
 async def query_rules_database(
@@ -196,10 +200,160 @@ def _format_rule_for_dm(cache_entry: dict) -> str:
     return "\\n".join(lines)
 
 
+async def query_character_ability(
+    ctx: RunContext[DMToolsDependencies],
+    character_id: str,
+    section: Literal["summary", "attacks", "features", "spells", "equipment", "full"],
+    ability_name: Optional[str] = None
+) -> str:
+    """
+    Query character ability information with varying levels of detail.
+
+    Use this tool when you need information about a character's abilities,
+    spells, features, or equipment to validate player actions or adjudicate rules.
+
+    The compact character sheet in context shows names only. This tool provides:
+    - summary: Compact character sheet (same as context, useful for other characters)
+    - Detailed sections with full descriptions:
+      - Spell: casting time, range, components, duration, full description, at higher levels
+      - Feature: source, full description text
+      - Attack: attack bonus, damage, damage type, notes
+      - Equipment: quantity, weight, full description
+
+    Args:
+        ctx: PydanticAI RunContext with DMToolsDependencies
+        character_id: Character ID to query (e.g., "fighter", "wizard", "cleric")
+        section: Which section to query:
+            - "summary": Compact character sheet (stats and ability names only)
+            - "attacks": Detailed attack information
+            - "features": Detailed feature/trait descriptions
+            - "spells": Detailed spell information (casting time, range, etc.)
+            - "equipment": Detailed equipment with descriptions
+            - "full": Complete detailed character sheet
+        ability_name: Optional specific ability name to look up within the section
+                     (e.g., "Fireball" for spells, "Second Wind" for features)
+                     If not found, returns the full section as fallback.
+
+    Returns:
+        Formatted information string
+
+    Examples:
+        Get compact character sheet:
+        >>> await query_character_ability(ctx, "wizard", "summary")
+
+        Get all spell details:
+        >>> await query_character_ability(ctx, "wizard", "spells")
+
+        Get specific spell details:
+        >>> await query_character_ability(ctx, "wizard", "spells", "Fireball")
+
+        Get all feature details:
+        >>> await query_character_ability(ctx, "fighter", "features")
+
+        Get specific feature:
+        >>> await query_character_ability(ctx, "fighter", "features", "Second Wind")
+    """
+    state_manager = ctx.deps.state_manager
+
+    if not state_manager:
+        return "Error: State manager not available for character queries."
+
+    # Load character
+    character = state_manager.get_character(character_id)
+    if not character:
+        return f"Error: Character '{character_id}' not found."
+
+    # Route to appropriate method
+    if section == "summary":
+        return character.get_full_sheet()
+
+    elif section == "full":
+        return character.get_full_sheet_detailed()
+
+    elif section == "attacks":
+        if ability_name:
+            # Find specific attack
+            for attack in character.attacks_and_spellcasting:
+                if attack.name.lower() == ability_name.lower():
+                    lines = [f"▸ {attack.name}"]
+                    lines.append(f"  Attack Bonus: +{attack.attack_bonus}")
+                    lines.append(f"  Damage: {attack.damage} {attack.damage_type}")
+                    if attack.notes:
+                        lines.append(f"  Notes: {attack.notes}")
+                    return "\n".join(lines)
+            # Not found - return section as fallback
+            return f"Attack '{ability_name}' not found. Here are all attacks:\n\n{character.get_attacks_detailed()}"
+        return character.get_attacks_detailed()
+
+    elif section == "features":
+        if ability_name:
+            # Find specific feature
+            for feature in character.features_and_traits:
+                if feature.name.lower() == ability_name.lower():
+                    lines = [f"▸ {feature.name}"]
+                    if feature.source:
+                        lines.append(f"  Source: {feature.source}")
+                    if feature.description:
+                        lines.append(f"  {feature.description}")
+                    return "\n".join(lines)
+            # Not found - return section as fallback
+            return f"Feature '{ability_name}' not found. Here are all features:\n\n{character.get_features_detailed()}"
+        return character.get_features_detailed()
+
+    elif section == "spells":
+        if not character.spells:
+            return f"{character.info.name} has no spells."
+
+        if ability_name:
+            # Find specific spell across all levels
+            for level in range(0, 10):
+                for spell in character.spells.get_spells_at_level(level):
+                    if spell.name.lower() == ability_name.lower():
+                        level_label = "Cantrip" if level == 0 else f"Level {level}"
+                        lines = [f"▸ {spell.name} ({level_label})"]
+                        if spell.casting_time:
+                            lines.append(f"  Casting Time: {spell.casting_time}")
+                        if spell.range:
+                            lines.append(f"  Range: {spell.range}")
+                        if spell.target:
+                            lines.append(f"  Target: {spell.target}")
+                        if spell.components:
+                            lines.append(f"  Components: {spell.components}")
+                        if spell.duration:
+                            lines.append(f"  Duration: {spell.duration}")
+                        if spell.description:
+                            lines.append(f"  Description: {spell.description}")
+                        if spell.at_higher_levels:
+                            lines.append(f"  At Higher Levels: {spell.at_higher_levels}")
+                        return "\n".join(lines)
+            # Not found - return section as fallback
+            return f"Spell '{ability_name}' not found. Here are all spells:\n\n{character.get_spells_detailed()}"
+        return character.get_spells_detailed()
+
+    elif section == "equipment":
+        if ability_name:
+            # Find specific equipment item
+            for item in character.equipment:
+                if item.name.lower() == ability_name.lower():
+                    qty = f" (×{item.quantity})" if item.quantity > 1 else ""
+                    weight = f" [{item.weight_lbs} lb]" if item.weight_lbs > 0 else ""
+                    lines = [f"▸ {item.name}{qty}{weight}"]
+                    if item.description:
+                        lines.append(f"  {item.description}")
+                    return "\n".join(lines)
+            # Not found - return section as fallback
+            return f"Equipment '{ability_name}' not found. Here is all equipment:\n\n{character.get_equipment_detailed()}"
+        return character.get_equipment_detailed()
+
+    else:
+        return f"Unknown section: '{section}'. Use 'summary', 'attacks', 'features', 'spells', 'equipment', or 'full'."
+
+
 def create_dm_tools(
     lance_service: LanceRulesService,
     turn_manager: TurnManager,
-    rules_cache_service: RulesCacheService
+    rules_cache_service: RulesCacheService,
+    state_manager: Optional[StateManager] = None
 ) -> tuple[list, DMToolsDependencies]:
     """
     Factory function to create DM tools and their dependencies.
@@ -208,6 +362,7 @@ def create_dm_tools(
         lance_service: LanceDB service for rule queries
         turn_manager: Turn manager for getting current turn
         rules_cache_service: Cache service for storing results
+        state_manager: Optional StateManager for character ability queries
 
     Returns:
         Tuple of (tool_list, dependencies) where:
@@ -215,15 +370,16 @@ def create_dm_tools(
         - dependencies: DMToolsDependencies instance to pass to agent.run()
 
     Usage:
-        tools, deps = create_dm_tools(lance_service, turn_manager, cache_service)
+        tools, deps = create_dm_tools(lance_service, turn_manager, cache_service, state_manager)
         dm_agent = create_dungeon_master_agent(tools=tools)
         result = await dm_agent.process_message(context, deps=deps)
     """
-    tools = [query_rules_database]
+    tools = [query_rules_database, query_character_ability]
     dependencies = DMToolsDependencies(
         lance_service=lance_service,
         turn_manager=turn_manager,
-        rules_cache_service=rules_cache_service
+        rules_cache_service=rules_cache_service,
+        state_manager=state_manager
     )
 
     return tools, dependencies
