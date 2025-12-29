@@ -161,7 +161,10 @@ class StateCommandOrchestrator:
                 # Calculate healing: hit_dice_spent × (hit die average + CON modifier)
                 # Note: Actual healing should be rolled, but we'll use average
                 # Calculate CON modifier: (score - 10) // 2
-                con_modifier = (character.ability_scores.constitution - 10) // 2
+                # Support both old (int) and new (AbilityScoreEntry) format
+                con_entry = character.ability_scores.constitution
+                con_score = con_entry.score if hasattr(con_entry, 'score') else con_entry
+                con_modifier = (con_score - 10) // 2
                 # Assume d10 hit die (Fighter default) - ideally would use character.hit_dice.die_type
                 hit_die_faces = 10  # Default assumption
                 hit_die_average = (hit_die_faces // 2) + 1
@@ -178,34 +181,35 @@ class StateCommandOrchestrator:
             # LONG REST: Full heal
             # Heal by maximum HP (executor will cap at actual max)
             # This ensures full heal regardless of command execution order
+            # Use backward compat property or new structure
+            max_hp = character.combat_stats.hit_points.maximum
             commands.append(HPChangeCommand(
                 character_id=char_id,
-                change=character.hit_points.maximum_hp,
+                change=max_hp,
                 change_type="heal"
             ))
 
             # Restore hit dice (regain half of spent hit dice, minimum 1)
-            hit_dice_spent_count = character.hit_dice.used
+            hit_dice_spent_count = character.combat_stats.hit_dice.used
             if hit_dice_spent_count > 0:
                 commands.append(HitDiceCommand(
                     character_id=char_id,
                     action="restore"
                 ))
 
-            # Restore all spell slots
-            if character.spellcasting:
-                for level in range(1, 10):
-                    slots_total = character.spellcasting.spell_slots.get(level, 0)
-                    if slots_total > 0:
-                        slots_used = character.spellcasting.spell_slots_expended.get(level, 0)
-                        if slots_used > 0:
-                            # Restore this spell level - restore ALL expended slots
-                            commands.append(SpellSlotCommand(
-                                character_id=char_id,
-                                level=level,
-                                action="restore",
-                                count=slots_used  # Restore all expended slots at this level
-                            ))
+            # Restore all spell slots (use new spellcasting_meta format)
+            if character.spellcasting_meta and character.spellcasting_meta.slots:
+                for slot_key, slot in character.spellcasting_meta.slots.items():
+                    if slot.total > 0 and slot.used > 0:
+                        # Convert slot key ("1st", "2nd", etc.) to level int
+                        level = character.spellcasting_meta._key_to_level(slot_key)
+                        # Restore this spell level - restore ALL expended slots
+                        commands.append(SpellSlotCommand(
+                            character_id=char_id,
+                            level=level,
+                            action="restore",
+                            count=slot.used  # Restore all expended slots at this level
+                        ))
 
             # Remove all non-permanent effects
             for effect in character.active_effects:
