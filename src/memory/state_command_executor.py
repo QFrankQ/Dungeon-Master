@@ -508,8 +508,8 @@ class StateCommandExecutor:
 
     def _handle_spell_slot(self, command: SpellSlotCommand, character: Character) -> CommandExecutionResult:
         """Handle spell slot use/restore commands."""
-        # Check if character has spellcasting
-        if character.spellcasting is None:
+        # Check if character has spellcasting (new format: spellcasting_meta)
+        if character.spellcasting_meta is None:
             return CommandExecutionResult(
                 success=False,
                 command_type=command.type,
@@ -519,10 +519,14 @@ class StateCommandExecutor:
 
         level = command.level
         action = command.action
-        spellcasting = character.spellcasting
+        spellcasting = character.spellcasting_meta
+
+        # Get the slot key for the new format
+        slot_key = spellcasting._level_to_key(level)
+        slot = spellcasting.slots.get(slot_key)
 
         # Check if character has spell slots at this level
-        total_slots = spellcasting.spell_slots.get(level, 0)
+        total_slots = slot.total if slot else 0
         if total_slots == 0:
             return CommandExecutionResult(
                 success=False,
@@ -570,7 +574,7 @@ class StateCommandExecutor:
         elif action == "restore":
             # Restore spell slots (partial restoration)
             count = command.count
-            expended_before = spellcasting.spell_slots_expended.get(level, 0)
+            expended_before = slot.used if slot else 0
 
             if expended_before == 0:
                 return CommandExecutionResult(
@@ -587,15 +591,7 @@ class StateCommandExecutor:
 
             # Restore count slots, but don't restore more than expended
             actual_restored = min(count, expended_before)
-            new_expended = expended_before - actual_restored
-
-            # Update the expended count
-            if new_expended == 0:
-                # Fully restored at this level, remove from dict
-                if level in spellcasting.spell_slots_expended:
-                    del spellcasting.spell_slots_expended[level]
-            else:
-                spellcasting.spell_slots_expended[level] = new_expended
+            slot.used = max(0, slot.used - actual_restored)
 
             remaining_after = spellcasting.get_remaining_slots(level)
 
@@ -716,13 +712,163 @@ class StateCommandExecutor:
 
     def _handle_item(self, command: ItemCommand, character: Character) -> CommandExecutionResult:
         """Handle item use/add/remove commands."""
-        # TODO: Implement item handling
-        return CommandExecutionResult(
-            success=False,
-            command_type=command.type,
-            character_id=command.character_id,
-            message="Item handler not yet implemented"
+        from ..characters.character_components import EquipmentItem
+
+        item_name = command.item_name
+        action = command.action
+        quantity = command.quantity
+
+        # Find existing item by name (case-insensitive)
+        existing_item = next(
+            (item for item in character.equipment if item.name.lower() == item_name.lower()),
+            None
         )
+
+        if action == "add":
+            if existing_item:
+                # Increase quantity of existing item
+                old_quantity = existing_item.quantity
+                existing_item.quantity += quantity
+
+                return CommandExecutionResult(
+                    success=True,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Added {quantity} {item_name} (now have {existing_item.quantity})",
+                    details={
+                        "item_name": item_name,
+                        "action": "add",
+                        "quantity_added": quantity,
+                        "previous_quantity": old_quantity,
+                        "new_quantity": existing_item.quantity
+                    }
+                )
+            else:
+                # Create new item
+                new_item = EquipmentItem(name=item_name, quantity=quantity)
+                character.equipment.append(new_item)
+
+                return CommandExecutionResult(
+                    success=True,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Added {quantity} {item_name} to inventory",
+                    details={
+                        "item_name": item_name,
+                        "action": "add",
+                        "quantity_added": quantity,
+                        "new_quantity": quantity
+                    }
+                )
+
+        elif action == "remove":
+            if not existing_item:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Item '{item_name}' not found in inventory",
+                    details={
+                        "item_name": item_name,
+                        "action": "remove",
+                        "inventory_items": [item.name for item in character.equipment]
+                    }
+                )
+
+            old_quantity = existing_item.quantity
+            if quantity >= old_quantity:
+                # Remove the item entirely
+                character.equipment.remove(existing_item)
+                return CommandExecutionResult(
+                    success=True,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Removed all {item_name} from inventory ({old_quantity} removed)",
+                    details={
+                        "item_name": item_name,
+                        "action": "remove",
+                        "quantity_removed": old_quantity,
+                        "previous_quantity": old_quantity,
+                        "new_quantity": 0
+                    }
+                )
+            else:
+                # Decrease quantity
+                existing_item.quantity -= quantity
+                return CommandExecutionResult(
+                    success=True,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Removed {quantity} {item_name} ({existing_item.quantity} remaining)",
+                    details={
+                        "item_name": item_name,
+                        "action": "remove",
+                        "quantity_removed": quantity,
+                        "previous_quantity": old_quantity,
+                        "new_quantity": existing_item.quantity
+                    }
+                )
+
+        elif action == "use":
+            if not existing_item:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Item '{item_name}' not found in inventory",
+                    details={
+                        "item_name": item_name,
+                        "action": "use",
+                        "inventory_items": [item.name for item in character.equipment]
+                    }
+                )
+
+            old_quantity = existing_item.quantity
+            if old_quantity < quantity:
+                return CommandExecutionResult(
+                    success=False,
+                    command_type=command.type,
+                    character_id=command.character_id,
+                    message=f"Not enough {item_name} (have {old_quantity}, need {quantity})",
+                    details={
+                        "item_name": item_name,
+                        "action": "use",
+                        "available": old_quantity,
+                        "requested": quantity
+                    }
+                )
+
+            # Use item (consume it)
+            if old_quantity == quantity:
+                # Remove the item entirely
+                character.equipment.remove(existing_item)
+                remaining = 0
+            else:
+                existing_item.quantity -= quantity
+                remaining = existing_item.quantity
+
+            return CommandExecutionResult(
+                success=True,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Used {quantity} {item_name}" + (f" ({remaining} remaining)" if remaining > 0 else " (none remaining)"),
+                details={
+                    "item_name": item_name,
+                    "action": "use",
+                    "quantity_used": quantity,
+                    "previous_quantity": old_quantity,
+                    "new_quantity": remaining
+                }
+            )
+
+        else:
+            # This should never happen due to Literal type, but include for safety
+            return CommandExecutionResult(
+                success=False,
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Invalid action '{action}' (must be 'use', 'add', or 'remove')"
+            )
 
     def _handle_death_save(self, command: DeathSaveCommand, character: Character) -> CommandExecutionResult:
         """Handle death save recording commands."""
