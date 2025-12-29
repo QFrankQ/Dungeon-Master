@@ -2,76 +2,226 @@
   "character_id": "fighter",
   "info": {
     "name": "Tharion Stormwind",
-    "player_name": "Player",
+    "alignment": "Lawful Good",
+    "race": "Human (Variant)",
     "background": "Soldier",
-    "alignment": "lawful_good",
-    "race": "human",
     "classes": [
-      "fighter"
+      {
+        "class_name": "Fighter",
+        "subclass": "Champion",
+        "level": 5
+      }
     ],
-    "level": 5,
-    "experience_points": 6500,
+    "total_level": 5,
     "proficiency_bonus": 3,
-    "inspiration": false,
-    "passive_perception": null
+    "experience_points": 6500,
+    "inspiration": false
   },
   "ability_scores": {
-    "strength": 18,
-    "dexterity": 14,
-    "constitution": 16,
-    "intelligence": 10,
-    "wisdom": 12,
-    "charisma": 8
+    "strength": { "score": 18, "modifier": 4 },
+    "dexterity": { "score": 14, "modifier": 2 },
+    "constitution": { "score": 16, "modifier": 3 },
+    "intelligence": { "score": 10, "modifier": 0 },
+    "wisdom": { "score": 12, "modifier": 1 },
+    "charisma": { "score": 8, "modifier": -1 }
   },
   "saving_throws": {
-    "strength": true,
-    "dexterity": false,
-    "constitution": true,
-    "intelligence": false,
-    "wisdom": false,
-    "charisma": false
+    "strength": { "proficient": true, "expertise": false, "additional_bonuses": 0 },
+    "dexterity": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "constitution": { "proficient": true, "expertise": false, "additional_bonuses": 0 },
+    "intelligence": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "wisdom": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "charisma": { "proficient": false, "expertise": false, "additional_bonuses": 0 }
   },
   "skills": {
-    "acrobatics": false,
-    "animal_handling": false,
-    "arcana": false,
-    "athletics": true,
-    "deception": false,
-    "history": false,
-    "insight": false,
-    "intimidation": true,
-    "investigation": false,
-    "medicine": false,
-    "nature": false,
-    "perception": true,
-    "performance": false,
-    "persuasion": false,
-    "religion": false,
-    "sleight_of_hand": false,
-    "stealth": false,
-    "survival": false
-  },
-  "hit_points": {
-    "maximum_hp": 44,
-    "current_hp": 44,
-    "temporary_hp": 0
-  },
-  "hit_dice": {
-    "total": 5,
-    "used": 0,
-    "die_type": "d10"
-  },
-  "death_saves": {
-    "successes": 0,
-    "failures": 0
+    "acrobatics": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "animal_handling": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "arcana": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "athletics": { "proficient": true, "expertise": false, "additional_bonuses": 0 },
+    "deception": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "history": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "insight": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "intimidation": { "proficient": true, "expertise": false, "additional_bonuses": 0 },
+    "investigation": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "medicine": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "nature": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "perception": { "proficient": true, "expertise": false, "additional_bonuses": 0 },
+    "performance": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "persuasion": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "religion": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "sleight_of_hand": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "stealth": { "proficient": false, "expertise": false, "additional_bonuses": 0 },
+    "survival": { "proficient": true, "expertise": false, "additional_bonuses": 0 }
   },
   "combat_stats": {
     "armor_class": 18,
     "initiative_bonus": 2,
-    "speed": 30
+    "speed": {
+      "walk": { "value": 30, "unit": "ft" }
+    },
+    "hit_points": {
+      "maximum": 49,
+      "current": 49,
+      "temporary": 0
+    },
+    "hit_dice": {
+      "total": 5,
+      "used": 0,
+      "die_type": "d10"
+    },
+    "death_saves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "senses": {
+      "passive_perception": 14,
+      "passive_insight": 11,
+      "passive_investigation": 10
+    }
   },
-  "proficiencies": null,
-  "features": null,
-  "spellcasting": null,
+  "attacks_and_spellcasting": [
+    {
+      "name": "Longsword",
+      "attack_bonus": 7,
+      "damage": "1d8 + 4",
+      "damage_type": "Slashing",
+      "notes": "Versatile (1d10). Can be wielded one or two-handed."
+    },
+    {
+      "name": "Longsword (Two-Handed)",
+      "attack_bonus": 7,
+      "damage": "1d10 + 4",
+      "damage_type": "Slashing",
+      "notes": "Versatile weapon used with two hands."
+    },
+    {
+      "name": "Handaxe",
+      "attack_bonus": 7,
+      "damage": "1d6 + 4",
+      "damage_type": "Slashing",
+      "notes": "Light, Thrown (range 20/60). Carries 2."
+    },
+    {
+      "name": "Longbow",
+      "attack_bonus": 5,
+      "damage": "1d8 + 2",
+      "damage_type": "Piercing",
+      "notes": "Ammunition, Heavy, Range (150/600), Two-Handed"
+    }
+  ],
+  "features_and_traits": [
+    {
+      "name": "Fighting Style: Defense",
+      "source": "Fighter Lvl 1",
+      "description": "While you are wearing armor, you gain a +1 bonus to AC. (Already included in AC calculation)"
+    },
+    {
+      "name": "Second Wind",
+      "source": "Fighter Lvl 1",
+      "description": "You have a limited well of stamina that you can draw on to protect yourself from harm. On your turn, you can use a bonus action to regain hit points equal to 1d10 + your fighter level. Once you use this feature, you must finish a short or long rest before you can use it again."
+    },
+    {
+      "name": "Action Surge",
+      "source": "Fighter Lvl 2",
+      "description": "Starting at 2nd level, you can push yourself beyond your normal limits for a moment. On your turn, you can take one additional action. Once you use this feature, you must finish a short or long rest before you can use it again."
+    },
+    {
+      "name": "Improved Critical",
+      "source": "Fighter Lvl 3 (Champion)",
+      "description": "Beginning when you choose this archetype at 3rd level, your weapon attacks score a critical hit on a roll of 19 or 20."
+    },
+    {
+      "name": "Extra Attack",
+      "source": "Fighter Lvl 5",
+      "description": "Beginning at 5th level, you can attack twice, instead of once, whenever you take the Attack action on your turn."
+    },
+    {
+      "name": "Great Weapon Master",
+      "source": "Feat (Variant Human)",
+      "description": "On your turn, when you score a critical hit with a melee weapon or reduce a creature to 0 hit points with one, you can make one melee weapon attack as a bonus action. Before you make a melee attack with a heavy weapon that you are proficient with, you can choose to take a -5 penalty to the attack roll. If the attack hits, you add +10 to the attack's damage."
+    },
+    {
+      "name": "Military Rank",
+      "source": "Soldier Background",
+      "description": "You have a military rank from your career as a soldier. Soldiers loyal to your former military organization still recognize your authority and influence, and they defer to you if they are of a lower rank."
+    }
+  ],
+  "equipment": [
+    {
+      "name": "Longsword",
+      "quantity": 1,
+      "weight_lbs": 3.0,
+      "description": "A well-balanced blade with the crest of the Stormwind regiment etched into the crossguard."
+    },
+    {
+      "name": "Shield",
+      "quantity": 1,
+      "weight_lbs": 6.0,
+      "description": "A sturdy wooden shield reinforced with iron bands, bearing battle scars from countless engagements."
+    },
+    {
+      "name": "Chain Mail",
+      "quantity": 1,
+      "weight_lbs": 55.0,
+      "description": "Heavy armor made of interlocking metal rings, issued during military service."
+    },
+    {
+      "name": "Handaxe",
+      "quantity": 2,
+      "weight_lbs": 2.0,
+      "description": "Light throwing axes kept on the belt for ranged options."
+    },
+    {
+      "name": "Longbow",
+      "quantity": 1,
+      "weight_lbs": 2.0,
+      "description": "A recurve longbow for hunting and ranged combat."
+    },
+    {
+      "name": "Arrows",
+      "quantity": 20,
+      "weight_lbs": 0.05,
+      "description": "Standard arrows in a leather quiver."
+    },
+    {
+      "name": "Explorer's Pack",
+      "quantity": 1,
+      "weight_lbs": 59.0,
+      "description": "Contains a bedroll, mess kit, tinderbox, torches, rations, and waterskin."
+    },
+    {
+      "name": "Military Insignia",
+      "quantity": 1,
+      "weight_lbs": 0.0,
+      "description": "A bronze medallion marking rank as a Sergeant in the King's Guard."
+    },
+    {
+      "name": "Potion of Healing",
+      "quantity": 2,
+      "weight_lbs": 0.5,
+      "description": "Heals 2d4+2 hit points when consumed."
+    },
+    {
+      "name": "Rope (Hemp)",
+      "quantity": 1,
+      "weight_lbs": 10.0,
+      "description": "50 feet of sturdy hemp rope."
+    }
+  ],
+  "coins": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 35,
+    "pp": 0
+  },
+  "spellcasting_meta": null,
+  "spells": null,
+  "languages_and_proficiencies": {
+    "languages": ["Common", "Orc"],
+    "armor": ["Light Armor", "Medium Armor", "Heavy Armor", "Shields"],
+    "weapons": ["Simple Weapons", "Martial Weapons"],
+    "tools": ["Playing Card Set", "Vehicles (Land)"]
+  },
   "active_effects": []
 }
