@@ -208,6 +208,99 @@ class CharacterCommands(commands.Cog):
 
         await interaction.response.send_message(char_sheet, ephemeral=True)
 
+    @app_commands.command(name="character-detailed", description="View your character's full detailed sheet")
+    async def show_character_detailed(self, interaction: discord.Interaction):
+        """Show detailed character sheet with full descriptions (handles Discord message limits)."""
+        session_context, error = self._get_session_or_error(interaction)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        session_manager = session_context.session_manager
+        player_id = str(interaction.user.id)
+
+        # Get character ID from registry
+        character_id = session_manager.player_character_registry.get_character_id_by_player_id(player_id)
+
+        if not character_id:
+            await interaction.response.send_message(
+                f"⚠️ No character registered for you.\n"
+                f"Use `/register <character_id>` to link a character.\n"
+                f"Available characters: fighter, wizard, cleric",
+                ephemeral=True
+            )
+            return
+
+        # Load character from state manager
+        character = session_manager.state_manager.get_character(character_id)
+
+        if not character:
+            await interaction.response.send_message(
+                f"❌ Character '{character_id}' not found",
+                ephemeral=True
+            )
+            return
+
+        # Get the full detailed sheet
+        detailed_sheet = character.get_full_sheet_detailed()
+
+        # Split into chunks respecting Discord's 2000 char limit
+        # Leave room for code block formatting (```\n...\n```)
+        max_chunk_size = 1900
+        chunks = self._split_into_chunks(detailed_sheet, max_chunk_size)
+
+        # Send first message as response
+        first_chunk = f"**🧙 {character.info.name} - Detailed Sheet**\n\n```\n{chunks[0]}\n```"
+        await interaction.response.send_message(first_chunk, ephemeral=True)
+
+        # Send remaining chunks as followups
+        for i, chunk in enumerate(chunks[1:], start=2):
+            followup_msg = f"```\n{chunk}\n```"
+            await interaction.followup.send(followup_msg, ephemeral=True)
+
+    def _split_into_chunks(self, text: str, max_size: int) -> list:
+        """
+        Split text into chunks that fit within Discord's message limit.
+        Tries to split on section boundaries (double newlines) for cleaner output.
+        """
+        if len(text) <= max_size:
+            return [text]
+
+        chunks = []
+        current_chunk = ""
+
+        # Split by sections (double newlines) first
+        sections = text.split("\n\n")
+
+        for section in sections:
+            # If adding this section would exceed limit
+            if len(current_chunk) + len(section) + 2 > max_size:
+                # Save current chunk if not empty
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = ""
+
+                # If single section is too long, split by lines
+                if len(section) > max_size:
+                    lines = section.split("\n")
+                    for line in lines:
+                        if len(current_chunk) + len(line) + 1 > max_size:
+                            if current_chunk:
+                                chunks.append(current_chunk.strip())
+                            current_chunk = line + "\n"
+                        else:
+                            current_chunk += line + "\n"
+                else:
+                    current_chunk = section + "\n\n"
+            else:
+                current_chunk += section + "\n\n"
+
+        # Don't forget the last chunk
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+
+        return chunks if chunks else [text[:max_size]]
+
     @app_commands.command(name="register", description="Register or switch to a character")
     @app_commands.describe(character_id="Character ID (use /who to see available characters)")
     async def register_character(self, interaction: discord.Interaction, character_id: str):
