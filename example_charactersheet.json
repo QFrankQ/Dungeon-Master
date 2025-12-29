@@ -1,0 +1,183 @@
+{
+  "character_id": "valerius_thorne",
+  "info": {
+    "name": "Valerius \"The Ghost\" Thorne",
+    "alignment": "Neutral",
+    "race": "Half-Elf",
+    "background": "Urchin",
+    "classes": [
+      {
+        "class_name": "Rogue",
+        "subclass": "Soulknife",
+        "level": 4
+      },
+      {
+        "class_name": "Fighter",
+        "subclass": "Echo Knight",
+        "level": 3
+      }
+    ],
+    "total_level": 7,
+    "proficiency_bonus": 3,
+    "experience_points": 23500,
+    "inspiration": true
+  },
+  "ability_scores": {
+    "strength": { "score": 10, "modifier": 0 },
+    "dexterity": { "score": 18, "modifier": 4 },
+    "constitution": { "score": 14, "modifier": 2 },
+    "intelligence": { "score": 12, "modifier": 1 },
+    "wisdom": { "score": 10, "modifier": 0 },
+    "charisma": { "score": 14, "modifier": 2 }
+  },
+  "saving_throws": {
+    "strength": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 1 },
+    "dexterity": { "proficient": true, "expertise": false, "additional_bonuses": 1, "total_bonus": 8 },
+    "constitution": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 3 },
+    "intelligence": { "proficient": true, "expertise": false, "additional_bonuses": 1, "total_bonus": 5 },
+    "wisdom": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 1 },
+    "charisma": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 3 }
+  },
+  "skills": {
+    "acrobatics": { "proficient": true, "expertise": false, "additional_bonuses": 1, "total_bonus": 8 },
+    "animal_handling": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 1 },
+    "arcana": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 2 },
+    "athletics": { "proficient": true, "expertise": false, "additional_bonuses": 1, "total_bonus": 4 },
+    "deception": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 3 },
+    "history": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 2 },
+    "insight": { "proficient": true, "expertise": false, "additional_bonuses": 1, "total_bonus": 4 },
+    "intimidation": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 3 },
+    "investigation": { "proficient": true, "expertise": false, "additional_bonuses": 1, "total_bonus": 5 },
+    "medicine": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 1 },
+    "nature": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 2 },
+    "perception": { "proficient": true, "expertise": false, "additional_bonuses": 1, "total_bonus": 4 },
+    "performance": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 3 },
+    "persuasion": { "proficient": true, "expertise": false, "additional_bonuses": 1, "total_bonus": 6 },
+    "religion": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 2 },
+    "sleight_of_hand": { "proficient": true, "expertise": true, "additional_bonuses": 1, "total_bonus": 11 },
+    "stealth": { "proficient": true, "expertise": true, "additional_bonuses": 1, "total_bonus": 11 },
+    "survival": { "proficient": false, "expertise": false, "additional_bonuses": 1, "total_bonus": 1 }
+  },
+  "combat_stats": {
+    "armor_class": 16,
+    "initiative_bonus": 5,
+    "speed": {
+      "walk": { "value": 30, "unit": "ft" },
+      "climb": { "value": 30, "unit": "ft" }
+    },
+    "hit_points": {
+      "maximum": 55,
+      "current": 42,
+      "temporary": 5
+    },
+    "hit_dice": {
+      "total": 7,
+      "used": 2,
+      "die_type": "4d8, 3d10"
+    },
+    "death_saves": {
+      "successes": 0,
+      "failures": 0
+    },
+    "senses": {
+      "darkvision": 60,
+      "passive_perception": 14,
+      "passive_insight": 14,
+      "passive_investigation": 15
+    }
+  },
+  "attacks_and_spellcasting": [
+    {
+      "name": "Psychic Blade",
+      "attack_bonus": 7,
+      "damage": "1d6 + 4",
+      "damage_type": "Psychic",
+      "notes": "If the attack misses, you can roll one Psionic Energy die and add the number rolled to the attack roll, potentially causing the attack to hit."
+    },
+    {
+      "name": "Rapier +1",
+      "attack_bonus": 8,
+      "damage": "1d8 + 5",
+      "damage_type": "Piercing",
+      "notes": "Standard melee weapon."
+    }
+  ],
+  "features_and_traits": [
+    {
+      "name": "Sneak Attack",
+      "source": "Rogue Lvl 1",
+      "description": "Beginning at 1st level, you know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal an extra 2d6 damage to one creature you hit with an attack if you have advantage on the attack roll. The attack must use a finesse or a ranged weapon. You don't need advantage on the attack roll if another enemy of the target is within 5 feet of it, that enemy isn't incapacitated, and you don't have disadvantage on the attack roll."
+    },
+    {
+      "name": "Manifest Echo",
+      "source": "Fighter Lvl 3 (Echo Knight)",
+      "description": "You can use a bonus action to magically manifest an echo of yourself in an unoccupied space you can see within 15 feet of you. This echo is a magical, translucent, gray image of you that lasts until it is destroyed, until you dismiss it as a bonus action, until you manifest another echo, or until you're incapacitated. Your echo has AC 14 + your proficiency bonus, 1 hit point, and immunity to all conditions. If it has to make a saving throw, it uses your saving throw bonus for the roll. It is the same size as you, and it occupies its space. On your turn, you can mentally command the echo to move up to 30 feet in any direction (no action required). If your echo is ever more than 30 feet from you at the end of your turn, it is destroyed."
+    },
+    {
+      "name": "Cunning Action",
+      "source": "Rogue Lvl 2",
+      "description": "Starting at 2nd level, your quick thinking and agility allow you to move and act quickly. You can take a bonus action on each of your turns in combat. This action can be used only to take the Dash, Disengage, or Hide action."
+    }
+  ],
+  "equipment": [
+    {
+      "name": "Stone of Good Luck (Luckstone)",
+      "quantity": 1,
+      "weight_lbs": 0.0,
+      "description": "While this polished agate is on your person, you gain a +1 bonus to ability checks and saving throws."
+    },
+    {
+      "name": "Studded Leather Armor",
+      "quantity": 1,
+      "weight_lbs": 13.0,
+      "description": "Made from tough but flexible leather, studded leather is reinforced with close-set rivets or spikes."
+    }
+  ],
+  "coins": {
+    "cp": 10,
+    "sp": 5,
+    "ep": 0,
+    "gp": 125,
+    "pp": 0
+  },
+  "spellcasting_meta": {
+    "ability": "Charisma",
+    "save_dc": 13,
+    "attack_bonus": 5,
+    "slots": {
+      "1st": { "total": 0, "used": 0 }
+    }
+  },
+  "spells": {
+    "cantrips": [
+      {
+        "name": "Booming Blade",
+        "casting_time": "1 action",
+        "range": "Self (5-foot radius)",
+        "target": "Self",
+        "components": "S, M (a melee weapon worth at least 1 sp)",
+        "duration": "1 round",
+        "description": "You brandish the weapon used in the spell’s casting and make a melee attack with it against one creature within 5 feet of you. On a hit, the target suffers the weapon attack’s normal effects and then becomes sheathed in booming energy until the start of your next turn. If the target willingly moves 5 feet or more before then, the target takes 1d8 thunder damage, and the spell ends.",
+        "at_higher_levels": "At 5th level, the melee attack deals an extra 1d8 thunder damage to the target on a hit, and the damage the target takes for moving increases to 2d8. Both damage rolls increase by 1d8 at 11th level (2d8 and 3d8) and 17th level (3d8 and 4d8)."
+      }
+    ],
+    "level_1": [
+      {
+        "name": "Shield",
+        "casting_time": "1 reaction, which you take when you are hit by an attack or targeted by the magic missile spell",
+        "range": "Self",
+        "target": "Self",
+        "components": "V, S",
+        "duration": "1 round",
+        "description": "An invisible barrier of magical force appears and protects you. Until the start of your next turn, you have a +5 bonus to AC, including against the triggering attack, and you take no damage from magic missile.",
+        "at_higher_levels": "N/A"
+      }
+    ]
+  },
+  "languages_and_proficiencies": {
+    "languages": ["Common", "Elvish", "Thieves' Cant"],
+    "armor": ["Light Armor", "Medium Armor", "Shields"],
+    "weapons": ["Simple Weapons", "Martial Weapons"],
+    "tools": ["Thieves' Tools", "Playing Card Set"]
+  }
+}

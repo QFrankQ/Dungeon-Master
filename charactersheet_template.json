@@ -1,0 +1,151 @@
+{
+  "info": {
+    "name": "string",
+    "player_name": "string",
+    "alignment": "string",
+    "race": "string",
+    "background": "string",
+    "classes": [
+      {
+        "class_name": "string",
+        "subclass": "string",
+        "level": 0
+      }
+    ],
+    "total_level": 0,
+    "proficiency_bonus": 0,
+    "experience_points": 0,
+    "inspiration": false
+  },
+  "ability_scores": {
+    "strength": { "score": 10, "modifier": 0 },
+    "dexterity": { "score": 10, "modifier": 0 },
+    "constitution": { "score": 10, "modifier": 0 },
+    "intelligence": { "score": 10, "modifier": 0 },
+    "wisdom": { "score": 10, "modifier": 0 },
+    "charisma": { "score": 10, "modifier": 0 }
+  },
+  "saving_throws": {
+    "strength": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "dexterity": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "constitution": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "intelligence": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "wisdom": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "charisma": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 }
+  },
+  "skills": {
+    "acrobatics": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "animal_handling": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "arcana": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "athletics": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "deception": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "history": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "insight": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "intimidation": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "investigation": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "medicine": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "nature": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "perception": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "performance": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "persuasion": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "religion": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "sleight_of_hand": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "stealth": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 },
+    "survival": { "proficient": false, "expertise": false, "additional_bonuses": 0, "total_bonus": 0 }
+  },
+  "combat_stats": {
+    "armor_class": 10,
+    "initiative_bonus": 0,
+    "speed": { "value": 30, "unit": "ft" },
+    "hit_points": { "maximum": 0, "current": 0, "temporary": 0 },
+    "hit_dice": { "total": 0, "used": 0, "die_type": "dX" },
+    "death_saves": { "successes": 0, "failures": 0 },
+    "senses": { "passive_perception": 10, "passive_insight": 10, "passive_investigation": 10 }
+  },
+  "attacks_and_spellcasting": [
+    {
+      "name": "string",
+      "attack_bonus": 0,
+      "damage": "string",
+      "damage_type": "string",
+      "notes": "string"
+    }
+  ],
+  "features_and_traits": [
+    {
+      "name": "string",
+      "source": "string",
+      "description": "string"
+    }
+  ],
+  "equipment": [
+    {
+      "name": "string",
+      "quantity": 1,
+      "weight_lbs": 0.0,
+      "description": "string"
+    }
+  ],
+  "coins": {
+    "cp": 0,
+    "sp": 0,
+    "ep": 0,
+    "gp": 0,
+    "pp": 0
+  },
+  "spellcasting_meta": {
+    "ability": "string",
+    "save_dc": 0,
+    "attack_bonus": 0,
+    "slots": {
+      "1st": { "total": 0, "used": 0 },
+      "2nd": { "total": 0, "used": 0 },
+      "3rd": { "total": 0, "used": 0 },
+      "4th": { "total": 0, "used": 0 },
+      "5th": { "total": 0, "used": 0 },
+      "6th": { "total": 0, "used": 0 },
+      "7th": { "total": 0, "used": 0 },
+      "8th": { "total": 0, "used": 0 },
+      "9th": { "total": 0, "used": 0 }
+    }
+  },
+  "spells": {
+    "cantrips": [
+      {
+        "name": "string",
+        "casting_time": "string",
+        "range": "string",
+        "target": "string",
+        "components": "string",
+        "duration": "string",
+        "description": "string"
+      }
+    ],
+    "level_1": [],
+    "level_2": [],
+    "level_3": [],
+    "level_4": [],
+    "level_5": [],
+    "level_6": [],
+    "level_7": [],
+    "level_8": [],
+    "level_9": [
+      {
+        "name": "string",
+        "casting_time": "string",
+        "range": "string",
+        "target": "string",
+        "components": "string",
+        "duration": "string",
+        "description": "string",
+        "at_higher_levels": "string"
+      }
+    ]
+  },
+  "languages_and_proficiencies": {
+    "languages": [],
+    "armor": [],
+    "weapons": [],
+    "tools": []
+  }
+}
