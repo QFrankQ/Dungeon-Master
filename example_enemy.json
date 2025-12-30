@@ -1,0 +1,236 @@
+{
+  "name": "JSON Template Golem",
+  "meta": {
+    "size": "Medium",
+    "type": "construct",
+    "alignment": "True Neutral"
+  },
+  "attributes": {
+    "strength": {
+      "score": 18,
+      "modifier": 4
+    },
+    "dexterity": {
+      "score": 8,
+      "modifier": -1
+    },
+    "constitution": {
+      "score": 20,
+      "modifier": 5
+    },
+    "intelligence": {
+      "score": 16,
+      "modifier": 3
+    },
+    "wisdom": {
+      "score": 12,
+      "modifier": 1
+    },
+    "charisma": {
+      "score": 1,
+      "modifier": -5
+    }
+  },
+  "stats": {
+    "armor_class": {
+      "value": 17,
+      "type": "Natural Armor"
+    },
+    "hit_points": {
+      "average": 133,
+      "formula": "14d8 + 70"
+    },
+    "speed": {
+      "walk": {
+        "value": 30,
+        "unit": "ft"
+      },
+      "fly": {
+        "value": 0,
+        "unit": "ft"
+      },
+      "swim": {
+        "value": 20,
+        "unit": "ft"
+      },
+      "climb": {
+        "value": 20,
+        "unit": "ft"
+      },
+      "burrow": {
+        "value": 0,
+        "unit": "ft"
+      }
+    },
+    "saving_throws": {
+      "strength": 9,
+      "dexterity": -1,
+      "constitution": 10,
+      "intelligence": 3,
+      "wisdom": 1,
+      "charisma": -5
+    },
+    "skills": {
+      "acrobatics": -1,
+      "animal_handling": 1,
+      "arcana": 8,
+      "athletics": 9,
+      "deception": -5,
+      "history": 8,
+      "insight": 1,
+      "intimidation": -5,
+      "investigation": 3,
+      "medicine": 1,
+      "nature": 3,
+      "perception": 6,
+      "performance": -5,
+      "persuasion": -5,
+      "religion": 3,
+      "sleight_of_hand": -1,
+      "stealth": -1,
+      "survival": 1
+    },
+    "damage_vulnerabilities": [
+      "thunder"
+    ],
+    "damage_resistances": [
+      "bludgeoning",
+      "piercing"
+    ],
+    "damage_immunities": [
+      "poison",
+      "psychic"
+    ],
+    "condition_immunities": [
+      "charmed",
+      "exhaustion",
+      "frightened",
+      "paralyzed",
+      "petrified",
+      "poisoned"
+    ],
+    "senses": {
+      "darkvision": 120,
+      "blindsight": 30,
+      "truesight": 0,
+      "tremorsense": 0,
+      "passive_perception": 16
+    },
+    "languages": [
+      "understands all languages but can't speak"
+    ],
+    "challenge": {
+      "rating": "10",
+      "xp": 5900
+    },
+    "proficiency_bonus": 5
+  },
+  "special_traits": [
+    {
+      "name": "Immutable Form",
+      "description": "The golem is immune to any spell or effect that would alter its form."
+    },
+    {
+      "name": "Magic Resistance",
+      "description": "The golem has advantage on saving throws against spells and other magical effects."
+    },
+    {
+      "name": "Innate Spellcasting",
+      "description": "The golem's innate spellcasting ability is Intelligence (spell save DC 16). It can innately cast the following spells, requiring no material components:",
+      "spellcasting": {
+        "at_will": [
+          "detect magic",
+          "message"
+        ],
+        "per_day": {
+          "3": [
+            "dispel magic",
+            "sending"
+          ],
+          "1": [
+            "arcane lock",
+            "globe of invulnerability"
+          ]
+        }
+      }
+    }
+  ],
+  "actions": [
+    {
+      "name": "Multiattack",
+      "description": "The golem makes two slam attacks."
+    },
+    {
+      "name": "Slam",
+      "type": "Melee Weapon Attack",
+      "attack_bonus": 9,
+      "reach": {
+        "value": 5,
+        "unit": "ft"
+      },
+      "target": "one target",
+      "damage": {
+        "average": 17,
+        "formula": "3d8 + 4",
+        "type": "bludgeoning"
+      }
+    },
+    {
+      "name": "Data Shard",
+      "type": "Ranged Spell Attack",
+      "attack_bonus": 8,
+      "range": {
+        "normal": 60,
+        "long": 120,
+        "unit": "ft"
+      },
+      "target": "one target",
+      "damage": {
+        "average": 21,
+        "formula": "4d8 + 3",
+        "type": "force"
+      },
+      "description": "On a hit, the target's speed is reduced by 10 feet until the end of its next turn."
+    }
+  ],
+  "reactions": [
+    {
+      "name": "Redirect Data Flow",
+      "description": "When the golem is targeted by a spell that requires a ranged attack roll, it can use its reaction to force the attacker to reroll the attack against another creature of the golem's choice within 30 feet."
+    }
+  ],
+  "legendary_actions": {
+    "uses": 3,
+    "description": "The golem can take 3 legendary actions, choosing from the options below. Only one legendary action option can be used at a time and only at the end of another creature's turn. The golem regains spent legendary actions at the start of its turn.",
+    "actions": [
+      {
+        "name": "Detect",
+        "cost": 1,
+        "description": "The golem makes a Wisdom (Perception) check."
+      },
+      {
+        "name": "Repair (Costs 2 Actions)",
+        "cost": 2,
+        "description": "The golem regains 10 (1d10 + 5) hit points."
+      },
+      {
+        "name": "Syntax Error (Costs 3 Actions)",
+        "cost": 3,
+        "description": "The golem targets one creature it can see within 60 feet. The target must succeed on a DC 16 Wisdom saving throw or use its reaction to make a melee attack against one of its allies."
+      }
+    ]
+  },
+  "mythic_actions": {
+    "trigger": "If the golem is a Mythic creature and is reduced to 0 hit points, it doesn't die or fall unconscious. Instead, its core reboots, it regains all its hit points, and it can now use Mythic Actions.",
+    "actions": [
+      {
+        "name": "Hard Reboot",
+        "description": "(Immediately after the trigger) The golem ends one spell effect on itself and can move up to its speed without provoking opportunity attacks."
+      },
+      {
+        "name": "Overclock",
+        "description": "(At the end of its turn) The golem makes one Slam attack. This attack has advantage."
+      }
+    ]
+  }
+}

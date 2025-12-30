@@ -1,0 +1,158 @@
+{
+  "name": "string",
+  "meta": {
+    "size": "string",
+    "type": "string",
+    "alignment": "string"
+  },
+  "attributes": {
+    "strength": {
+      "score": 0,
+      "modifier": 0
+    },
+    "dexterity": {
+      "score": 0,
+      "modifier": 0
+    },
+    "constitution": {
+      "score": 0,
+      "modifier": 0
+    },
+    "intelligence": {
+      "score": 0,
+      "modifier": 0
+    },
+    "wisdom": {
+      "score": 0,
+      "modifier": 0
+    },
+    "charisma": {
+      "score": 0,
+      "modifier": 0
+    }
+  },
+  "stats": {
+    "armor_class": {
+      "value": 0,
+      "type": "string"
+    },
+    "hit_points": {
+      "average": 0,
+      "formula": "xdY + Z"
+    },
+    "speed": {
+      "walk": {
+        "value": 0,
+        "unit": "ft"
+      },
+      "fly": {
+        "value": 0,
+        "unit": "ft"
+      },
+      "swim": {
+        "value": 0,
+        "unit": "ft"
+      },
+      "climb": {
+        "value": 0,
+        "unit": "ft"
+      },
+      "burrow": {
+        "value": 0,
+        "unit": "ft"
+      }
+    },
+    "saving_throws": {
+      "strength": 0,
+      "dexterity": 0,
+      "constitution": 0,
+      "intelligence": 0,
+      "wisdom": 0,
+      "charisma": 0
+    },
+    "skills": {
+      "acrobatics": 0,
+      "animal_handling": 0,
+      "arcana": 0,
+      "athletics": 0,
+      "deception": 0,
+      "history": 0,
+      "insight": 0,
+      "intimidation": 0,
+      "investigation": 0,
+      "medicine": 0,
+      "nature": 0,
+      "perception": 0,
+      "performance": 0,
+      "persuasion": 0,
+      "religion": 0,
+      "sleight_of_hand": 0,
+      "stealth": 0,
+      "survival": 0
+    },
+    "damage_vulnerabilities": [],
+    "damage_resistances": [],
+    "damage_immunities": [],
+    "condition_immunities": [],
+    "senses": {
+      "darkvision": 0,
+      "blindsight": 0,
+      "truesight": 0,
+      "tremorsense": 0,
+      "passive_perception": 0
+    },
+    "languages": [],
+    "challenge": {
+      "rating": "string",
+      "xp": 0
+    },
+    "proficiency_bonus": 0
+  },
+  "special_traits": [
+    {
+      "name": "string",
+      "description": "string"
+    }
+  ],
+  "actions": [
+    {
+      "name": "string",
+      "description": "string",
+      "attack_bonus": 0,
+      "damage": {
+        "formula": "xdY + Z",
+        "type": "string"
+      },
+      "range": {
+        "normal": 0,
+        "long": 0,
+        "unit": "ft"
+      }
+    }
+  ],
+  "reactions": [
+    {
+      "name": "string",
+      "description": "string"
+    }
+  ],
+  "legendary_actions": {
+    "uses": 0,
+    "actions": [
+      {
+        "name": "string",
+        "cost": 0,
+        "description": "string"
+      }
+    ]
+  },
+  "mythic_actions": {
+    "trigger": "string",
+    "actions": [
+      {
+        "name": "string",
+        "description": "string"
+      }
+    ]
+  }
+}
