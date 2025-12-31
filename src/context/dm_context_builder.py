@@ -6,10 +6,12 @@ with both live messages and completed subturn results. Preserves nested structur
 and chronological order for optimal DM narrative generation.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 from ..memory.turn_manager import TurnManagerSnapshot
 from ..models.turn_context import TurnContext
+from ..characters.monster import Monster
+from ..characters.charactersheet import Character
 
 
 
@@ -75,11 +77,11 @@ class DMContextBuilder:
         context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level))
         context_parts.extend("</current_turn>")
 
-        # Add character sheet for active character (for capability validation)
+        # Add character/monster sheet for active character (for capability validation)
         if self.state_manager and turn_manager_snapshots.active_turns_by_level:
             current_turn = turn_manager_snapshots.active_turns_by_level[-1]
             if current_turn.active_character:
-                character = self.state_manager.get_character(current_turn.active_character)
+                character = self.state_manager.get_character_by_id(current_turn.active_character)
                 if character:
                     context_parts.append("<character_sheet>")
                     context_parts.append(self._format_character_sheet(character))
@@ -162,21 +164,25 @@ class DMContextBuilder:
 
         return "\n".join(context_parts)
 
-    def _format_character_sheet(self, character) -> str:
+    def _format_character_sheet(self, character: Union[Character, Monster]) -> str:
         """
-        Format character sheet information for DM context.
+        Format character or monster sheet information for DM context.
 
-        Uses Character's compact get_full_sheet() method which provides essential
+        For Characters: Uses compact get_full_sheet() method which provides essential
         stats and ability names without full descriptions. This is token-efficient
         for routine context. The DM can use query_character_ability tool to get
         detailed descriptions for specific features, spells, or equipment when needed.
 
+        For Monsters: Uses get_full_statblock() for complete monster statblock format.
+
         Args:
-            character: Character object from state_manager
+            character: Character or Monster object from state_manager
 
         Returns:
-            Formatted character sheet string (compact version)
+            Formatted sheet string (compact version for characters, full statblock for monsters)
         """
+        if isinstance(character, Monster):
+            return character.get_full_statblock()
         return character.get_full_sheet()
 
     #TODO: this should be generated directly from Character
@@ -285,11 +291,11 @@ class DMContextBuilder:
         context_parts.append("</current_turn>")
         context_parts.append("")
 
-        # Add character sheet for active character (enables DM to validate capabilities)
+        # Add character/monster sheet for active character (enables DM to validate capabilities)
         if self.state_manager and turn_manager_snapshots.active_turns_by_level:
             current_turn = turn_manager_snapshots.active_turns_by_level[-1]
             if current_turn.active_character:
-                character = self.state_manager.get_character(current_turn.active_character)
+                character = self.state_manager.get_character_by_id(current_turn.active_character)
                 if character:
                     context_parts.append("<character_sheet>")
                     context_parts.append(self._format_character_sheet(character))
