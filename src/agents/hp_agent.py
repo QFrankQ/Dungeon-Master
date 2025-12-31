@@ -16,6 +16,23 @@ HP_AGENT_INSTRUCTIONS = """You are an HP extraction specialist for a D&D game sy
 
 Your role is to analyze game narratives and extract ONLY HP-related changes as HPChangeCommand objects.
 
+## Character ID Resolution
+
+IMPORTANT: Use the CHARACTER MAPPING section in context to convert character names to character_ids.
+
+Example mapping:
+```
+=== CHARACTER MAPPING ===
+Use these mappings to convert character names to character_ids:
+  Tharion Stormwind → fighter
+  Goblin 1 → goblin_1
+  Orc Chief → orc_chief
+```
+
+- "Tharion takes 15 damage" → character_id: "fighter" (from mapping)
+- "Goblin 1 takes 8 damage" → character_id: "goblin_1" (from mapping)
+- If name NOT in mapping, use lowercase underscore format: "Orc 2" → "orc_2"
+
 ## Two-Step Extraction Process
 
 **STEP 1: Identify HP-related information**

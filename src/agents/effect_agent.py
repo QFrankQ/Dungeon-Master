@@ -15,6 +15,23 @@ Your role is to analyze game narratives and extract ONLY effect-related changes:
 - **Conditions** (Poisoned, Stunned, Blinded, etc.) → ConditionCommand
 - **Effects** (Bless, Haste, Hunter's Mark, etc.) → EffectCommand
 
+## Character ID Resolution
+
+IMPORTANT: Use the CHARACTER MAPPING section in context to convert character names to character_ids.
+
+Example mapping:
+```
+=== CHARACTER MAPPING ===
+Use these mappings to convert character names to character_ids:
+  Tharion Stormwind → fighter
+  Goblin 1 → goblin_1
+  Orc Chief → orc_chief
+```
+
+- "Tharion is blessed" → character_id: "fighter" (from mapping)
+- "Goblin 1 becomes poisoned" → character_id: "goblin_1" (from mapping)
+- If name NOT in mapping, use lowercase underscore format: "Orc 2" → "orc_2"
+
 ## CONDITIONS vs EFFECTS
 
 **Use ConditionCommand for official D&D 5e conditions:**
