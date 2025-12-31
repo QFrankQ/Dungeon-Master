@@ -486,6 +486,264 @@ class TestMonsterStateCommandExecutor:
         assert result.success is True
         assert goblin.hit_points.temporary == 5
 
+    def test_condition_add_command_on_monster(self, executor, goblin):
+        """Test adding a condition to a monster."""
+        from src.models.state_commands_optimized import ConditionCommand
+        from src.characters.dnd_enums import Condition
+
+        command = ConditionCommand(
+            character_id="goblin_1",
+            condition=Condition.POISONED,
+            action="add",
+            duration_type=DurationType.ROUNDS,
+            duration=3
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is True
+        assert "Poisoned" in goblin.conditions
+        assert "Added condition" in result.message
+
+    def test_condition_remove_command_on_monster(self, executor, goblin):
+        """Test removing a condition from a monster."""
+        from src.models.state_commands_optimized import ConditionCommand
+        from src.characters.dnd_enums import Condition
+
+        # First add the condition
+        goblin.add_effect(Effect(
+            name="Poisoned",
+            effect_type="condition",
+            duration_type=DurationType.ROUNDS,
+            duration_remaining=3,
+            source="Test"
+        ))
+
+        command = ConditionCommand(
+            character_id="goblin_1",
+            condition=Condition.POISONED,
+            action="remove"
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is True
+        assert "Poisoned" not in goblin.conditions
+        assert "Removed condition" in result.message
+
+    def test_effect_add_command_on_monster(self, executor, orc_chief):
+        """Test adding a spell effect to a monster."""
+        from src.models.state_commands_optimized import EffectCommand
+
+        command = EffectCommand(
+            character_id="orc_chief",
+            effect_name="Bless",
+            action="add",
+            duration_type=DurationType.CONCENTRATION,
+            duration=10,
+            effect_type="buff",
+            description="+1d4 to attack rolls and saving throws",
+            summary="+1d4 attacks/saves"
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is True
+        assert any(e.name == "Bless" for e in orc_chief.active_effects)
+        assert "Added buff" in result.message
+
+    def test_effect_remove_command_on_monster(self, executor, orc_chief):
+        """Test removing an effect from a monster."""
+        from src.models.state_commands_optimized import EffectCommand
+
+        # First add the effect
+        orc_chief.add_effect(Effect(
+            name="Hex",
+            effect_type="debuff",
+            duration_type=DurationType.CONCENTRATION,
+            duration_remaining=10,
+            source="Warlock"
+        ))
+
+        command = EffectCommand(
+            character_id="orc_chief",
+            effect_name="Hex",
+            action="remove"
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is True
+        assert not any(e.name == "Hex" for e in orc_chief.active_effects)
+        assert "Removed effect" in result.message
+
+    def test_batch_execution_on_monsters(self, executor, goblin, orc_chief):
+        """Test executing multiple commands on different monsters."""
+        commands = [
+            HPChangeCommand(character_id="goblin_1", change=-3),
+            HPChangeCommand(character_id="orc_chief", change=-10),
+            HPChangeCommand(character_id="goblin_1", change=2),
+        ]
+
+        batch_result = executor.execute_batch(commands)
+
+        assert batch_result.total_commands == 3
+        assert batch_result.successful == 3
+        assert batch_result.failed == 0
+        assert batch_result.all_successful is True
+        assert goblin.hit_points.current == 7 - 3 + 2  # 6
+        assert orc_chief.hit_points.current == 45 - 10  # 35
+
+    def test_command_on_nonexistent_monster(self, executor):
+        """Test command on nonexistent monster fails gracefully."""
+        command = HPChangeCommand(
+            character_id="nonexistent_monster",
+            change=-10
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is False
+        assert "not found" in result.message
+
+    def test_batch_with_mixed_success_failure(self, executor, goblin):
+        """Test batch execution with some failures."""
+        commands = [
+            HPChangeCommand(character_id="goblin_1", change=-3),  # Success
+            HPChangeCommand(character_id="nonexistent", change=-5),  # Fail
+            HPChangeCommand(character_id="goblin_1", change=1),  # Success
+        ]
+
+        batch_result = executor.execute_batch(commands)
+
+        assert batch_result.total_commands == 3
+        assert batch_result.successful == 2
+        assert batch_result.failed == 1
+        assert batch_result.all_successful is False
+        assert len(batch_result.get_failures()) == 1
+        assert len(batch_result.get_successes()) == 2
+
+    def test_damage_with_temp_hp_on_monster(self, executor, orc_chief):
+        """Test damage absorbed by temp HP on monster."""
+        # Give temp HP first
+        orc_chief.add_temporary_hp(10)
+        initial_hp = orc_chief.hit_points.current
+
+        command = HPChangeCommand(
+            character_id="orc_chief",
+            change=-15,
+            damage_type=DamageType.FIRE
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is True
+        assert orc_chief.hit_points.temporary == 0  # Temp HP consumed
+        assert orc_chief.hit_points.current == initial_hp - 5  # 15 - 10 temp = 5 actual
+        assert "temp HP" in result.message
+
+    def test_healing_caps_at_max_on_monster(self, executor, goblin):
+        """Test healing doesn't exceed max HP on monster."""
+        goblin.take_damage(3)  # 7 -> 4
+        assert goblin.hit_points.current == 4
+
+        command = HPChangeCommand(
+            character_id="goblin_1",
+            change=10  # More than missing HP
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is True
+        assert goblin.hit_points.current == 7  # Capped at max
+        assert result.details["actual_healing"] == 3
+
+    def test_lethal_damage_on_monster(self, executor, goblin):
+        """Test damage that reduces monster to 0 HP."""
+        command = HPChangeCommand(
+            character_id="goblin_1",
+            change=-100,
+            damage_type=DamageType.BLUDGEONING
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is True
+        assert goblin.hit_points.current == 0
+        assert goblin.hit_points.is_unconscious is True
+        assert "Unconscious" in goblin.conditions
+
+    def test_multiple_conditions_on_monster(self, executor, orc_chief):
+        """Test adding multiple conditions to a monster."""
+        from src.models.state_commands_optimized import ConditionCommand
+        from src.characters.dnd_enums import Condition
+
+        commands = [
+            ConditionCommand(
+                character_id="orc_chief",
+                condition=Condition.POISONED,
+                action="add",
+                duration_type=DurationType.ROUNDS,
+                duration=5
+            ),
+            ConditionCommand(
+                character_id="orc_chief",
+                condition=Condition.FRIGHTENED,
+                action="add",
+                duration_type=DurationType.ROUNDS,
+                duration=3
+            ),
+        ]
+
+        batch_result = executor.execute_batch(commands)
+
+        assert batch_result.all_successful is True
+        assert "Poisoned" in orc_chief.conditions
+        assert "Frightened" in orc_chief.conditions
+
+    def test_condition_already_exists_fails(self, executor, goblin):
+        """Test adding condition that already exists fails."""
+        from src.models.state_commands_optimized import ConditionCommand
+        from src.characters.dnd_enums import Condition
+
+        # Add condition first
+        goblin.add_effect(Effect(
+            name="Stunned",
+            effect_type="condition",
+            duration_type=DurationType.ROUNDS,
+            duration_remaining=1,
+            source="Test"
+        ))
+
+        command = ConditionCommand(
+            character_id="goblin_1",
+            condition=Condition.STUNNED,
+            action="add",
+            duration_type=DurationType.ROUNDS,
+            duration=2
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is False
+        assert "already active" in result.message
+
+    def test_remove_nonexistent_condition_fails(self, executor, goblin):
+        """Test removing condition that doesn't exist fails."""
+        from src.models.state_commands_optimized import ConditionCommand
+        from src.characters.dnd_enums import Condition
+
+        command = ConditionCommand(
+            character_id="goblin_1",
+            condition=Condition.PARALYZED,
+            action="remove"
+        )
+
+        result = executor.execute_command(command)
+
+        assert result.success is False
+        assert "not found" in result.message
+
 
 # ==================== StateManager Monster Support Tests ====================
 
