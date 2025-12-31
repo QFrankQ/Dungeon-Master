@@ -263,15 +263,16 @@ class SessionManager:
                 #     - UPDATE game state if required
                 self.turn_manager.set_next_step_objective(gameflow_director_response.next_game_step_objectives)
                 if gameflow_director_response.game_state_updates_required:
-                    #TODO: build relevant context
                     current_TurnContext_snapshot = self.turn_manager.get_snapshot().turn_stack[-1][0]
+                    # Get character name→ID mapping for state extraction
+                    character_map = self.state_manager.get_character_name_to_id_map()
                     state_extractor_context = self.state_extractor_context_builder.build_context(
                         current_turn=current_TurnContext_snapshot,
+                        character_map=character_map
                     )
                     # Use orchestrator to extract commands
                     state_commands = await self.state_extraction_orchestrator.extract_state_changes(
                         formatted_turn_context=state_extractor_context,
-                        # TODO: game_context TBD
                         game_context={
                             "turn_id": current_TurnContext_snapshot.turn_id,
                             "turn_level": current_TurnContext_snapshot.turn_level,
@@ -493,9 +494,11 @@ class SessionManager:
 
             response_queue.append("[Resolution step detected - extracting state changes...]\n")
 
-            # Build state extraction context
+            # Build state extraction context with character name→ID mapping
+            character_map = self.state_manager.get_character_name_to_id_map()
             state_context = self.state_extractor_context_builder.build_context(
-                current_turn=current_turn
+                current_turn=current_turn,
+                character_map=character_map
             )
 
             # Extract state changes
