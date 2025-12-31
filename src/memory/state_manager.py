@@ -1,22 +1,25 @@
 """
-State Manager - Character Persistence Layer
+State Manager - Character and Monster Persistence Layer
 
-This class handles character storage and persistence:
+This class handles character and monster storage and persistence:
 - load_character(): Load character from JSON file
 - save_character(): Save character to JSON file
 - get_character(): Get character with caching
+- Monster management: add_monster, remove_monster, get_monster, clear_monsters
+- get_character_by_id(): Unified lookup for both characters and monsters
 
 All state updates are handled by StateCommandExecutor.
 See state_command_executor.py for update logic.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 import json
 import os
 from datetime import datetime
 
 from ..models.state_commands_optimized import StateCommandResult
 from ..characters.charactersheet import Character
+from ..characters.monster import Monster
 from .state_command_executor import StateCommandExecutor, BatchExecutionResult
 
 
@@ -27,19 +30,20 @@ class StateUpdateError(Exception):
 
 class StateManager:
     """
-    Character Persistence and Storage Manager.
+    Character and Monster Persistence and Storage Manager.
 
-    This class provides character storage, loading, and saving functionality.
-    It delegates state updates to StateCommandExecutor while maintaining
-    character data, caching, and audit trails.
+    This class provides storage, loading, and saving functionality for both
+    player characters and monsters. It delegates state updates to StateCommandExecutor
+    while maintaining data, caching, and audit trails.
 
     Key responsibilities:
     - Load/save character JSON files
-    - Cache characters in memory
+    - Cache characters and monsters in memory
     - Coordinate with StateCommandExecutor for state updates
+    - Provide unified character lookup for duck typing compatibility
     - Provide audit logging for state changes
     """
-    
+
     def __init__(self, character_data_path: str = "src/characters/", enable_logging: bool = True):
         """
         Initialize the state manager.
@@ -51,11 +55,12 @@ class StateManager:
         self.character_data_path = character_data_path
         self.enable_logging = enable_logging
         self.characters: Dict[str, Character] = {}
+        self.monsters: Dict[str, Monster] = {}  # Combat monsters (runtime only)
         self.update_log: List[Dict[str, Any]] = []
 
-        # Initialize command executor with character lookup function
+        # Initialize command executor with unified character lookup
         self.command_executor = StateCommandExecutor(
-            character_lookup=self._get_character_for_executor
+            character_lookup=self.get_character_by_id
         )
 
         # Ensure directories exist
@@ -109,12 +114,25 @@ class StateManager:
         
         return False
     
-    def _get_character_for_executor(self, character_id: str) -> Optional[Character]:
+    def get_character_by_id(self, character_id: str) -> Optional[Union[Character, Monster]]:
         """
-        Character lookup function for StateCommandExecutor.
+        Unified lookup for any character (player character or monster).
 
-        Loads character from storage if not in memory.
+        Used by StateCommandExecutor for duck typing compatibility.
+        Checks monsters first (runtime entities), then player characters.
+        Loads player character from storage if not in memory.
+
+        Args:
+            character_id: ID of the character to look up
+
+        Returns:
+            Character or Monster instance, or None if not found
         """
+        # Check monsters first (runtime entities)
+        if character_id in self.monsters:
+            return self.monsters[character_id]
+
+        # Then check player characters (load from storage if needed)
         if character_id not in self.characters:
             self.load_character(character_id)
         return self.characters.get(character_id)
@@ -217,18 +235,232 @@ class StateManager:
                 pass  # Don't fail on logging errors
     
     def get_character(self, character_id: str) -> Optional[Character]:
-        """Get a character by ID, loading if necessary."""
-        if character_id not in self.characters:
-            return self.load_character(character_id)
-        return self.characters[character_id]
+        """
+        Get a player character by ID, loading if necessary.
+
+        Delegates to get_character_by_id() but filters to only return
+        Character instances (not Monster). Use get_character_by_id()
+        for unified lookup of both types.
+
+        Args:
+            character_id: ID of the player character to get
+
+        Returns:
+            Character instance or None if not found or if ID refers to a monster
+        """
+        result = self.get_character_by_id(character_id)
+        if isinstance(result, Character):
+            return result
+        return None
     
     def get_update_stats(self) -> Dict[str, Any]:
         """Get statistics about state updates."""
         return {
             "total_updates": len(self.update_log),
             "characters_in_memory": len(self.characters),
+            "monsters_in_combat": len(self.monsters),
             "recent_errors": len([log for log in self.update_log if log.get("results", {}).get("errors")])
         }
+
+    # ==================== Monster Management ====================
+
+    def add_monster(self, monster: Monster) -> None:
+        """
+        Add a monster to combat.
+
+        Args:
+            monster: Monster instance to add
+        """
+        self.monsters[monster.character_id] = monster
+
+    def remove_monster(self, character_id: str) -> bool:
+        """
+        Remove a monster from combat.
+
+        Args:
+            character_id: ID of the monster to remove
+
+        Returns:
+            True if monster was found and removed, False otherwise
+        """
+        if character_id in self.monsters:
+            del self.monsters[character_id]
+            return True
+        return False
+
+    def get_monster(self, character_id: str) -> Optional[Monster]:
+        """
+        Get a monster by ID.
+
+        Args:
+            character_id: ID of the monster
+
+        Returns:
+            Monster instance or None if not found
+        """
+        return self.monsters.get(character_id)
+
+    def get_all_monsters(self) -> List[Monster]:
+        """
+        Get all active monsters.
+
+        Returns:
+            List of all Monster instances currently in combat
+        """
+        return list(self.monsters.values())
+
+    def clear_monsters(self) -> None:
+        """Clear all monsters (typically at end of combat)."""
+        self.monsters.clear()
+
+    def get_character_name_to_id_map(self) -> Dict[str, str]:
+        """
+        Get name → character_id mapping for all characters (players and monsters).
+
+        Used by state extraction agents to resolve character names
+        from narrative text to character IDs.
+
+        Returns:
+            Dictionary mapping display names to character IDs
+        """
+        mapping = {}
+
+        # Add player characters
+        for char_id, char in self.characters.items():
+            if char.info and char.info.name:
+                mapping[char.info.name] = char_id
+
+        # Add monsters
+        for monster_id, monster in self.monsters.items():
+            mapping[monster.name] = monster_id
+
+        return mapping
+
+    def _transform_monster_template(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Transform JSON template format to Monster model format.
+
+        Handles the structural differences between example_enemy.json format and
+        Monster class expectations, including:
+        - Moving stats.* fields to top level
+        - Consolidating damage modifiers into damage_modifiers dict
+        - Converting special_traits to MonsterSpecialTrait format
+
+        Args:
+            data: Raw JSON template data
+
+        Returns:
+            Transformed data ready for Monster.model_validate()
+        """
+        from ..characters.monster_components import MonsterSpecialTrait
+
+        result = {}
+
+        # Copy top-level fields directly
+        for key in ['name', 'meta', 'attributes', 'special_traits', 'actions',
+                    'reactions', 'legendary_actions', 'mythic_actions']:
+            if key in data:
+                result[key] = data[key]
+
+        # Handle stats block - move fields to top level
+        if 'stats' in data:
+            stats = data['stats']
+
+            # Direct mappings from stats to top level
+            for key in ['armor_class', 'hit_points', 'speed', 'saving_throws',
+                        'skills', 'senses', 'languages', 'challenge', 'proficiency_bonus']:
+                if key in stats:
+                    result[key] = stats[key]
+
+            # Consolidate damage modifiers into damage_modifiers dict
+            damage_mods = {}
+            if 'damage_vulnerabilities' in stats:
+                damage_mods['vulnerabilities'] = stats['damage_vulnerabilities']
+            if 'damage_resistances' in stats:
+                damage_mods['resistances'] = stats['damage_resistances']
+            if 'damage_immunities' in stats:
+                damage_mods['immunities'] = stats['damage_immunities']
+            if 'condition_immunities' in stats:
+                damage_mods['condition_immunities'] = stats['condition_immunities']
+
+            if damage_mods:
+                result['damage_modifiers'] = damage_mods
+
+        # Convert special_traits to MonsterSpecialTrait format (preserves extra fields)
+        if 'special_traits' in result:
+            result['special_traits'] = [
+                MonsterSpecialTrait.from_dict(trait).model_dump()
+                for trait in result['special_traits']
+            ]
+
+        return result
+
+    def create_monster_from_template(
+        self,
+        template_path: str,
+        character_id: str,
+        name: Optional[str] = None
+    ) -> Optional[Monster]:
+        """
+        Create a monster from a JSON template file.
+
+        Handles JSON templates in example_enemy.json format with nested stats block.
+
+        Args:
+            template_path: Path to monster template JSON file
+            character_id: Unique ID for this monster instance
+            name: Optional display name (defaults to template name)
+
+        Returns:
+            Monster instance or None if template loading failed
+        """
+        try:
+            with open(template_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # Transform template format to Monster model format
+            transformed = self._transform_monster_template(data)
+
+            # Set the character_id
+            transformed['character_id'] = character_id
+
+            # Override name if provided
+            if name:
+                transformed['name'] = name
+
+            monster = Monster.model_validate(transformed)
+            self.add_monster(monster)
+            return monster
+
+        except Exception as e:
+            self._log_error(f"Failed to create monster from template {template_path}: {e}")
+            return None
+
+    def create_monster_group(
+        self,
+        template_path: str,
+        count: int,
+        prefix: str
+    ) -> List[Monster]:
+        """
+        Create multiple monsters from the same template.
+
+        Args:
+            template_path: Path to monster template JSON file
+            count: Number of monsters to create
+            prefix: Prefix for character_id and name (e.g., "goblin" -> "goblin_1", "Goblin 1")
+
+        Returns:
+            List of created Monster instances
+        """
+        monsters = []
+        for i in range(1, count + 1):
+            character_id = f"{prefix}_{i}"
+            name = f"{prefix.replace('_', ' ').title()} {i}"
+            monster = self.create_monster_from_template(template_path, character_id, name)
+            if monster:
+                monsters.append(monster)
+        return monsters
 
 
 def create_state_manager(character_data_path: str = "src/characters/") -> StateManager:
