@@ -184,6 +184,64 @@ class MonsterReaction(BaseModel):
     description: str
 
 
+class MonsterSpecialTrait(BaseModel):
+    """
+    Monster special trait with flexible extra fields.
+
+    Special traits can have additional fields beyond name and description,
+    such as spellcasting details, recharge mechanics, etc. These are captured
+    in the extra_fields dictionary.
+
+    Examples:
+        - Simple trait: {"name": "Magic Resistance", "description": "..."}
+        - Spellcasting: {"name": "Innate Spellcasting", "description": "...",
+                         "spellcasting": {"at_will": [...], "per_day": {...}}}
+    """
+    name: str
+    description: str
+    extra_fields: Optional[dict] = Field(default=None, description="Additional trait-specific fields")
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MonsterSpecialTrait":
+        """
+        Create a MonsterSpecialTrait from a dictionary, capturing extra fields.
+
+        Args:
+            data: Dictionary with trait data (must have 'name' and 'description')
+
+        Returns:
+            MonsterSpecialTrait instance with extra fields stored
+        """
+        name = data.get("name", "")
+        description = data.get("description", "")
+
+        # Capture any extra fields beyond name and description
+        extra = {k: v for k, v in data.items() if k not in ("name", "description")}
+        extra_fields = extra if extra else None
+
+        return cls(name=name, description=description, extra_fields=extra_fields)
+
+    def to_display_string(self) -> str:
+        """Format trait for display, including extra fields if present."""
+        lines = [f"***{self.name}.*** {self.description}"]
+
+        if self.extra_fields:
+            # Format spellcasting specially
+            if "spellcasting" in self.extra_fields:
+                spells = self.extra_fields["spellcasting"]
+                if "at_will" in spells:
+                    lines.append(f"  At will: {', '.join(spells['at_will'])}")
+                if "per_day" in spells:
+                    for uses, spell_list in spells["per_day"].items():
+                        lines.append(f"  {uses}/day each: {', '.join(spell_list)}")
+            # Add other extra fields as key: value
+            for key, value in self.extra_fields.items():
+                if key != "spellcasting":
+                    lines.append(f"  {key}: {value}")
+
+        return "\n".join(lines)
+
+
 class LegendaryAction(BaseModel):
     """Single legendary action option with cost."""
     name: str
