@@ -4,13 +4,15 @@ Provides tools for DM to query LanceDB for D&D rules and cache results in curren
 as well as query detailed character ability information.
 """
 
-from typing import Optional, Literal
+from typing import Optional, Literal, Union
 from pydantic_ai import RunContext
 
 from ..db.lance_rules_service import LanceRulesService
 from ..memory.turn_manager import TurnManager
 from ..memory.state_manager import StateManager
 from ..services.rules_cache_service import RulesCacheService
+from ..characters.monster import Monster
+from ..characters.charactersheet import Character
 
 
 # Dependency types for tool context
@@ -203,33 +205,42 @@ def _format_rule_for_dm(cache_entry: dict) -> str:
 async def query_character_ability(
     ctx: RunContext[DMToolsDependencies],
     character_id: str,
-    section: Literal["summary", "attacks", "features", "spells", "equipment", "full"],
+    section: Literal["summary", "attacks", "actions", "features", "traits", "spells", "equipment", "full"],
     ability_name: Optional[str] = None
 ) -> str:
     """
-    Query character ability information with varying levels of detail.
+    Query character or monster ability information with varying levels of detail.
 
-    Use this tool when you need information about a character's abilities,
+    Use this tool when you need information about a character's or monster's abilities,
     spells, features, or equipment to validate player actions or adjudicate rules.
 
-    The compact character sheet in context shows names only. This tool provides:
-    - summary: Compact character sheet (same as context, useful for other characters)
+    The compact sheet in context shows names only. This tool provides:
+    - summary: Compact sheet (stats and ability names only)
     - Detailed sections with full descriptions:
       - Spell: casting time, range, components, duration, full description, at higher levels
-      - Feature: source, full description text
-      - Attack: attack bonus, damage, damage type, notes
+      - Feature/Trait: source, full description text
+      - Attack/Action: attack bonus, damage, damage type, notes
       - Equipment: quantity, weight, full description
+
+    For Characters:
+    - summary, attacks, features, spells, equipment, full
+
+    For Monsters:
+    - summary: Combat summary (AC, HP, CR)
+    - full: Full statblock
+    - actions/attacks: Detailed action descriptions
+    - traits/features: Special trait descriptions
 
     Args:
         ctx: PydanticAI RunContext with DMToolsDependencies
-        character_id: Character ID to query (e.g., "fighter", "wizard", "cleric")
+        character_id: Character or Monster ID to query (e.g., "fighter", "goblin_1")
         section: Which section to query:
-            - "summary": Compact character sheet (stats and ability names only)
-            - "attacks": Detailed attack information
-            - "features": Detailed feature/trait descriptions
-            - "spells": Detailed spell information (casting time, range, etc.)
-            - "equipment": Detailed equipment with descriptions
-            - "full": Complete detailed character sheet
+            - "summary": Compact sheet (stats and ability names only)
+            - "attacks"/"actions": Detailed attack/action information
+            - "features"/"traits": Detailed feature/trait descriptions
+            - "spells": Detailed spell information (characters only)
+            - "equipment": Detailed equipment with descriptions (characters only)
+            - "full": Complete detailed sheet/statblock
         ability_name: Optional specific ability name to look up within the section
                      (e.g., "Fireball" for spells, "Second Wind" for features)
                      If not found, returns the full section as fallback.
@@ -238,30 +249,34 @@ async def query_character_ability(
         Formatted information string
 
     Examples:
-        Get compact character sheet:
+        Get character sheet:
         >>> await query_character_ability(ctx, "wizard", "summary")
 
-        Get all spell details:
-        >>> await query_character_ability(ctx, "wizard", "spells")
+        Get monster statblock:
+        >>> await query_character_ability(ctx, "goblin_1", "full")
+
+        Get monster actions:
+        >>> await query_character_ability(ctx, "orc_chief", "actions")
 
         Get specific spell details:
         >>> await query_character_ability(ctx, "wizard", "spells", "Fireball")
-
-        Get all feature details:
-        >>> await query_character_ability(ctx, "fighter", "features")
-
-        Get specific feature:
-        >>> await query_character_ability(ctx, "fighter", "features", "Second Wind")
     """
     state_manager = ctx.deps.state_manager
 
     if not state_manager:
         return "Error: State manager not available for character queries."
 
-    # Load character
-    character = state_manager.get_character(character_id)
+    # Load character (player character or monster)
+    character = state_manager.get_character_by_id(character_id)
     if not character:
-        return f"Error: Character '{character_id}' not found."
+        return f"Error: '{character_id}' not found (checked both player characters and monsters)."
+
+    # Handle Monster
+    if isinstance(character, Monster):
+        return _query_monster_ability(character, section, ability_name)
+
+    # Handle Player Character (Character class)
+    # `character` variable now refers to the Character object
 
     # Route to appropriate method
     if section == "summary":
@@ -270,7 +285,7 @@ async def query_character_ability(
     elif section == "full":
         return character.get_full_sheet_detailed()
 
-    elif section == "attacks":
+    elif section in ("attacks", "actions"):
         if ability_name:
             # Find specific attack
             for attack in character.attacks_and_spellcasting:
@@ -285,7 +300,7 @@ async def query_character_ability(
             return f"Attack '{ability_name}' not found. Here are all attacks:\n\n{character.get_attacks_detailed()}"
         return character.get_attacks_detailed()
 
-    elif section == "features":
+    elif section in ("features", "traits"):
         if ability_name:
             # Find specific feature
             for feature in character.features_and_traits:
@@ -346,7 +361,72 @@ async def query_character_ability(
         return character.get_equipment_detailed()
 
     else:
-        return f"Unknown section: '{section}'. Use 'summary', 'attacks', 'features', 'spells', 'equipment', or 'full'."
+        return f"Unknown section: '{section}'. Use 'summary', 'attacks', 'actions', 'features', 'traits', 'spells', 'equipment', or 'full'."
+
+
+def _query_monster_ability(
+    monster: Monster,
+    section: str,
+    ability_name: Optional[str] = None
+) -> str:
+    """
+    Query monster ability information with varying levels of detail.
+
+    Args:
+        monster: Monster instance to query
+        section: Which section to query (summary, full, actions, traits, etc.)
+        ability_name: Optional specific ability name to look up
+
+    Returns:
+        Formatted information string
+    """
+    if section == "summary":
+        return monster.get_combat_summary()
+
+    elif section == "full":
+        return monster.get_full_statblock()
+
+    elif section in ("actions", "attacks"):
+        if ability_name:
+            # Find specific action
+            for action in monster.actions:
+                if action.name.lower() == ability_name.lower():
+                    lines = [f"▸ {action.name}"]
+                    if action.attack_bonus is not None:
+                        lines.append(f"  Attack Bonus: +{action.attack_bonus}")
+                    if action.damage:
+                        lines.append(f"  Damage: {action.damage.formula} {action.damage.type}")
+                    if action.range:
+                        range_str = f"{action.range.normal} {action.range.unit}"
+                        if action.range.long > 0:
+                            range_str += f"/{action.range.long} {action.range.unit}"
+                        lines.append(f"  Range: {range_str}")
+                    lines.append(f"  Description: {action.description}")
+                    return "\n".join(lines)
+            # Not found - return full section
+            return f"Action '{ability_name}' not found. Here are all actions:\n\n{monster.get_actions_detailed()}"
+        return monster.get_actions_detailed()
+
+    elif section in ("traits", "features"):
+        if ability_name:
+            # Find specific trait
+            for trait in monster.special_traits:
+                if trait.name.lower() == ability_name.lower():
+                    lines = [f"▸ {trait.name}"]
+                    lines.append(f"  {trait.description}")
+                    return "\n".join(lines)
+            # Not found - return full section
+            return f"Trait '{ability_name}' not found. Here are all traits:\n\n{monster.get_traits_detailed()}"
+        return monster.get_traits_detailed()
+
+    elif section == "spells":
+        return f"{monster.name} is a monster. Use 'actions' to see its abilities."
+
+    elif section == "equipment":
+        return f"{monster.name} is a monster. Monsters don't have equipment in the same way as characters."
+
+    else:
+        return f"Unknown section: '{section}'. For monsters, use 'summary', 'full', 'actions', or 'traits'."
 
 
 def create_dm_tools(
