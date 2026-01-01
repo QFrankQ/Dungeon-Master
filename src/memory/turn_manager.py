@@ -140,11 +140,12 @@ from ..models.formatted_game_message import FormattedGameMessage
 from ..models.turn_context import TurnContext, TurnExtractionContext
 from ..models.turn_message import create_live_message, create_message_group
 from ..models.combat_state import CombatState, CombatPhase, InitiativeEntry, create_combat_state
+from ..models.dm_response import MonsterReactionDecision
 from ..context.state_extractor_context_builder import StateExtractorContextBuilder
 from ..prompts.demo_combat_steps import (
     DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS,
     COMBAT_START_STEPS, COMBAT_TURN_STEPS, COMBAT_END_STEPS,
-    EXPLORATION_STEPS, GamePhase, get_steps_for_phase
+    EXPLORATION_STEPS, MONSTER_TURN_STEPS, GamePhase, get_steps_for_phase
 )
 
 
@@ -249,14 +250,110 @@ class TurnManager:
 
         # Combat state - tracks phase progression and initiative order
         self.combat_state: CombatState = create_combat_state()
-    
+
+        # Pending monster reactions - stored when DM records monster reaction decisions
+        # These are merged into start_and_queue_turns when creating reaction subturns
+        self._pending_monster_reactions: List[MonsterReactionDecision] = []
+
     def _get_message_formatter(self):
         """Lazy load MessageFormatter when needed."""
         if self.message_formatter is None:
             from ..services.message_formatter import MessageFormatter
             self.message_formatter = MessageFormatter()
         return self.message_formatter
-    
+
+    # ===== PENDING MONSTER REACTIONS MANAGEMENT =====
+
+    def set_pending_monster_reactions(self, reactions: List[MonsterReactionDecision]) -> None:
+        """
+        Store pending monster reactions to be merged when creating reaction subturns.
+
+        Called by SessionManager after DM response when monster_reactions field contains
+        decisions with will_use=True. These reactions will be automatically merged
+        into the next start_and_queue_turns call for reactions.
+
+        Args:
+            reactions: List of MonsterReactionDecision objects to store
+        """
+        # Only store reactions that will actually be used
+        self._pending_monster_reactions = [r for r in reactions if r.will_use]
+
+    def get_pending_monster_reactions(self) -> List[MonsterReactionDecision]:
+        """Get the currently stored pending monster reactions."""
+        return self._pending_monster_reactions
+
+    def clear_pending_monster_reactions(self) -> None:
+        """Clear all pending monster reactions."""
+        self._pending_monster_reactions = []
+
+    def get_monster_id_to_name_map(self) -> Dict[str, str]:
+        """
+        Get a mapping from monster character_id to display name from the combat state.
+
+        Maps monster character_id (e.g., "goblin_1") to character_name (e.g., "Goblin Archer").
+        This is useful for UI contexts that need to display monster names.
+
+        Returns:
+            Dict mapping monster character_id -> display name
+        """
+        mapping = {}
+        for entry in self.combat_state.initiative_order:
+            if not entry.is_player:
+                mapping[entry.character_id] = entry.character_name
+        return mapping
+
+    def get_all_combatant_id_to_name_map(self) -> Dict[str, str]:
+        """
+        Get a mapping of all combatant character_ids to display names.
+
+        Maps character_id to character_name for all combatants in initiative order.
+        Useful for UI display across all combatants.
+
+        Returns:
+            Dict mapping character_id -> display_name
+        """
+        mapping = {}
+        for entry in self.combat_state.initiative_order:
+            mapping[entry.character_id] = entry.character_name
+        return mapping
+
+    def _merge_pending_monster_reactions(
+        self,
+        player_actions: List[ActionDeclaration]
+    ) -> List[ActionDeclaration]:
+        """
+        Merge pending monster reactions with player actions.
+
+        Monster reactions are converted to ActionDeclarations and appended to the
+        player actions list. Duplicate reactions (same monster_id) are skipped.
+
+        Args:
+            player_actions: List of player reaction ActionDeclarations
+
+        Returns:
+            Merged list with both player and monster reactions
+        """
+        if not self._pending_monster_reactions:
+            return player_actions
+
+        merged_actions = list(player_actions)  # Copy to avoid mutating original
+
+        # Get speakers already in the action list to avoid duplicates
+        existing_speakers = {action.speaker for action in player_actions}
+
+        # Convert monster reactions to ActionDeclarations
+        for monster_reaction in self._pending_monster_reactions:
+            if monster_reaction.monster_id not in existing_speakers:
+                merged_actions.append(ActionDeclaration(
+                    speaker=monster_reaction.monster_id,
+                    content=f"Uses {monster_reaction.reaction_name}"
+                ))
+
+        # Clear pending reactions after merging
+        self.clear_pending_monster_reactions()
+
+        return merged_actions
+
     #TODO: using prepare_tools keyword argument in agent calls to control when this tool is available
     def start_and_queue_turns(
         self,
@@ -293,6 +390,11 @@ class TurnManager:
 
         turn_level = len(self.turn_stack)  # Stack depth determines nesting level
         created_turn_ids = []
+
+        # Merge pending monster reactions for reaction turns (level 1+)
+        # This ensures monster reactions recorded by DM are included alongside player reactions
+        if turn_level > 0 and self._pending_monster_reactions:
+            actions = self._merge_pending_monster_reactions(actions)
 
         # Determine game_step_list based on phase, current game phase, or turn level
         if phase is not None:
@@ -1010,44 +1112,80 @@ class TurnManager:
             "initiative_summary": self.combat_state.get_initiative_summary()
         }
 
+    def _is_player_character(self, character_id: str) -> bool:
+        """
+        Check if a character is a player character using the initiative order.
+
+        Looks up the character by their character_id in the initiative order
+        and returns the is_player flag from the InitiativeEntry.
+
+        Args:
+            character_id: The character's unique identifier (e.g., "fighter", "goblin_1")
+
+        Returns:
+            True if the character is a player, False if monster/NPC
+        """
+        for entry in self.combat_state.initiative_order:
+            if entry.character_id == character_id:
+                return entry.is_player
+        # Default to True if not found in initiative (for non-combat scenarios)
+        return True
+
+    def _get_step_list_for_character(self, character_id: str, turn_level: int) -> list:
+        """
+        Get the appropriate step list based on character type and turn level.
+
+        Args:
+            character_id: The character's unique identifier (e.g., "fighter", "goblin_1")
+            turn_level: The turn nesting level (0=main, 1+=sub-turn/reaction)
+
+        Returns:
+            The appropriate step list for this character/turn
+        """
+        if turn_level > 0:
+            # Sub-turns/reactions use reaction steps regardless of character type
+            return DEMO_REACTION_STEPS
+
+        # Level 0 turns: check if player or monster using is_player flag
+        if self._is_player_character(character_id):
+            return get_steps_for_phase(self._current_game_phase)
+        else:
+            return MONSTER_TURN_STEPS
+
     def _queue_combat_round(self) -> None:
         """
         Queue turns for the current combat round based on initiative order.
 
         Creates a turn for each participant in initiative order.
+        Uses COMBAT_TURN_STEPS for players and MONSTER_TURN_STEPS for monsters.
         """
         if not self.combat_state.initiative_order:
             return
 
-        # Create actions for each participant in initiative order
-        actions = [
-            ActionDeclaration(
-                speaker=entry.character_name,
-                content=f"{entry.character_name}'s turn begins"
-            )
-            for entry in self.combat_state.initiative_order
-        ]
-
-        # Queue turns using COMBAT_TURN_STEPS
-        # This uses the existing start_and_queue_turns but we override the step list
         turn_level = len(self.turn_stack)
 
-        for i, action in enumerate(actions):
+        for entry in self.combat_state.initiative_order:
             self._turn_counter += 1
             turn_id = str(self._turn_counter)
+
+            # Select step list based on whether this is a player or monster (using is_player flag)
+            step_list = self._get_step_list_for_character(entry.character_id, turn_level)
 
             turn_context = TurnContext(
                 turn_id=turn_id,
                 turn_level=turn_level,
-                current_step_objective=COMBAT_TURN_STEPS[0],
-                active_character=action.speaker,
-                initiative_order=[e.character_name for e in self.combat_state.initiative_order],
-                game_step_list=COMBAT_TURN_STEPS,
+                current_step_objective=step_list[0],
+                active_character=entry.character_id,  # Use character_id for system lookups
+                initiative_order=[e.character_id for e in self.combat_state.initiative_order],
+                game_step_list=step_list,
                 current_step_index=0
             )
 
-            # Add the turn start message
-            turn_context.add_live_message(action.content, action.speaker)
+            # Add the turn start message (use display name for narrative)
+            turn_context.add_live_message(
+                f"{entry.character_name}'s turn begins",
+                entry.character_id
+            )
 
             # Add to turn stack
             if len(self.turn_stack) == turn_level:
