@@ -386,6 +386,30 @@ class SessionManager:
         """Get a character by ID."""
         return self.state_manager.get_character(character_id)
 
+    def get_all_character_display_names(self) -> Dict[str, str]:
+        """
+        Get a combined mapping of all combatant IDs to display names.
+
+        Merges player character ID-to-name mapping with enemy names from
+        the combat state's initiative order. Useful for UI display across
+        all combatants in combat.
+
+        Player characters: character_id (e.g., "fighter") -> display_name (e.g., "Tharion Stormwind")
+        Enemies: enemy_name -> enemy_name (identity mapping, since enemies use display names as IDs)
+
+        Returns:
+            Dict mapping combatant_id -> display_name
+        """
+        # Start with player character mappings
+        mapping = self.player_character_registry.get_character_id_to_name_map()
+
+        # Add monster names from initiative order (if turn management is enabled)
+        if self.turn_manager:
+            monster_mapping = self.turn_manager.get_monster_id_to_name_map()
+            mapping.update(monster_mapping)
+
+        return mapping
+
     def get_session_stats(self) -> Dict[str, Any]:
         """Get session statistics."""
         return {
@@ -530,6 +554,26 @@ class SessionManager:
             response_queue.append(f"⚠ State extraction failed: {e}\n")
             return None
 
+    def _store_pending_monster_reactions(self, dm_response: DungeonMasterResponse) -> None:
+        """
+        Store monster reactions from DM response for later merging with player reactions.
+
+        When the DM is at a reaction window step and sets monster_reactions with decisions,
+        these are stored in the TurnManager. When the DM later calls start_and_queue_turns
+        to create reaction subturns, the stored monster reactions are automatically merged.
+
+        Args:
+            dm_response: The DM response that may contain monster_reactions
+        """
+        if not dm_response.monster_reactions:
+            return
+
+        # Only store reactions where the monster decided to use their reaction
+        reactions_to_use = [r for r in dm_response.monster_reactions if r.will_use]
+
+        if reactions_to_use:
+            self.turn_manager.set_pending_monster_reactions(reactions_to_use)
+
     # Mock combat game steps based on combat_flow.txt
     # These represent a typical combat turn action lifecycle
     _DEMO_COMBAT_STEPS = [
@@ -635,6 +679,10 @@ class SessionManager:
             is_new=False
         )
 
+        # Store any monster reactions for later merging with player reactions
+        # This enables automatic merging when DM calls start_and_queue_turns for reactions
+        self._store_pending_monster_reactions(dungeon_master_response)
+
         # === PHASE 4: CHECK FOR STEP COMPLETION ===
         state_results = None
         if not dungeon_master_response.game_step_completed:
@@ -695,6 +743,9 @@ class SessionManager:
                     [{"content": dungeon_master_response.narrative, "speaker": "DM"}],
                     is_new=False
                 )
+
+                # Store any monster reactions for later merging with player reactions
+                self._store_pending_monster_reactions(dungeon_master_response)
 
                 # Continue loop if DM still signals step completion
 
