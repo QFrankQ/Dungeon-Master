@@ -82,13 +82,13 @@ COMBAT_TURN_STEPS = [
     "Receive and interpret the participant's declared action. Use action interpretation guidelines (Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize). VALIDATE character capability: check if character has the spell, ability, or equipment needed. If invalid, explain why and ask for a different action. If valid, confirm what action they are taking. DO NOT resolve the action in this step.",
 
     # Adjudication Step 3: Pre-Resolution Reaction Window
-    "Provide pre-resolution reaction window: Ask if anyone wants to use a Reaction BEFORE the action resolves. Wait for response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s) with the reaction declaration(s). DO NOT resolve the main action in this step.",
+    "Provide pre-resolution reaction window: Ask if any PLAYER wants to use a Reaction BEFORE the action resolves. Set awaiting_response with response_type='reaction' and characters=[all player character IDs]. For MONSTERS with reactions: Internally decide if each monster would use their reaction based on the trigger and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative). Wait for player response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s). DO NOT resolve the main action in this step.",
 
     # Adjudication Step 4: Resolve Action (Index 3 - Main Resolution step)
     "Resolve the declared action: Validate the action, call for necessary rolls (attack rolls, saving throws, ability checks), determine outcome based on the rolls, and narrate the result vividly. Apply damage and effects. DO NOT handle status changes or post-resolution reactions in this step.",
 
     # Adjudication Step 5 & 6: Status Changes + Post-Resolution Reactions
-    "Handle critical status changes: Check if anyone dropped to 0 HP (PCs fall unconscious, NPCs typically die). Then provide post-resolution reaction window: Ask if anyone wants to use a Reaction in response to the outcome. If a reaction is declared, create reaction turn(s). DO NOT ask about additional actions in this step.",
+    "Handle critical status changes: Check if anyone dropped to 0 HP (PCs fall unconscious, NPCs typically die). Then provide post-resolution reaction window: Ask if any PLAYER wants to use a Reaction in response to the outcome. Set awaiting_response with response_type='reaction'. For MONSTERS with reactions: Decide if they would react and record in monster_reactions field (hidden from players). If a reaction is declared, create reaction turn(s). DO NOT ask about additional actions in this step.",
 
     # Step D: Confirm End of Turn
     "Ask the active participant: 'Would you like to do anything else on your turn?' Options include: bonus action, movement, free object interaction, or additional actions from features. If they declare another action, resolve it immediately within this step (interpret, validate, resolve, narrate). If they have nothing more to do, set game_step_completed=True to proceed. DO NOT check for turn-end effects in this step.",
@@ -104,6 +104,41 @@ COMBAT_TURN_STEPS = [
 DEMO_MAIN_ACTION_STEPS = COMBAT_TURN_STEPS
 
 # =============================================================================
+# PHASE 2: COMBAT ROUNDS - Monster Turn Steps
+# =============================================================================
+# Used for monster/NPC turns during combat rounds
+# DM decides and executes monster actions internally
+
+MONSTER_TURN_STEPS = [
+    # Step 0: Announce Turn + Turn-Start Effects (Resolution step for turn-start effects)
+    "Announce it is the monster's turn. Check for any effects that trigger at the start of this turn (ongoing damage, concentration checks, spell effects). Resolve turn-start effects before deciding actions. DO NOT decide monster action in this step.",
+
+    # Step 1: Decide and Declare Action
+    "Based on the monster's statblock, decide what action the monster takes. Consider: available actions, current HP, tactical situation, targets in range. Declare the monster's intended action clearly in the narrative. DO NOT resolve the action yet.",
+
+    # Step 2: Pre-Resolution Reaction Window
+    "Provide pre-resolution reaction window: Ask if any PLAYER wants to use a Reaction BEFORE the monster's action resolves. Set awaiting_response with response_type='reaction' and characters=[all player character IDs]. For OTHER MONSTERS with reactions (not the active monster): Internally decide if each would use their reaction and record decisions in the monster_reactions field (hidden from players). Wait for player responses. If any reactions are declared, use start_and_queue_turns to create reaction turn(s). DO NOT resolve the monster's action in this step.",
+
+    # Step 3: Resolve Monster Action (Resolution step)
+    "Resolve the monster's declared action: Make attack rolls, call for saving throws from players if needed, determine outcome, apply damage and effects. Narrate the result vividly. DO NOT handle post-resolution reactions in this step.",
+
+    # Step 4: Status Changes + Post-Resolution Reactions
+    "Handle critical status changes: Check if anyone dropped to 0 HP (PCs fall unconscious, NPCs typically die). Then provide post-resolution reaction window: Ask if any PLAYER wants to use a Reaction in response. For OTHER MONSTERS: Decide if they would react and record in monster_reactions field (hidden). Set awaiting_response with response_type='reaction' if applicable. DO NOT ask about additional actions yet.",
+
+    # Step 5: Additional Actions (Bonus Action, Movement)
+    "Decide if the monster uses a bonus action, additional movement, or free object interaction based on its statblock and the tactical situation. Resolve any additional actions. Set awaiting_response with response_type='none'.",
+
+    # Step 6: Turn-End Effects (Resolution step for turn-end effects)
+    "Check for turn-end effects: Apply effects that trigger at the end of this turn (saving throws against conditions, concentration checks). Resolve any triggered effects. DO NOT announce the next turn in this step.",
+
+    # Step 7: Announce Next Turn
+    "Announce the end of the monster's turn. State which participant is next in initiative order. If this was the last turn in the round, also announce the start of the new round. DO NOT begin processing the next participant's actions in this step."
+]
+
+# Legacy alias for backward compatibility
+ENEMY_TURN_STEPS = MONSTER_TURN_STEPS
+
+# =============================================================================
 # PHASE 2: REACTION STEPS (Adjudication Sub-Routine)
 # =============================================================================
 # Used when reactions are declared during pre-resolution or post-resolution windows
@@ -117,7 +152,7 @@ DEMO_REACTION_STEPS = [
     "Confirm this uses their Reaction for this round. Verify they have a Reaction available (haven't used it this round). If valid, mark their reaction as used. If not, inform them and ask for a different choice. DO NOT check for nested reactions in this step.",
 
     # Adjudication Step 3: Pre-Resolution Reaction Window (Recursive)
-    "Provide pre-resolution reaction window: Ask if anyone ELSE wants to use a Reaction in response to this reaction before it resolves. Wait for response. If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s). DO NOT resolve this reaction in this step.",
+    "Provide pre-resolution reaction window: Ask if any other PLAYER wants to use a Reaction in response to this reaction before it resolves. Set awaiting_response with response_type='reaction'. For MONSTERS with reactions: Decide if they would react and record in monster_reactions field (hidden from players). If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s). DO NOT resolve this reaction in this step.",
 
     # Adjudication Step 4: Resolve Reaction (Index 3 - Resolution step)
     "Resolve the declared reaction: Validate, call for necessary rolls, determine outcome, and narrate how the reaction affects the triggering action or its outcome. DO NOT handle status changes in this step.",
@@ -126,7 +161,7 @@ DEMO_REACTION_STEPS = [
     "Handle critical status changes from the reaction: Check if the reaction caused anyone to drop to 0 HP. Apply consequences immediately (unconscious for PCs, death for most NPCs). DO NOT check for post-resolution reactions in this step.",
 
     # Adjudication Step 6: Post-Resolution Reaction Window (Recursive)
-    "Provide post-resolution reaction window: Ask if anyone wants to use a Reaction in response to this reaction's outcome. Wait for response. If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s). DO NOT return to the parent turn in this step."
+    "Provide post-resolution reaction window: Ask if any PLAYER wants to use a Reaction in response to this reaction's outcome. Set awaiting_response with response_type='reaction'. For MONSTERS with reactions: Decide if they would react and record in monster_reactions field (hidden from players). If a reaction is declared, use start_and_queue_turns to create nested reaction turn(s). DO NOT return to the parent turn in this step."
 ]
 
 # =============================================================================
@@ -160,6 +195,13 @@ COMBAT_END_STEPS = [
 COMBAT_TURN_RESOLUTION_INDICES = {0, 3, 6}
 MAIN_ACTION_RESOLUTION_INDICES = COMBAT_TURN_RESOLUTION_INDICES  # Legacy alias
 
+# For monster turns: Same resolution indices as player turns
+# - Index 0: Turn-start effects
+# - Index 3: Monster action resolution
+# - Index 6: Turn-end effects
+MONSTER_TURN_RESOLUTION_INDICES = {0, 3, 6}
+ENEMY_TURN_RESOLUTION_INDICES = MONSTER_TURN_RESOLUTION_INDICES  # Legacy alias
+
 # For reactions: Resolution happens at step index 3 (Resolve Reaction)
 REACTION_RESOLUTION_INDICES = {3}
 
@@ -183,6 +225,8 @@ def is_resolution_step_index(step_index: int, step_list: list[str]) -> bool:
     """
     if step_list is COMBAT_TURN_STEPS or step_list is DEMO_MAIN_ACTION_STEPS:
         return step_index in COMBAT_TURN_RESOLUTION_INDICES
+    elif step_list is MONSTER_TURN_STEPS:
+        return step_index in MONSTER_TURN_RESOLUTION_INDICES
     elif step_list is DEMO_REACTION_STEPS:
         return step_index in REACTION_RESOLUTION_INDICES
     elif step_list is COMBAT_START_STEPS:
@@ -202,6 +246,8 @@ def get_step_list_name(step_list: list[str]) -> str:
         return "Combat Start"
     elif step_list is COMBAT_TURN_STEPS or step_list is DEMO_MAIN_ACTION_STEPS:
         return "Combat Turn"
+    elif step_list is MONSTER_TURN_STEPS:
+        return "Monster Turn"
     elif step_list is DEMO_REACTION_STEPS:
         return "Reaction"
     elif step_list is COMBAT_END_STEPS:
