@@ -8,6 +8,9 @@ and chronological order for optimal DM narrative generation.
 
 from typing import List, Optional, Dict, Any, Union
 
+from ..memory.player_character_registry import PlayerCharacterRegistry
+from ..memory.state_manager import StateManager
+from ..services.rules_cache_service import RulesCacheService
 from ..memory.turn_manager import TurnManagerSnapshot
 from ..models.turn_context import TurnContext
 from ..characters.monster import Monster
@@ -35,9 +38,9 @@ class DMContextBuilder:
             rules_cache_service: Optional RulesCacheService for accessing cached rules
             player_character_registry: Optional PlayerCharacterRegistry for registered character names
         """
-        self.state_manager = state_manager
-        self.rules_cache_service = rules_cache_service
-        self.player_character_registry = player_character_registry
+        self.state_manager: Optional[StateManager] = state_manager
+        self.rules_cache_service: Optional[RulesCacheService] = rules_cache_service
+        self.player_character_registry: Optional[PlayerCharacterRegistry] = player_character_registry
     
     def build_context(
         self,
@@ -77,15 +80,16 @@ class DMContextBuilder:
         context_parts.append(self.build_xml_context(turn_manager_snapshots.active_turns_by_level))
         context_parts.extend("</current_turn>")
 
-        # Add character/monster sheet for active character (for capability validation)
+        # Add character/monster statblock for active character (for capability validation)
         if self.state_manager and turn_manager_snapshots.active_turns_by_level:
             current_turn = turn_manager_snapshots.active_turns_by_level[-1]
             if current_turn.active_character:
-                character = self.state_manager.get_character_by_id(current_turn.active_character)
-                if character:
-                    context_parts.append("<character_sheet>")
-                    context_parts.append(self._format_character_sheet(character))
-                    context_parts.append("</character_sheet>")
+                character_data = self.state_manager.get_character_by_id(current_turn.active_character)
+                if character_data:
+                    # Use _format_character_sheet which handles both Character and Monster
+                    context_parts.append("<active_character_statblock>")
+                    context_parts.append(self._format_character_sheet(character_data))
+                    context_parts.append("</active_character_statblock>")
                     context_parts.append("")
 
         # Add cached rules from turn hierarchy (for quick reference)
@@ -291,15 +295,17 @@ class DMContextBuilder:
         context_parts.append("</current_turn>")
         context_parts.append("")
 
-        # Add character/monster sheet for active character (enables DM to validate capabilities)
+        # Add character/monster statblock for active character
+        # Enables DM to validate capabilities (players) or make tactical decisions (monsters)
         if self.state_manager and turn_manager_snapshots.active_turns_by_level:
             current_turn = turn_manager_snapshots.active_turns_by_level[-1]
             if current_turn.active_character:
-                character = self.state_manager.get_character_by_id(current_turn.active_character)
-                if character:
-                    context_parts.append("<character_sheet>")
-                    context_parts.append(self._format_character_sheet(character))
-                    context_parts.append("</character_sheet>")
+                character_data = self.state_manager.get_character_by_id(current_turn.active_character)
+                if character_data:
+                    # Use _format_character_sheet which handles both Character and Monster
+                    context_parts.append("<active_character_statblock>")
+                    context_parts.append(self._format_character_sheet(character_data))
+                    context_parts.append("</active_character_statblock>")
                     context_parts.append("")
 
         # Add cached rules from turn hierarchy (provides quick rule reference)
