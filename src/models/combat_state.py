@@ -30,8 +30,14 @@ class InitiativeEntry(BaseModel):
     - Surprise gives DISADVANTAGE on initiative roll (not "skip first turn")
     - The disadvantage is applied BEFORE rolling, so is_surprised is not stored here
     - Once the roll is made with disadvantage factored in, no additional tracking needed
+
+    Fields:
+    - character_id: Unique identifier used for system lookups (e.g., "fighter", "goblin_1")
+    - character_name: Display name for UI/narrative (e.g., "Tharion Stormwind", "Goblin Archer")
+    - is_player: True for player characters, False for monsters/NPCs
     """
-    character_name: str = Field(..., description="Name of the character/creature")
+    character_id: str = Field(..., description="Unique identifier for the character (e.g., 'fighter', 'goblin_1')")
+    character_name: str = Field(..., description="Display name of the character/creature for narrative")
     roll: int = Field(..., description="Total initiative roll result (with any modifiers/advantage/disadvantage already applied)")
     is_player: bool = Field(default=True, description="Whether this is a player character")
     dex_modifier: int = Field(default=0, description="Dexterity modifier for tie-breaking")
@@ -87,8 +93,8 @@ class CombatState(BaseModel):
         if self.phase != CombatPhase.COMBAT_START:
             raise ValueError(f"Cannot add initiative roll in phase {self.phase}")
 
-        # Check if character already has an entry
-        existing = next((e for e in self.initiative_order if e.character_name == entry.character_name), None)
+        # Check if character already has an entry (by character_id)
+        existing = next((e for e in self.initiative_order if e.character_id == entry.character_id), None)
         if existing:
             # Replace existing entry (in case of re-roll)
             self.initiative_order.remove(existing)
@@ -110,13 +116,13 @@ class CombatState(BaseModel):
         self.round_number = 1
         self.current_participant_index = 0
 
-    def get_current_participant(self) -> Optional[str]:
-        """Get the name of the current participant in initiative order."""
+    def get_current_participant_id(self) -> Optional[str]:
+        """Get the character_id of the current participant in initiative order."""
         if not self.initiative_order or self.phase != CombatPhase.COMBAT_ROUNDS:
             return None
         if self.current_participant_index >= len(self.initiative_order):
             return None
-        return self.initiative_order[self.current_participant_index].character_name
+        return self.initiative_order[self.current_participant_index].character_id
 
     def get_current_entry(self) -> Optional[InitiativeEntry]:
         """Get the full initiative entry for the current participant."""
@@ -131,8 +137,8 @@ class CombatState(BaseModel):
         Move to next participant in initiative order.
 
         Returns:
-            Tuple of (next_participant_name, is_new_round)
-            - next_participant_name: Name of next participant, or None if combat ended
+            Tuple of (next_participant_id, is_new_round)
+            - next_participant_id: character_id of next participant, or None if combat ended
             - is_new_round: True if we wrapped to a new round
         """
         if self.phase != CombatPhase.COMBAT_ROUNDS:
@@ -147,20 +153,20 @@ class CombatState(BaseModel):
             self.round_number += 1
             is_new_round = True
 
-        return self.get_current_participant(), is_new_round
+        return self.get_current_participant_id(), is_new_round
 
-    def remove_participant(self, character_name: str) -> bool:
+    def remove_participant(self, character_id: str) -> bool:
         """
         Remove a participant from combat (died, fled, etc.).
 
         Args:
-            character_name: Name of the participant to remove
+            character_id: The character_id of the participant to remove
 
         Returns:
             True if removed, False if not found
         """
-        # Find and remove from initiative order
-        entry = next((e for e in self.initiative_order if e.character_name == character_name), None)
+        # Find and remove from initiative order (by character_id)
+        entry = next((e for e in self.initiative_order if e.character_id == character_id), None)
         if entry:
             removed_index = self.initiative_order.index(entry)
             self.initiative_order.remove(entry)
@@ -175,8 +181,8 @@ class CombatState(BaseModel):
                     self.current_participant_index = 0
 
             # Remove from participants list
-            if character_name in self.participants:
-                self.participants.remove(character_name)
+            if character_id in self.participants:
+                self.participants.remove(character_id)
 
             return True
         return False
@@ -192,9 +198,9 @@ class CombatState(BaseModel):
         if self.phase != CombatPhase.COMBAT_ROUNDS:
             raise ValueError("Can only add combatants during combat rounds")
 
-        # Add to participants
-        if entry.character_name not in self.participants:
-            self.participants.append(entry.character_name)
+        # Add to participants (using character_id)
+        if entry.character_id not in self.participants:
+            self.participants.append(entry.character_id)
 
         # If immediate turn, they'll be handled separately
         # Then add to initiative order at appropriate position
@@ -230,24 +236,24 @@ class CombatState(BaseModel):
 
         return "\n".join(lines)
 
-    def get_remaining_players(self) -> List[str]:
-        """Get list of player characters still in combat."""
-        return [e.character_name for e in self.initiative_order if e.is_player]
+    def get_remaining_player_ids(self) -> List[str]:
+        """Get list of player character IDs still in combat."""
+        return [e.character_id for e in self.initiative_order if e.is_player]
 
-    def get_remaining_enemies(self) -> List[str]:
-        """Get list of non-player combatants still in combat."""
-        return [e.character_name for e in self.initiative_order if not e.is_player]
+    def get_remaining_monster_ids(self) -> List[str]:
+        """Get list of monster/NPC character IDs still in combat."""
+        return [e.character_id for e in self.initiative_order if not e.is_player]
 
     def is_combat_over(self) -> bool:
         """
         Check if combat should end (one side eliminated).
 
         Returns:
-            True if all players or all enemies are gone
+            True if all players or all monsters are gone
         """
-        players = self.get_remaining_players()
-        enemies = self.get_remaining_enemies()
-        return len(players) == 0 or len(enemies) == 0
+        players = self.get_remaining_player_ids()
+        monsters = self.get_remaining_monster_ids()
+        return len(players) == 0 or len(monsters) == 0
 
 
 def create_combat_state() -> CombatState:
