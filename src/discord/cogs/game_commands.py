@@ -429,7 +429,7 @@ class GameCommands(commands.Cog):
                     f"⚔️ **Combat Status**\n\n"
                     f"**Phase:** {phase.value}\n"
                     f"**Round:** {combat_state.round_number}\n"
-                    f"**Current Participant:** {combat_state.get_current_participant() or 'N/A'}\n\n"
+                    f"**Current Participant:** {combat_state.get_current_participant_id() or 'N/A'}\n\n"
                     f"```\n{summary}\n```"
                 )
 
