@@ -1,16 +1,17 @@
 """DM Agent Tools - Tools for Dungeon Master agent to query rules and cache results.
 
 Provides tools for DM to query LanceDB for D&D rules and cache results in current turn,
-as well as query detailed character ability information.
+as well as query detailed character ability information and spawn monsters for combat.
 """
 
-from typing import Optional, Literal, Union
+from typing import Optional, Literal, Union, List, Dict, Any
 from pydantic_ai import RunContext
 
 from ..db.lance_rules_service import LanceRulesService
 from ..memory.turn_manager import TurnManager
 from ..memory.state_manager import StateManager
 from ..services.rules_cache_service import RulesCacheService
+from ..services.monster_spawner import MonsterSpawner
 from ..characters.monster import Monster
 from ..characters.charactersheet import Character
 
@@ -24,12 +25,14 @@ class DMToolsDependencies:
         lance_service: LanceRulesService,
         turn_manager: TurnManager,
         rules_cache_service: RulesCacheService,
-        state_manager: Optional[StateManager] = None
+        state_manager: Optional[StateManager] = None,
+        monster_spawner: Optional[MonsterSpawner] = None
     ):
         self.lance_service = lance_service
         self.turn_manager = turn_manager
         self.rules_cache_service = rules_cache_service
         self.state_manager = state_manager
+        self.monster_spawner = monster_spawner
 
 
 async def query_rules_database(
@@ -364,6 +367,110 @@ async def query_character_ability(
         return f"Unknown section: '{section}'. Use 'summary', 'attacks', 'actions', 'features', 'traits', 'spells', 'equipment', or 'full'."
 
 
+async def get_available_monsters(
+    ctx: RunContext[DMToolsDependencies]
+) -> str:
+    """
+    Get list of available monster templates for encounter selection.
+
+    Call this to see what monsters can be spawned for combat encounters.
+    Returns a list of monster types with their basic stats (CR, HP, AC, size, type).
+
+    Args:
+        ctx: PydanticAI RunContext with DMToolsDependencies
+
+    Returns:
+        Formatted list of available monster templates with summary stats
+
+    Example:
+        >>> await get_available_monsters(ctx)
+        "Available Monster Templates:
+         - goblin (CR 1/4, Small humanoid): HP 7, AC 15, Nimble Escape
+         - orc (CR 1/2, Medium humanoid): HP 15, AC 13, Aggressive
+         - skeleton (CR 1/4, Medium undead): HP 13, AC 13
+         ..."
+    """
+    monster_spawner = ctx.deps.monster_spawner
+
+    if not monster_spawner:
+        return "Error: Monster spawner not available."
+
+    return monster_spawner.get_available_monsters_context()
+
+
+async def select_encounter_monsters(
+    ctx: RunContext[DMToolsDependencies],
+    monsters: List[Dict[str, Any]]
+) -> str:
+    """
+    Select monsters for an encounter before narrating combat start.
+
+    Call this AFTER reviewing available monsters with get_available_monsters().
+    Creates monster instances with stat sheets for initiative, HP tracking, and ability queries.
+
+    Args:
+        ctx: PydanticAI RunContext with DMToolsDependencies
+        monsters: List of monster selections, each with:
+            - type: str - Monster template name (e.g., "goblin", "orc")
+            - count: int - Number of this monster type to spawn
+
+    Returns:
+        Confirmation with created monster IDs and basic combat stats
+
+    Examples:
+        Spawn a small goblin ambush:
+        >>> await select_encounter_monsters(ctx, [{"type": "goblin", "count": 3}])
+        "Created 3 monsters:
+         - goblin_1: HP 7, AC 15, DEX +2
+         - goblin_2: HP 7, AC 15, DEX +2
+         - goblin_3: HP 7, AC 15, DEX +2"
+
+        Spawn mixed encounter:
+        >>> await select_encounter_monsters(ctx, [
+        ...     {"type": "orc", "count": 2},
+        ...     {"type": "wolf", "count": 1}
+        ... ])
+        "Created 3 monsters:
+         - orc_1: HP 15, AC 13, DEX +1
+         - orc_2: HP 15, AC 13, DEX +1
+         - wolf_1: HP 11, AC 13, DEX +2"
+
+    Side Effects:
+        - Creates Monster objects in StateManager
+        - Monsters are available for query_character_ability tool
+        - Monsters can be targeted in combat and have HP tracked
+    """
+    monster_spawner = ctx.deps.monster_spawner
+
+    if not monster_spawner:
+        return "Error: Monster spawner not available. Cannot create monsters for encounter."
+
+    # Validate input format
+    if not monsters:
+        return "Error: No monsters specified. Provide a list like [{\"type\": \"goblin\", \"count\": 2}]"
+
+    for selection in monsters:
+        if "type" not in selection:
+            return f"Error: Missing 'type' in selection: {selection}"
+        if "count" not in selection:
+            return f"Error: Missing 'count' in selection: {selection}"
+        if not isinstance(selection["count"], int) or selection["count"] < 1:
+            return f"Error: 'count' must be a positive integer, got: {selection['count']}"
+
+    # Spawn the monsters
+    try:
+        created_ids = monster_spawner.spawn_monsters(monsters)
+    except ValueError as e:
+        return f"Error spawning monsters: {e}"
+
+    if not created_ids:
+        return "Error: No monsters were created. Check that monster types are valid."
+
+    # Return summary for DM to use in narrative
+    summary = monster_spawner.get_spawned_summary()
+    return f"Created {len(created_ids)} monsters:\n{summary}"
+
+
 def _query_monster_ability(
     monster: Monster,
     section: str,
@@ -433,7 +540,8 @@ def create_dm_tools(
     lance_service: LanceRulesService,
     turn_manager: TurnManager,
     rules_cache_service: RulesCacheService,
-    state_manager: Optional[StateManager] = None
+    state_manager: Optional[StateManager] = None,
+    monster_spawner: Optional[MonsterSpawner] = None
 ) -> tuple[list, DMToolsDependencies]:
     """
     Factory function to create DM tools and their dependencies.
@@ -443,6 +551,7 @@ def create_dm_tools(
         turn_manager: Turn manager for getting current turn
         rules_cache_service: Cache service for storing results
         state_manager: Optional StateManager for character ability queries
+        monster_spawner: Optional MonsterSpawner for creating monsters in encounters
 
     Returns:
         Tuple of (tool_list, dependencies) where:
@@ -450,16 +559,17 @@ def create_dm_tools(
         - dependencies: DMToolsDependencies instance to pass to agent.run()
 
     Usage:
-        tools, deps = create_dm_tools(lance_service, turn_manager, cache_service, state_manager)
+        tools, deps = create_dm_tools(lance_service, turn_manager, cache_service, state_manager, monster_spawner)
         dm_agent = create_dungeon_master_agent(tools=tools)
         result = await dm_agent.process_message(context, deps=deps)
     """
-    tools = [query_rules_database, query_character_ability]
+    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters]
     dependencies = DMToolsDependencies(
         lance_service=lance_service,
         turn_manager=turn_manager,
         rules_cache_service=rules_cache_service,
-        state_manager=state_manager
+        state_manager=state_manager,
+        monster_spawner=monster_spawner
     )
 
     return tools, dependencies
