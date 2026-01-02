@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..agents.dungeon_master import DungeonMasterAgent
+    from ..services.monster_spawner import MonsterSpawner
 
 
 class SessionManager:
@@ -59,11 +60,12 @@ class SessionManager:
         turn_manager: Optional[TurnManager] = None,
         enable_turn_management: bool = False,
         player_character_registry: Optional[PlayerCharacterRegistry] = None,
-        rules_cache_service: Optional[RulesCacheService] = None
+        rules_cache_service: Optional[RulesCacheService] = None,
+        monster_spawner: Optional["MonsterSpawner"] = None
     ):
         """
         Initialize session manager.
-        
+
         Args:
             dungeon_master_agent: The DM agent for generating responses
             state_extractor: Agent for extracting state changes from narratives
@@ -72,6 +74,7 @@ class SessionManager:
             tool_registry: Registry for session tools (created with defaults if None)
             turn_manager: Manager for turn tracking and context isolation
             enable_turn_management: Whether to enable turn-aware processing
+            monster_spawner: MonsterSpawner for creating monsters in encounters
         """
         self.enable_state_management = enable_state_management
         self.enable_turn_management = enable_turn_management
@@ -100,6 +103,9 @@ class SessionManager:
 
         # Store rules cache service
         self.rules_cache_service = rules_cache_service
+
+        # Store monster spawner
+        self.monster_spawner = monster_spawner
 
         # Initialize context builders
         self.gd_context_builder = GDContextBuilder()
