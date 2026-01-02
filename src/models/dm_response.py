@@ -3,7 +3,7 @@ Simple structured response class for DM agent.
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.models.response_expectation import ResponseExpectation
 
@@ -70,9 +70,8 @@ class DungeonMasterResponse(BaseModel):
         )
     )
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {
                     "narrative": "You successfully cast the healing spell, feeling warmth flow through your wounds. The goblin falls unconscious from its wounds, ending the combat encounter.",
@@ -109,3 +108,4 @@ class DungeonMasterResponse(BaseModel):
                 }
             ]
         }
+    )

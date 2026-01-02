@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import List, Optional, Set, ClassVar, Iterator
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 @contextmanager
@@ -195,9 +195,8 @@ class ResponseExpectation(BaseModel):
             return self.characters[0]
         return None
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "examples": [
                 {
                     "characters": ["Tharion"],
@@ -231,3 +230,4 @@ class ResponseExpectation(BaseModel):
                 }
             ]
         }
+    )
