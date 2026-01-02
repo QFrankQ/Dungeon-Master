@@ -53,7 +53,7 @@ EXPLORATION_STEPS = [
 
 COMBAT_START_STEPS = [
     # Step 0: Select Monsters for Encounter
-    "BEFORE describing the combat encounter: Review <available_monsters> and call select_encounter_monsters() to choose which monsters will appear. Select monsters that fit the narrative context and desired difficulty. Example: select_encounter_monsters([{type: 'goblin', count: 3}]). DO NOT describe the encounter until monsters are selected - you need their stat sheets for initiative and combat. Set awaiting_response with response_type='none' and game_step_completed=True after selecting monsters.",
+    "BEFORE describing the combat encounter: Call get_available_monsters() to see available monster templates, then call select_encounter_monsters() to spawn monsters that fit the narrative context and desired difficulty. Example: select_encounter_monsters([{type: 'goblin', count: 3}]). DO NOT describe the encounter until monsters are selected - you need their stat sheets for initiative and combat. Set awaiting_response with response_type='none' and game_step_completed=True after selecting monsters.",
 
     # Step 1: Announce Combat Initiation
     "Announce combat initiation. Describe the encounter using the monsters you selected, identify all hostile participants by the IDs returned (e.g., goblin_1, goblin_2), and set the stage for battle. Make the transition from exploration to combat dramatic and clear. The monsters are now in StateManager with full stat sheets. DO NOT call for initiative rolls in this step. Set awaiting_response with response_type='none' (you are narrating).",
