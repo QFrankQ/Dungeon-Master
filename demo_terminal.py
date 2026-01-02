@@ -1045,39 +1045,8 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
     if not api_key:
         raise ValueError("API key is required for demo session manager")
 
-    # Create turn condensation agent for automatic reaction summarization
-    turn_condensation_agent = create_turn_condensation_agent()
-
-    # Create turn manager with condensation agent
-    turn_manager = create_turn_manager(turn_condensation_agent=turn_condensation_agent)
-
-    # NEW: Create services for DM tools
-    from src.db.lance_rules_service import create_lance_rules_service
-    from src.services.rules_cache_service import create_rules_cache_service
-    from src.agents.dm_tools import create_dm_tools
-
-    lance_service = create_lance_rules_service()
-    rules_cache_service = create_rules_cache_service()
-
-    # Create DM tools and dependencies
-    dm_tools, dm_deps = create_dm_tools(
-        lance_service=lance_service,
-        turn_manager=turn_manager,
-        rules_cache_service=rules_cache_service
-    )
-
-    # Create DM agent with all tools (turn management + rules database)
-    # Pass guild-level API key for BYOK
-    dm_agent = create_dungeon_master_agent(
-        model_name=dm_model_name,
-        tools=[turn_manager.start_and_queue_turns] + dm_tools,
-        api_key=api_key  # NEW: Pass guild's API key
-    )
-
-    # Store dm_deps for passing to process_message()
-    dm_agent.dm_deps = dm_deps
-
     # Create temporary directory for character state (prevents modifying source files)
+    # Must be created FIRST so state_manager can use the path
     temp_dir = tempfile.mkdtemp(prefix="dnd_demo_")
     print(f"[SYSTEM] Created temporary character directory: {temp_dir}")
 
@@ -1092,6 +1061,48 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
             shutil.copy2(source_file, temp_char_dir / char_file)
             print(f"[SYSTEM] Copied {char_file} to temp directory")
 
+    # Create turn condensation agent for automatic reaction summarization
+    turn_condensation_agent = create_turn_condensation_agent()
+
+    # Create turn manager with condensation agent
+    turn_manager = create_turn_manager(turn_condensation_agent=turn_condensation_agent)
+
+    # Create services for DM tools
+    from src.db.lance_rules_service import create_lance_rules_service
+    from src.services.rules_cache_service import create_rules_cache_service
+    from src.services.monster_spawner import create_monster_spawner
+    from src.agents.dm_tools import create_dm_tools
+    from src.memory.state_manager import create_state_manager
+
+    lance_service = create_lance_rules_service()
+    rules_cache_service = create_rules_cache_service()
+
+    # Create state manager with temp directory (needed for monster spawner)
+    state_manager = create_state_manager(character_data_path=str(temp_char_dir) + "/")
+
+    # Create monster spawner for DM to select monsters from templates
+    monster_spawner = create_monster_spawner(state_manager=state_manager)
+
+    # Create DM tools and dependencies (with monster spawner)
+    dm_tools, dm_deps = create_dm_tools(
+        lance_service=lance_service,
+        turn_manager=turn_manager,
+        rules_cache_service=rules_cache_service,
+        state_manager=state_manager,
+        monster_spawner=monster_spawner
+    )
+
+    # Create DM agent with all tools (turn management + rules database + monster selection)
+    # Pass guild-level API key for BYOK
+    dm_agent = create_dungeon_master_agent(
+        model_name=dm_model_name,
+        tools=[turn_manager.start_and_queue_turns] + dm_tools,
+        api_key=api_key
+    )
+
+    # Store dm_deps for passing to process_message()
+    dm_agent.dm_deps = dm_deps
+
     # Create player character registry in a subdirectory (not in character_data_path)
     # This prevents StateManager from trying to load registry as a character file
     registry_dir = temp_char_dir / "registry"
@@ -1100,18 +1111,16 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
     player_registry = create_player_character_registry(registry_file_path=registry_path)
     print(f"[SYSTEM] Created per-session player registry: {registry_path}")
 
-    # Create state management components with temp directory
-    from src.memory.state_manager import create_state_manager
+    # Create state extraction orchestrator
     from src.agents.state_extraction_orchestrator import create_state_extraction_orchestrator
 
-    state_manager = create_state_manager(character_data_path=str(temp_char_dir) + "/")
     state_extraction_orchestrator = create_state_extraction_orchestrator(
         model_name="gemini-2.5-flash-lite",
         api_key=api_key,
         rules_cache_service=rules_cache_service  # Share with DM tools
     )
 
-    # Create session manager with all components
+    # Create session manager with all components (including monster spawner)
     session_manager = SessionManager(
         gameflow_director_agent=None,  # No GD for demo
         dungeon_master_agent=dm_agent,
@@ -1121,7 +1130,8 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
         turn_manager=turn_manager,
         enable_turn_management=True,
         player_character_registry=player_registry,
-        rules_cache_service=rules_cache_service  # For DM context with cached rules
+        rules_cache_service=rules_cache_service,  # For DM context with cached rules
+        monster_spawner=monster_spawner  # For monster selection in combat
     )
 
     return session_manager, temp_dir
