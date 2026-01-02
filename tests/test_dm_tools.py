@@ -6,6 +6,8 @@ from pydantic_ai import RunContext
 
 from src.agents.dm_tools import (
     query_rules_database,
+    get_available_monsters,
+    select_encounter_monsters,
     DMToolsDependencies,
     create_dm_tools,
     _format_lance_entry_to_cache,
@@ -533,9 +535,11 @@ class TestFactoryFunction:
             rules_cache_service=mock_rules_cache_service
         )
 
-        # Verify tools list (query_rules_database + query_character_ability)
-        assert len(tools) == 2
+        # Verify tools list (query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters)
+        assert len(tools) == 4
         assert query_rules_database in tools
+        assert get_available_monsters in tools
+        assert select_encounter_monsters in tools
 
         # Verify dependencies
         assert isinstance(deps, DMToolsDependencies)
