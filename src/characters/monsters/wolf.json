@@ -1,0 +1,49 @@
+{
+  "name": "Wolf",
+  "meta": {
+    "size": "Medium",
+    "type": "beast",
+    "alignment": "Unaligned"
+  },
+  "attributes": {
+    "strength": {"score": 12, "modifier": 1},
+    "dexterity": {"score": 15, "modifier": 2},
+    "constitution": {"score": 12, "modifier": 1},
+    "intelligence": {"score": 3, "modifier": -4},
+    "wisdom": {"score": 12, "modifier": 1},
+    "charisma": {"score": 6, "modifier": -2}
+  },
+  "stats": {
+    "armor_class": {"value": 13, "type": "Natural Armor"},
+    "hit_points": {"average": 11, "formula": "2d8 + 2"},
+    "speed": {
+      "walk": {"value": 40, "unit": "ft"}
+    },
+    "skills": {"perception": 3, "stealth": 4},
+    "senses": {"passive_perception": 13},
+    "languages": [],
+    "challenge": {"rating": "1/4", "xp": 50},
+    "proficiency_bonus": 2
+  },
+  "special_traits": [
+    {
+      "name": "Keen Hearing and Smell",
+      "description": "The wolf has advantage on Wisdom (Perception) checks that rely on hearing or smell."
+    },
+    {
+      "name": "Pack Tactics",
+      "description": "The wolf has advantage on an attack roll against a creature if at least one of the wolf's allies is within 5 feet of the creature and the ally isn't incapacitated."
+    }
+  ],
+  "actions": [
+    {
+      "name": "Bite",
+      "description": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 7 (2d4 + 2) piercing damage. If the target is a creature, it must succeed on a DC 11 Strength saving throw or be knocked prone.",
+      "type": "Melee Weapon Attack",
+      "attack_bonus": 4,
+      "reach": {"value": 5, "unit": "ft"},
+      "target": "one target",
+      "damage": {"average": 7, "formula": "2d4 + 2", "type": "piercing"}
+    }
+  ]
+}

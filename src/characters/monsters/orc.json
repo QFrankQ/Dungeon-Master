@@ -1,0 +1,55 @@
+{
+  "name": "Orc",
+  "meta": {
+    "size": "Medium",
+    "type": "humanoid",
+    "alignment": "Chaotic Evil"
+  },
+  "attributes": {
+    "strength": {"score": 16, "modifier": 3},
+    "dexterity": {"score": 12, "modifier": 1},
+    "constitution": {"score": 16, "modifier": 3},
+    "intelligence": {"score": 7, "modifier": -2},
+    "wisdom": {"score": 11, "modifier": 0},
+    "charisma": {"score": 10, "modifier": 0}
+  },
+  "stats": {
+    "armor_class": {"value": 13, "type": "Hide Armor"},
+    "hit_points": {"average": 15, "formula": "2d8 + 6"},
+    "speed": {
+      "walk": {"value": 30, "unit": "ft"}
+    },
+    "skills": {"intimidation": 2},
+    "senses": {"darkvision": 60, "passive_perception": 10},
+    "languages": ["Common", "Orc"],
+    "challenge": {"rating": "1/2", "xp": 100},
+    "proficiency_bonus": 2
+  },
+  "special_traits": [
+    {
+      "name": "Aggressive",
+      "description": "As a bonus action, the orc can move up to its speed toward a hostile creature that it can see."
+    }
+  ],
+  "actions": [
+    {
+      "name": "Greataxe",
+      "description": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 9 (1d12 + 3) slashing damage.",
+      "type": "Melee Weapon Attack",
+      "attack_bonus": 5,
+      "reach": {"value": 5, "unit": "ft"},
+      "target": "one target",
+      "damage": {"average": 9, "formula": "1d12 + 3", "type": "slashing"}
+    },
+    {
+      "name": "Javelin",
+      "description": "Melee or Ranged Weapon Attack: +5 to hit, reach 5 ft. or range 30/120 ft., one target. Hit: 6 (1d6 + 3) piercing damage.",
+      "type": "Melee or Ranged Weapon Attack",
+      "attack_bonus": 5,
+      "reach": {"value": 5, "unit": "ft"},
+      "range": {"normal": 30, "long": 120, "unit": "ft"},
+      "target": "one target",
+      "damage": {"average": 6, "formula": "1d6 + 3", "type": "piercing"}
+    }
+  ]
+}
