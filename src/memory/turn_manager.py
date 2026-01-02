@@ -1013,6 +1013,7 @@ class TurnManager:
 
     def add_initiative_roll(
         self,
+        character_id: str,
         character_name: str,
         roll: int,
         is_player: bool = True,
@@ -1027,7 +1028,8 @@ class TurnManager:
         - The roll parameter should be the final result with all modifiers applied
 
         Args:
-            character_name: Name of the character
+            character_id: Unique identifier for the character (e.g., 'fighter', 'goblin_1')
+            character_name: Display name of the character
             roll: Total initiative roll result (with any advantage/disadvantage already applied)
             is_player: Whether this is a player character
             dex_modifier: Dexterity modifier for tie-breaking
@@ -1039,6 +1041,7 @@ class TurnManager:
             raise ValueError(f"Cannot add initiative in phase {self.combat_state.phase}")
 
         entry = InitiativeEntry(
+            character_id=character_id,
             character_name=character_name,
             roll=roll,
             is_player=is_player,
@@ -1047,12 +1050,13 @@ class TurnManager:
 
         self.combat_state.add_initiative_roll(entry)
 
-        # Check if all participants have rolled
-        rolled = {e.character_name for e in self.combat_state.initiative_order}
+        # Check if all participants have rolled (by character_id)
+        rolled = {e.character_id for e in self.combat_state.initiative_order}
         missing = [p for p in self.combat_state.participants if p not in rolled]
 
         return {
-            "character": character_name,
+            "character_id": character_id,
+            "character_name": character_name,
             "roll": roll,
             "collected": len(self.combat_state.initiative_order),
             "total_participants": len(self.combat_state.participants),
@@ -1095,7 +1099,7 @@ class TurnManager:
         self._queue_combat_round()
 
         # Get the first participant
-        first_participant = self.combat_state.get_current_participant()
+        first_participant = self.combat_state.get_current_participant_id()
 
         return {
             "phase": CombatPhase.COMBAT_ROUNDS.value,
@@ -1213,8 +1217,8 @@ class TurnManager:
             return {
                 "combat_over": True,
                 "reason": "One side eliminated",
-                "remaining_players": self.combat_state.get_remaining_players(),
-                "remaining_enemies": self.combat_state.get_remaining_enemies()
+                "remaining_players": self.combat_state.get_remaining_player_ids(),
+                "remaining_monsters": self.combat_state.get_remaining_monster_ids()
             }
 
         result = {
@@ -1369,14 +1373,14 @@ class TurnManager:
             "phase": self.combat_state.phase.value,
             "game_phase": self._current_game_phase.value,
             "round_number": self.combat_state.round_number,
-            "current_participant": self.combat_state.get_current_participant(),
+            "current_participant": self.combat_state.get_current_participant_id(),
             "participants_count": len(self.combat_state.participants),
             "initiative_order": [
                 {"name": e.character_name, "roll": e.roll, "is_player": e.is_player}
                 for e in self.combat_state.initiative_order
             ],
-            "players_remaining": len(self.combat_state.get_remaining_players()),
-            "enemies_remaining": len(self.combat_state.get_remaining_enemies())
+            "players_remaining": len(self.combat_state.get_remaining_player_ids()),
+            "monsters_remaining": len(self.combat_state.get_remaining_monster_ids())
         }
 
 
