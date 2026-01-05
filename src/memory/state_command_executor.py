@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Callable, Union
 from pydantic import BaseModel, Field
 
 from ..characters.charactersheet import Character
+from ..characters.monster import Monster
 from ..characters.character_components import Effect, DurationType
 from ..models.state_commands_optimized import (
     HPChangeCommand,
@@ -870,8 +871,31 @@ class StateCommandExecutor:
                 message=f"Invalid action '{action}' (must be 'use', 'add', or 'remove')"
             )
 
-    def _handle_death_save(self, command: DeathSaveCommand, character: Character) -> CommandExecutionResult:
-        """Handle death save recording commands."""
+    def _handle_death_save(self, command: DeathSaveCommand, character: Union[Character, Monster]) -> CommandExecutionResult:
+        """Handle death save recording commands.
+
+        Note: In D&D 5e, monsters don't make death saves - they die immediately at 0 HP.
+        If a death save command is issued for a monster, we return a success with a note
+        explaining that monsters don't make death saves.
+        """
+        # Monsters don't make death saves in D&D 5e - they die at 0 HP
+        if isinstance(character, Monster):
+            # Check if monster is at 0 HP
+            is_dead = character.hit_points.current <= 0
+            return CommandExecutionResult(
+                success=True,  # Not an error, just different rules for monsters
+                command_type=command.type,
+                character_id=command.character_id,
+                message=f"Monsters don't make death saves in D&D 5e - they die at 0 HP. "
+                        f"{character.name} {'is dead' if is_dead else 'is still alive'}.",
+                details={
+                    "is_monster": True,
+                    "current_hp": character.hit_points.current,
+                    "is_dead": is_dead,
+                    "note": "Death saves are a player character mechanic; monsters die instantly at 0 HP"
+                }
+            )
+
         result = command.result
         count = command.count
         death_saves = character.death_saves
