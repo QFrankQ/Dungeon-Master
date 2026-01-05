@@ -389,20 +389,25 @@ class SessionCommands(commands.Cog):
 
             # Add initiative rolls to turn manager (finalization happens after step 5 completes)
             turn_manager = session_manager.turn_manager
+            registry = session_manager.player_character_registry
+            id_to_name_map = registry.get_character_id_to_name_map() if registry else {}
             if turn_manager:
-                for char_name, roll_info in rolls.items():
+                for char_id, roll_info in rolls.items():
                     roll_value = roll_info.get("roll", 0)
                     dex_mod = roll_info.get("dex_modifier", 0)
+                    # Get display name for narrative (fallback to ID if not found)
+                    char_display_name = id_to_name_map.get(char_id, char_id)
                     try:
                         turn_manager.add_initiative_roll(
-                            character_name=char_name,
+                            character_id=char_id,
+                            character_name=char_display_name,
                             roll=roll_value,
                             dex_modifier=dex_mod,
                             is_player=True  # All Discord players are player characters
                         )
-                        logger.info(f"Added initiative roll: {char_name} = {roll_value}")
+                        logger.info(f"Added initiative roll: {char_display_name} ({char_id}) = {roll_value}")
                     except Exception as e:
-                        logger.warning(f"Could not add initiative roll for {char_name}: {e}")
+                        logger.warning(f"Could not add initiative roll for {char_id}: {e}")
 
             summary_lines = ["**Initiative Results:**"]
             for i, char in enumerate(order):
