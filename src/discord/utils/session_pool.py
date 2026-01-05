@@ -32,6 +32,7 @@ class SessionContext:
     temp_character_dir: Optional[str] = None
     message_coordinator: Optional['MessageCoordinator'] = None  # Milestone 5: Multiplayer coordination
     timeouts: SessionTimeouts = None  # Milestone 6: Configurable timeouts
+    logger: Optional['GameLogger'] = None  # Structured logging
 
     def __post_init__(self):
         """Initialize default timeouts if not provided."""
@@ -105,9 +106,10 @@ class SessionPool:
             )
 
         # Create session manager with guild's API key
-        session_manager, temp_dir = create_demo_session_manager(
+        session_manager, temp_dir, logger = create_demo_session_manager(
             dm_model_name='gemini-2.5-flash',
-            api_key=guild_api_key  # Pass guild's API key for BYOK
+            api_key=guild_api_key,  # Pass guild's API key for BYOK
+            enable_logging=True  # Enable structured logging
         )
 
         # Initialize first turn in EXPLORATION mode
@@ -149,7 +151,8 @@ class SessionPool:
             channel_id=channel_id,
             session_db_id=session_db_id,
             temp_character_dir=temp_dir,
-            message_coordinator=message_coordinator
+            message_coordinator=message_coordinator,
+            logger=logger
         )
 
         self._sessions[channel_id] = context
@@ -180,6 +183,13 @@ class SessionPool:
                 await db_session.commit()
         except Exception as e:
             print(f"Warning: Failed to cleanup session from database: {e}")
+
+        # Close logger session
+        if context.logger:
+            try:
+                context.logger.close_session()
+            except Exception as e:
+                print(f"Warning: Failed to close logger session: {e}")
 
         # Cleanup temp character directory (like demo_terminal.py:503-509)
         if context.temp_character_dir and Path(context.temp_character_dir).exists():
