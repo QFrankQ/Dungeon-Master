@@ -6,7 +6,7 @@ Coordinates between DM responses, state extraction, and state updates.
 from typing import Optional, Dict, Any, List
 import asyncio
 
-
+from ..services.game_logger import GameLogger, LogLevel
 
 from ..models.dm_response import DungeonMasterResponse
 from ..models.chat_message import ChatMessage
@@ -61,7 +61,8 @@ class SessionManager:
         enable_turn_management: bool = False,
         player_character_registry: Optional[PlayerCharacterRegistry] = None,
         rules_cache_service: Optional[RulesCacheService] = None,
-        monster_spawner: Optional["MonsterSpawner"] = None
+        monster_spawner: Optional["MonsterSpawner"] = None,
+        logger: Optional[GameLogger] = None
     ):
         """
         Initialize session manager.
@@ -75,10 +76,12 @@ class SessionManager:
             turn_manager: Manager for turn tracking and context isolation
             enable_turn_management: Whether to enable turn-aware processing
             monster_spawner: MonsterSpawner for creating monsters in encounters
+            logger: Optional GameLogger for tracing
         """
         self.enable_state_management = enable_state_management
         self.enable_turn_management = enable_turn_management
-        
+        self.logger = logger
+
         # Store the GD agent
         self.gameflow_director_agent: GameflowDirectorAgent = gameflow_director_agent
         # Store the DM agent
@@ -522,6 +525,12 @@ class SessionManager:
                 # Not a resolution step - no extraction needed
                 return None
 
+            # Log state extraction trigger
+            if self.logger:
+                self.logger.extraction("Resolution step detected - starting extraction",
+                                      turn_id=current_turn.turn_id,
+                                      step_index=current_step_index)
+
             response_queue.append("[Resolution step detected - extracting state changes...]\n")
 
             # Build state extraction context with character name→ID mapping
@@ -544,20 +553,39 @@ class SessionManager:
 
             # Apply commands
             if state_commands.commands:
+                # Log commands generated
+                if self.logger:
+                    self.logger.extraction("Commands extracted",
+                                          command_count=len(state_commands.commands),
+                                          command_types=[cmd.command_type for cmd in state_commands.commands])
+
                 state_results = self.state_manager.apply_commands(state_commands)
 
                 if state_results["success"]:
                     response_queue.append(f"✓ Applied {state_results['commands_executed']} state commands\n")
+                    if self.logger:
+                        self.logger.command("State commands applied",
+                                          commands_executed=state_results['commands_executed'])
                 else:
                     response_queue.append(f"⚠ State extraction errors: {state_results['errors']}\n")
+                    if self.logger:
+                        self.logger.command("State command errors",
+                                          errors=state_results['errors'],
+                                          level=LogLevel.WARNING)
 
                 return state_results
             else:
                 response_queue.append("[No state changes detected]\n")
+                if self.logger:
+                    self.logger.extraction("No state changes detected")
                 return None
 
         except Exception as e:
             response_queue.append(f"⚠ State extraction failed: {e}\n")
+            if self.logger:
+                self.logger.extraction("State extraction failed",
+                                      error=str(e),
+                                      level=LogLevel.ERROR)
             return None
 
     def _store_pending_monster_reactions(self, dm_response: DungeonMasterResponse) -> None:
@@ -622,6 +650,12 @@ class SessionManager:
         if not self.dungeon_master_agent:
             raise ValueError("No DungeonMasterAgent configured.")
 
+        # Log player input received
+        if self.logger:
+            self.logger.player("Player input received",
+                             message_count=len(new_messages),
+                             speakers=[m.player_id for m in new_messages])
+
         # === PHASE 0: BEGIN TURN PROCESSING ===
         # Set processing turn to current stack top (only if turn is active)
         # Note: First message may not have a turn yet - DM will create it via tool
@@ -661,6 +695,11 @@ class SessionManager:
         # Pass deps if available (for DM tools like query_rules_database)
         #TODO: if exception, roll back the added messages.
         deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
+
+        # Log DM processing start
+        if self.logger:
+            self.logger.dm("Processing DM response", context_length=len(dungeon_master_context))
+
         with character_registry_context(registered_chars):
             dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
         dungeon_master_response: DungeonMasterResponse = dm_result.output
@@ -670,6 +709,14 @@ class SessionManager:
         total_input_tokens = run_usage.input_tokens if run_usage else 0
         total_output_tokens = run_usage.output_tokens if run_usage else 0
         total_requests = run_usage.requests if run_usage else 0
+
+        # Log DM response received
+        if self.logger:
+            self.logger.dm("DM response generated",
+                         narrative_length=len(dungeon_master_response.narrative),
+                         step_completed=dungeon_master_response.game_step_completed,
+                         input_tokens=total_input_tokens,
+                         output_tokens=total_output_tokens)
 
         # === PHASE 3: PROCESS DM RESPONSE ===
         response_queue: List[str] = []
@@ -695,6 +742,10 @@ class SessionManager:
             # No step completion - done processing
             pass
         else:
+            # Log step completion
+            if self.logger:
+                self.logger.step("Step completed - entering advancement loop")
+
             # WHILE loop for step completion
             # Processes multiple steps in same turn OR switches to subturns
             while dungeon_master_response.game_step_completed:
@@ -708,6 +759,12 @@ class SessionManager:
                 # (This is the turn that was being processed when DM ran, even if tools created subturns)
                 # response_queue.append("[Advancing turn step...]\n")
                 more_steps = self.turn_manager.advance_processing_turn_step()
+
+                # Log step advancement
+                if self.logger:
+                    self.logger.step("Step advanced",
+                                   new_objective=self.turn_manager.get_current_step_objective(),
+                                   more_steps=more_steps)
                 # response_queue.append(f"[New step objective: {self.turn_manager.get_current_step_objective()}]\n")
                 if not more_steps:
                     # Processing turn is complete - end it and get next
