@@ -314,10 +314,10 @@ class GameCommands(commands.Cog):
                 )
                 return
 
-            # For now, add some placeholder enemies
-            # In future, DM narrative or explicit command would specify enemies
-            enemies = ["Goblin 1", "Goblin 2"]
-            all_participants = player_chars + enemies
+            # Start combat with only player characters as initial participants.
+            # Monsters will be selected by the DM via select_encounter_monsters() tool
+            # during COMBAT_START Step 0, and their initiative will be added separately.
+            all_participants = player_chars
 
             # Enter combat via TurnManager
             # Note: We explicitly ensure combat_mode is OFF during COMBAT_START.
@@ -333,14 +333,13 @@ class GameCommands(commands.Cog):
 
             # Build combat announcement
             player_list = ", ".join(player_chars) if player_chars else "No players"
-            enemy_list = ", ".join(enemies) if enemies else "No enemies"
 
             await interaction.response.send_message(
                 "⚔️ **COMBAT INITIATED!**\n\n"
                 f"**Players:** {player_list}\n"
-                f"**Enemies:** {enemy_list}\n\n"
+                f"**Enemies:** (DM will select monsters)\n\n"
                 f"**Phase:** Combat Start\n"
-                f"The DM will guide you through the combat flow."
+                f"The DM will select monsters and guide you through combat."
             )
 
         elif action.lower() == "end":
