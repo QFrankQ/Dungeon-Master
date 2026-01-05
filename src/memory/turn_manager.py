@@ -130,11 +130,14 @@ This design supports complex D&D reaction scenarios while maintaining clean arch
 boundaries and providing efficient queue processing for combat mechanics.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime
 import asyncio
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from .state_manager import StateManager
 
 from ..models.formatted_game_message import FormattedGameMessage
 from ..models.turn_context import TurnContext, TurnExtractionContext
@@ -210,15 +213,18 @@ class TurnManager:
     
     def __init__(
         self,
-        turn_condensation_agent: Optional["StructuredTurnSummarizer"] = None
+        turn_condensation_agent: Optional["StructuredTurnSummarizer"] = None,
+        state_manager: Optional["StateManager"] = None
     ):
         """
         Initialize the turn manager.
 
         Args:
             turn_condensation_agent: Optional agent for turn condensation
+            state_manager: Optional StateManager for monster validation during initiative
         """
         self.turn_condensation_agent = turn_condensation_agent
+        self.state_manager = state_manager
 
         # Context builders for different consumers
         self.state_extractor_context_builder = StateExtractorContextBuilder()
@@ -1044,9 +1050,24 @@ class TurnManager:
 
         Returns:
             Dictionary with roll info and collection status
+
+        Raises:
+            ValueError: If phase is not COMBAT_START, or if is_player=False and monster
+                        doesn't exist in StateManager (must use select_encounter_monsters first)
         """
         if self.combat_state.phase != CombatPhase.COMBAT_START:
             raise ValueError(f"Cannot add initiative in phase {self.combat_state.phase}")
+
+        # Validate that monsters exist in StateManager before adding to initiative
+        # This ensures DM used select_encounter_monsters() to properly spawn monsters
+        if not is_player and self.state_manager is not None:
+            monster = self.state_manager.get_monster(character_id)
+            if monster is None:
+                raise ValueError(
+                    f"Monster '{character_id}' not found in StateManager. "
+                    f"You must use select_encounter_monsters() to spawn monsters before adding "
+                    f"their initiative. Available monsters: {list(self.state_manager.monsters.keys())}"
+                )
 
         entry = InitiativeEntry(
             character_id=character_id,
