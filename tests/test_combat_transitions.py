@@ -1024,3 +1024,51 @@ class TestFullCombatFlow:
         # Remove all monsters to trigger combat over
         tm.combat_state.remove_participant("goblin_2")
         assert tm.combat_state.is_combat_over() is True
+
+
+# =============================================================================
+# MONSTER INITIATIVE TESTS
+# =============================================================================
+
+class TestMonsterInitiativeInTurnManager:
+    """Test that monster initiative rolls work in TurnManager.
+
+    Note: Monster validation (ensuring monsters exist before adding initiative)
+    is now handled in dm_tools.py's add_monster_initiative() function, not in
+    TurnManager. This keeps TurnManager focused on turn management without
+    coupling it to StateManager.
+    """
+
+    def test_monster_initiative_allowed(self, turn_manager):
+        """Monster initiative rolls work in TurnManager without validation."""
+        # Enter combat
+        turn_manager.enter_combat(["fighter", "goblin_1"], "Test")
+
+        # Add monster initiative - TurnManager accepts it directly
+        # (validation happens at dm_tools layer)
+        result = turn_manager.add_initiative_roll(
+            character_id="goblin_1",
+            character_name="Goblin",
+            roll=12,
+            is_player=False,
+            dex_modifier=2
+        )
+
+        assert result["character_id"] == "goblin_1"
+        assert len(turn_manager.combat_state.initiative_order) == 1
+
+    def test_player_initiative_allowed(self, turn_manager):
+        """Player initiative rolls work in TurnManager."""
+        turn_manager.enter_combat(["fighter", "goblin_1"], "Test")
+
+        # Add player initiative
+        result = turn_manager.add_initiative_roll(
+            character_id="fighter",
+            character_name="Tharion",
+            roll=18,
+            is_player=True,
+            dex_modifier=2
+        )
+
+        assert result["character_id"] == "fighter"
+        assert len(turn_manager.combat_state.initiative_order) == 1
