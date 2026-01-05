@@ -13,6 +13,7 @@ from ..memory.turn_manager import TurnManager
 from ..memory.state_manager import StateManager
 from ..services.rules_cache_service import RulesCacheService
 from ..services.monster_spawner import MonsterSpawner
+from ..services.game_logger import GameLogger, LogLevel
 from ..characters.monster import Monster
 from ..characters.charactersheet import Character
 
@@ -42,13 +43,15 @@ class DMToolsDependencies:
         turn_manager: TurnManager,
         rules_cache_service: RulesCacheService,
         state_manager: Optional[StateManager] = None,
-        monster_spawner: Optional[MonsterSpawner] = None
+        monster_spawner: Optional[MonsterSpawner] = None,
+        logger: Optional[GameLogger] = None
     ):
         self.lance_service = lance_service
         self.turn_manager = turn_manager
         self.rules_cache_service = rules_cache_service
         self.state_manager = state_manager
         self.monster_spawner = monster_spawner
+        self.logger = logger
 
 
 async def query_rules_database(
@@ -94,10 +97,17 @@ async def query_rules_database(
     lance_service = ctx.deps.lance_service
     turn_manager = ctx.deps.turn_manager
     rules_cache_service = ctx.deps.rules_cache_service
+    logger = ctx.deps.logger
+
+    # Log tool invocation
+    if logger:
+        logger.dm_tool("query_rules_database called", query=query, limit=limit)
 
     # Get current turn for caching
     current_turn = turn_manager.get_current_turn_context()
     if not current_turn:
+        if logger:
+            logger.dm_tool("query_rules_database failed: no active turn", level=LogLevel.WARNING)
         return "Error: No active turn to cache results."
 
     # Clamp limit to max 10
@@ -110,12 +120,23 @@ async def query_rules_database(
             # Exact match found - cache and return single result
             cache_entry = _format_lance_entry_to_cache(rule_entry)
             rules_cache_service.add_to_cache(cache_entry, current_turn)
+            if logger:
+                logger.dm_tool("query_rules_database complete",
+                             query=query,
+                             results_count=1,
+                             match_type="exact",
+                             cached=True)
             return _format_rule_for_dm(cache_entry)
 
     # Fall through to hybrid search (or if query was long/no exact match)
     results = lance_service.search(query, limit=limit)
 
     if not results:
+        if logger:
+            logger.dm_tool("query_rules_database complete",
+                         query=query,
+                         results_count=0,
+                         match_type="hybrid")
         return f"No rules found matching '{query}'"
 
     # Cache all results and format
@@ -124,6 +145,13 @@ async def query_rules_database(
         cache_entry = _format_lance_entry_to_cache(result)
         rules_cache_service.add_to_cache(cache_entry, current_turn)
         formatted_results.append(_format_rule_for_dm(cache_entry))
+
+    if logger:
+        logger.dm_tool("query_rules_database complete",
+                     query=query,
+                     results_count=len(results),
+                     match_type="hybrid",
+                     cached=True)
 
     # Return formatted multi-result string with separator
     return "\n\n---\n\n".join(formatted_results)
@@ -281,14 +309,37 @@ async def query_character_ability(
         >>> await query_character_ability(ctx, "wizard", "spells", "Fireball")
     """
     state_manager = ctx.deps.state_manager
+    logger = ctx.deps.logger
+
+    # Log tool invocation
+    if logger:
+        logger.dm_tool("query_character_ability called",
+                     character_id=character_id,
+                     section=section,
+                     ability_name=ability_name)
 
     if not state_manager:
+        if logger:
+            logger.dm_tool("query_character_ability failed: no state manager",
+                         level=LogLevel.WARNING)
         return "Error: State manager not available for character queries."
 
     # Load character (player character or monster)
     character = state_manager.get_character_by_id(character_id)
     if not character:
+        if logger:
+            logger.dm_tool("query_character_ability failed: character not found",
+                         character_id=character_id,
+                         level=LogLevel.WARNING)
         return f"Error: '{character_id}' not found (checked both player characters and monsters)."
+
+    # Log successful lookup
+    if logger:
+        char_type = "monster" if isinstance(character, Monster) else "player"
+        logger.dm_tool("query_character_ability found character",
+                     character_id=character_id,
+                     character_type=char_type,
+                     section=section)
 
     # Handle Monster
     if isinstance(character, Monster):
@@ -407,11 +458,24 @@ async def get_available_monsters(
          ..."
     """
     monster_spawner = ctx.deps.monster_spawner
+    logger = ctx.deps.logger
+
+    # Log tool invocation
+    if logger:
+        logger.dm_tool("get_available_monsters called")
 
     if not monster_spawner:
+        if logger:
+            logger.dm_tool("get_available_monsters failed: no monster spawner",
+                         level=LogLevel.WARNING)
         return "Error: Monster spawner not available."
 
-    return monster_spawner.get_available_monsters_context()
+    result = monster_spawner.get_available_monsters_context()
+
+    if logger:
+        logger.dm_tool("get_available_monsters complete")
+
+    return result
 
 
 async def select_encounter_monsters(
@@ -447,11 +511,23 @@ async def select_encounter_monsters(
         - Monsters can be targeted in combat and have HP tracked
     """
     monster_spawner = ctx.deps.monster_spawner
+    logger = ctx.deps.logger
+
+    # Log tool invocation
+    if logger:
+        selections_summary = [{"type": m.type, "count": m.count} for m in monsters] if monsters else []
+        logger.dm_tool("select_encounter_monsters called", selections=selections_summary)
 
     if not monster_spawner:
+        if logger:
+            logger.dm_tool("select_encounter_monsters failed: no monster spawner",
+                         level=LogLevel.WARNING)
         return "Error: Monster spawner not available. Cannot create monsters for encounter."
 
     if not monsters:
+        if logger:
+            logger.dm_tool("select_encounter_monsters failed: no monsters specified",
+                         level=LogLevel.WARNING)
         return "Error: No monsters specified."
 
     # Convert MonsterSelection objects to dicts for the spawner
@@ -461,10 +537,23 @@ async def select_encounter_monsters(
     try:
         created_ids = monster_spawner.spawn_monsters(selections)
     except ValueError as e:
+        if logger:
+            logger.dm_tool("select_encounter_monsters failed: spawn error",
+                         error=str(e),
+                         level=LogLevel.ERROR)
         return f"Error spawning monsters: {e}"
 
     if not created_ids:
+        if logger:
+            logger.dm_tool("select_encounter_monsters failed: no monsters created",
+                         level=LogLevel.WARNING)
         return "Error: No monsters were created. Check that monster types are valid."
+
+    # Log successful spawn
+    if logger:
+        logger.dm_tool("Monsters spawned",
+                     created_ids=created_ids,
+                     count=len(created_ids))
 
     # Return summary for DM to use in narrative
     summary = monster_spawner.get_spawned_summary()
@@ -498,17 +587,33 @@ async def add_monster_initiative(
     """
     turn_manager = ctx.deps.turn_manager
     state_manager = ctx.deps.state_manager
+    logger = ctx.deps.logger
+
+    # Log tool invocation
+    if logger:
+        rolls_summary = [{"id": r.monster_id, "roll": r.roll} for r in rolls] if rolls else []
+        logger.dm_tool("add_monster_initiative called", rolls=rolls_summary)
 
     if not turn_manager:
+        if logger:
+            logger.dm_tool("add_monster_initiative failed: no turn manager",
+                         level=LogLevel.WARNING)
         return "Error: Turn manager not available."
 
     if not state_manager:
+        if logger:
+            logger.dm_tool("add_monster_initiative failed: no state manager",
+                         level=LogLevel.WARNING)
         return "Error: State manager not available for monster lookups."
 
     if not rolls:
+        if logger:
+            logger.dm_tool("add_monster_initiative failed: no rolls provided",
+                         level=LogLevel.WARNING)
         return "Error: No initiative rolls provided."
 
     results = []
+    successful_count = 0
     for roll_entry in rolls:
         monster = state_manager.get_monster(roll_entry.monster_id)
         if not monster:
@@ -528,6 +633,7 @@ async def add_monster_initiative(
                 is_player=False  # Monsters are not player characters
             )
             results.append(f"✅ {display_name} ({roll_entry.monster_id}): Initiative {roll_entry.roll}")
+            successful_count += 1
         except ValueError as e:
             results.append(f"❌ {roll_entry.monster_id}: {e}")
 
@@ -536,8 +642,18 @@ async def add_monster_initiative(
         collected = len(turn_manager.combat_state.initiative_order)
         total = len(turn_manager.combat_state.participants)
         status = f"\n\nInitiative collected: {collected}/{total}"
+
+        # Log completion with status
+        if logger:
+            logger.dm_tool("add_monster_initiative complete",
+                         added_count=successful_count,
+                         collected=collected,
+                         total=total)
     else:
         status = ""
+        if logger:
+            logger.dm_tool("add_monster_initiative complete",
+                         added_count=successful_count)
 
     return "\n".join(results) + status
 
@@ -612,7 +728,8 @@ def create_dm_tools(
     turn_manager: TurnManager,
     rules_cache_service: RulesCacheService,
     state_manager: Optional[StateManager] = None,
-    monster_spawner: Optional[MonsterSpawner] = None
+    monster_spawner: Optional[MonsterSpawner] = None,
+    logger: Optional[GameLogger] = None
 ) -> tuple[list, DMToolsDependencies]:
     """
     Factory function to create DM tools and their dependencies.
@@ -623,6 +740,7 @@ def create_dm_tools(
         rules_cache_service: Cache service for storing results
         state_manager: Optional StateManager for character ability queries
         monster_spawner: Optional MonsterSpawner for creating monsters in encounters
+        logger: Optional GameLogger for tracing tool invocations
 
     Returns:
         Tuple of (tool_list, dependencies) where:
@@ -630,7 +748,7 @@ def create_dm_tools(
         - dependencies: DMToolsDependencies instance to pass to agent.run()
 
     Usage:
-        tools, deps = create_dm_tools(lance_service, turn_manager, cache_service, state_manager, monster_spawner)
+        tools, deps = create_dm_tools(lance_service, turn_manager, cache_service, state_manager, monster_spawner, logger)
         dm_agent = create_dungeon_master_agent(tools=tools)
         result = await dm_agent.process_message(context, deps=deps)
     """
@@ -640,7 +758,8 @@ def create_dm_tools(
         turn_manager=turn_manager,
         rules_cache_service=rules_cache_service,
         state_manager=state_manager,
-        monster_spawner=monster_spawner
+        monster_spawner=monster_spawner,
+        logger=logger
     )
 
     return tools, dependencies
