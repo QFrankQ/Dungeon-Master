@@ -137,6 +137,7 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from ..models.formatted_game_message import FormattedGameMessage
+from ..services.game_logger import GameLogger, LogLevel
 from ..models.turn_context import TurnContext, TurnExtractionContext
 from ..models.turn_message import create_live_message, create_message_group
 from ..models.combat_state import CombatState, CombatPhase, InitiativeEntry, create_combat_state
@@ -210,15 +211,18 @@ class TurnManager:
     
     def __init__(
         self,
-        turn_condensation_agent: Optional["StructuredTurnSummarizer"] = None
+        turn_condensation_agent: Optional["StructuredTurnSummarizer"] = None,
+        logger: Optional[GameLogger] = None
     ):
         """
         Initialize the turn manager.
 
         Args:
             turn_condensation_agent: Optional agent for turn condensation
+            logger: Optional GameLogger for tracing
         """
         self.turn_condensation_agent = turn_condensation_agent
+        self.logger = logger
 
         # Context builders for different consumers
         self.state_extractor_context_builder = StateExtractorContextBuilder()
@@ -973,6 +977,12 @@ class TurnManager:
         if self.combat_state.phase != CombatPhase.NOT_IN_COMBAT:
             raise ValueError(f"Cannot enter combat: already in phase {self.combat_state.phase}")
 
+        # Log combat start
+        if self.logger:
+            self.logger.combat("Combat started",
+                              participants=participants,
+                              encounter_name=encounter_name)
+
         # Transition game phase to COMBAT_START
         self._current_game_phase = GamePhase.COMBAT_START
 
@@ -1065,6 +1075,17 @@ class TurnManager:
         rolled = {e.character_id for e in self.combat_state.initiative_order}
         missing = [p for p in self.combat_state.participants if p not in rolled]
 
+        # Log initiative roll
+        if self.logger:
+            self.logger.combat("Initiative roll added",
+                              character_id=character_id,
+                              character_name=character_name,
+                              roll=roll,
+                              is_player=is_player,
+                              dex_modifier=dex_modifier,
+                              collected=len(self.combat_state.initiative_order),
+                              total=len(self.combat_state.participants))
+
         return {
             "character_id": character_id,
             "character_name": character_name,
@@ -1096,6 +1117,13 @@ class TurnManager:
 
         # Finalize the initiative order in combat state
         self.combat_state.finalize_initiative()
+
+        # Log initiative finalized
+        if self.logger:
+            self.logger.combat("Initiative finalized",
+                              order=[{"id": e.character_id, "name": e.character_name, "roll": e.roll}
+                                     for e in self.combat_state.initiative_order],
+                              round_number=self.combat_state.round_number)
 
         # Validate that initiative order is not empty
         if not self.combat_state.initiative_order:
@@ -1230,6 +1258,13 @@ class TurnManager:
             raise ValueError(f"Cannot advance combat turn in phase {self.combat_state.phase}")
 
         next_participant, is_new_round = self.combat_state.advance_turn()
+
+        # Log turn advancement
+        if self.logger:
+            self.logger.combat("Turn advanced",
+                              next_character=next_participant,
+                              round_number=self.combat_state.round_number,
+                              is_new_round=is_new_round)
 
         # Check if combat should end
         if self.combat_state.is_combat_over():
@@ -1404,17 +1439,20 @@ class TurnManager:
 
 
 def create_turn_manager(
-    turn_condensation_agent: Optional[Any] = None
+    turn_condensation_agent: Optional[Any] = None,
+    logger: Optional[GameLogger] = None
 ) -> TurnManager:
     """
     Factory function to create a configured turn manager.
 
     Args:
         turn_condensation_agent: Optional agent for turn condensation
+        logger: Optional GameLogger for tracing
 
     Returns:
         Configured TurnManager instance
     """
     return TurnManager(
-        turn_condensation_agent=turn_condensation_agent
+        turn_condensation_agent=turn_condensation_agent,
+        logger=logger
     )
