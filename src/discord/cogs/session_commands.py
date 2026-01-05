@@ -638,7 +638,7 @@ class SessionCommands(commands.Cog):
             # Standard turn - just announce whose turn it is (use display name)
             active_id = expectation.characters[0] if expectation.characters else "Unknown"
             active_name = id_to_name_map.get(active_id, active_id)
-            await channel.send(f"⚔️ **{active_name}'s turn.** What do you do?")
+            await channel.send(f"*⚔️ It's **{active_name}**'s turn. {active_name} may respond.*")
 
         elif expectation.response_type == ResponseType.INITIATIVE:
             # Show initiative view with roll button
