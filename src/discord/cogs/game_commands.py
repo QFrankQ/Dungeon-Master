@@ -1,7 +1,7 @@
 """
 Game Commands Cog
 
-Handles game information commands: /turn, /history, /stats, /context, /usage, /help, /combat
+Handles game information commands: /turn, /combat-state, /history, /stats, /context, /usage, /help, /combat
 """
 
 import discord
@@ -88,6 +88,71 @@ class GameCommands(commands.Cog):
                 turn_info += f"• Current Expectation: None\n"
 
         await interaction.response.send_message(turn_info)
+
+    @app_commands.command(name="combat-state", description="Show current combat state and initiative order")
+    async def show_combat_state(self, interaction: discord.Interaction):
+        """Show current combat state including phase, round, and initiative order."""
+        session_context, error = self._get_session_or_error(interaction)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        turn_manager = session_context.session_manager.turn_manager
+        combat_state = turn_manager.combat_state
+
+        # Check if in combat
+        if combat_state.phase == CombatPhase.NOT_IN_COMBAT:
+            await interaction.response.send_message(
+                "⚔️ **Combat State**\n\n"
+                "**Phase:** Not in combat\n\n"
+                "*Use `/combat start` to initiate combat.*",
+                ephemeral=True
+            )
+            return
+
+        # Build combat state message
+        state_info = f"⚔️ **Combat State**\n\n"
+
+        # Phase and round info
+        state_info += f"**Phase:** {combat_state.phase.value}\n"
+        if combat_state.round_number > 0:
+            state_info += f"**Round:** {combat_state.round_number}\n"
+        if combat_state.encounter_name:
+            state_info += f"**Encounter:** {combat_state.encounter_name}\n"
+        state_info += "\n"
+
+        # Initiative order
+        if combat_state.initiative_order:
+            state_info += "**📋 Initiative Order:**\n"
+            for i, entry in enumerate(combat_state.initiative_order):
+                # Mark current participant
+                if i == combat_state.current_participant_index and combat_state.phase == CombatPhase.COMBAT_ROUNDS:
+                    marker = "➤ "
+                else:
+                    marker = "   "
+
+                # Player vs monster indicator
+                type_icon = "🧙" if entry.is_player else "👹"
+
+                state_info += f"{marker}{i+1}. {type_icon} **{entry.character_name}** (ID: `{entry.character_id}`) - Initiative: {entry.roll}\n"
+            state_info += "\n"
+        else:
+            state_info += "**Initiative:** Not yet collected\n\n"
+
+        # Participant counts
+        players = combat_state.get_remaining_player_ids()
+        monsters = combat_state.get_remaining_monster_ids()
+        state_info += f"**Players remaining:** {len(players)}\n"
+        state_info += f"**Monsters remaining:** {len(monsters)}\n"
+
+        # Combat over check
+        if combat_state.is_combat_over():
+            if len(players) == 0:
+                state_info += "\n⚠️ **All players have been defeated!**"
+            elif len(monsters) == 0:
+                state_info += "\n🎉 **All monsters have been defeated!**"
+
+        await interaction.response.send_message(state_info)
 
     @app_commands.command(name="history", description="Show completed turns history")
     async def show_history(self, interaction: discord.Interaction):
