@@ -1000,7 +1000,15 @@ class TurnManager:
             "SYSTEM"
         )
 
-        # Add to turn stack
+        # Clear any existing exploration turns before starting combat
+        # (Combat is a phase transition, exploration turns should be completed/archived)
+        while self.turn_stack:
+            for turn in self.turn_stack.pop():
+                if turn.end_time is None:
+                    turn.end_time = datetime.now()
+                self.completed_turns.append(turn)
+
+        # Add combat start turn at level 0
         self.turn_stack.append([combat_start_turn])
 
         return {
@@ -1085,6 +1093,14 @@ class TurnManager:
 
         # Finalize the initiative order in combat state
         self.combat_state.finalize_initiative()
+
+        # Validate that initiative order is not empty
+        if not self.combat_state.initiative_order:
+            raise ValueError(
+                "Cannot transition to COMBAT_ROUNDS: initiative_order is empty. "
+                "No initiative rolls were registered. Ensure all players submitted initiative "
+                "via the modal and monster initiative was added via add_monster_initiative()."
+            )
 
         # End the combat start turn if one exists and not already ended
         if not combat_start_turn_already_ended and self.turn_stack and self.turn_stack[-1]:
