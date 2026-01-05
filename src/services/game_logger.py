@@ -21,6 +21,47 @@ import structlog
 from structlog.typing import FilteringBoundLogger
 
 
+class _NullLogger:
+    """A logger that discards all output. Used as final sink after custom processors."""
+
+    def msg(self, *args, **kw) -> None:
+        pass
+
+    # Log level methods - all no-ops since we handle output in custom processors
+    def debug(self, *args, **kw) -> None:
+        pass
+
+    def info(self, *args, **kw) -> None:
+        pass
+
+    def warning(self, *args, **kw) -> None:
+        pass
+
+    def warn(self, *args, **kw) -> None:
+        pass
+
+    def error(self, *args, **kw) -> None:
+        pass
+
+    def critical(self, *args, **kw) -> None:
+        pass
+
+    def fatal(self, *args, **kw) -> None:
+        pass
+
+    def exception(self, *args, **kw) -> None:
+        pass
+
+    def __repr__(self) -> str:
+        return "<NullLogger>"
+
+
+class _NullLoggerFactory:
+    """Factory that creates NullLogger instances."""
+    def __call__(self, *args, **kwargs) -> _NullLogger:
+        return _NullLogger()
+
+
 class LogLevel(Enum):
     """Log severity levels (maps to stdlib logging levels)."""
     DEBUG = 10
@@ -106,7 +147,7 @@ class GameLogger:
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
         ]
 
-        # Configure structlog globally
+        # Configure structlog globally with NullLogger (we handle output in custom processors)
         structlog.configure(
             processors=[
                 structlog.contextvars.merge_contextvars,
@@ -118,7 +159,7 @@ class GameLogger:
             ],
             wrapper_class=structlog.make_filtering_bound_logger(self.min_level.value),
             context_class=dict,
-            logger_factory=structlog.PrintLoggerFactory(),
+            logger_factory=_NullLoggerFactory(),
             cache_logger_on_first_use=False,  # Allow reconfiguration
         )
 
@@ -211,12 +252,12 @@ class GameLogger:
 
             final_processors.append(write_to_console)
 
-        # Reconfigure structlog
+        # Reconfigure structlog with NullLogger (we handle output in custom processors)
         structlog.configure(
             processors=final_processors,
             wrapper_class=structlog.make_filtering_bound_logger(self.min_level.value),
             context_class=dict,
-            logger_factory=structlog.PrintLoggerFactory(),
+            logger_factory=_NullLoggerFactory(),
             cache_logger_on_first_use=False,
         )
 
