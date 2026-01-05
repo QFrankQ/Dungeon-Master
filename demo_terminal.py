@@ -36,10 +36,11 @@ class DemoTerminal:
     Provides simple command-line interaction with the DM using demo methods.
     """
 
-    def __init__(self, session_manager: 'SessionManager', temp_character_dir: Optional[str] = None):
+    def __init__(self, session_manager: 'SessionManager', temp_character_dir: Optional[str] = None, logger=None):
         self.session_manager = session_manager
         self.session_active = True
         self.temp_character_dir = temp_character_dir  # For cleanup on exit
+        self.logger = logger  # For logging session close on exit
 
         # Usage tracking
         self.total_input_tokens = 0
@@ -1012,7 +1013,16 @@ class DemoTerminal:
         print("[SYSTEM] Use /character to view character status")
 
     def cleanup(self):
-        """Clean up temporary character directory on exit."""
+        """Clean up temporary character directory and close logger on exit."""
+        # Close logger session first
+        if self.logger:
+            try:
+                self.logger.close_session()
+                print(f"[SYSTEM] Logging session closed")
+            except Exception as e:
+                print(f"[SYSTEM] Warning: Could not close logger: {e}")
+
+        # Clean up temp directory
         if self.temp_character_dir and Path(self.temp_character_dir).exists():
             try:
                 shutil.rmtree(self.temp_character_dir)
@@ -1021,16 +1031,17 @@ class DemoTerminal:
                 print(f"[SYSTEM] Warning: Could not clean up temp directory: {e}")
 
 
-def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['SessionManager', str]:
+def create_demo_session_manager(dm_model_name=None, api_key=None, enable_logging=True) -> tuple['SessionManager', str, any]:
     """
     Create a session manager configured for demo purposes.
 
     Args:
         dm_model_name: Optional model name override
         api_key: Optional API key for guild-level BYOK (required)
+        enable_logging: Whether to enable file logging (default True)
 
     Returns:
-        Tuple of (SessionManager with DM agent and turn manager, temp character directory path)
+        Tuple of (SessionManager, temp character directory path, GameLogger or None)
     """
     # Local imports to avoid heavy SDK/module import at module load time
     print("Starting imports for demo session manager...")
@@ -1039,6 +1050,7 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
     from src.memory.turn_manager import create_turn_manager
     from src.memory.player_character_registry import create_player_character_registry
     from src.agents.structured_summarizer import create_turn_condensation_agent
+    from src.services.game_logger import create_game_logger, LogLevel
     print("Finished imports for demo session manager.")
 
     # API key is required
@@ -1061,11 +1073,27 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
             shutil.copy2(source_file, temp_char_dir / char_file)
             print(f"[SYSTEM] Copied {char_file} to temp directory")
 
+    # Create logger if enabled
+    logger = None
+    if enable_logging:
+        logger = create_game_logger(
+            min_level=LogLevel.INFO,
+            output_dir="logs/",
+            console_output=False  # File only by default
+        )
+        # Generate unique session ID based on timestamp
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = logger.start_session(session_id)
+        print(f"[SYSTEM] Logging enabled: {log_file}")
+
     # Create turn condensation agent for automatic reaction summarization
     turn_condensation_agent = create_turn_condensation_agent()
 
-    # Create turn manager with condensation agent
-    turn_manager = create_turn_manager(turn_condensation_agent=turn_condensation_agent)
+    # Create turn manager with condensation agent and logger
+    turn_manager = create_turn_manager(
+        turn_condensation_agent=turn_condensation_agent,
+        logger=logger
+    )
 
     # Create services for DM tools
     from src.db.lance_rules_service import create_lance_rules_service
@@ -1083,13 +1111,14 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
     # Create monster spawner for DM to select monsters from templates
     monster_spawner = create_monster_spawner(state_manager=state_manager)
 
-    # Create DM tools and dependencies (with monster spawner)
+    # Create DM tools and dependencies (with monster spawner and logger)
     dm_tools, dm_deps = create_dm_tools(
         lance_service=lance_service,
         turn_manager=turn_manager,
         rules_cache_service=rules_cache_service,
         state_manager=state_manager,
-        monster_spawner=monster_spawner
+        monster_spawner=monster_spawner,
+        logger=logger
     )
 
     # Create DM agent with all tools (turn management + rules database + monster selection)
@@ -1120,7 +1149,7 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
         rules_cache_service=rules_cache_service  # Share with DM tools
     )
 
-    # Create session manager with all components (including monster spawner)
+    # Create session manager with all components (including monster spawner and logger)
     session_manager = SessionManager(
         gameflow_director_agent=None,  # No GD for demo
         dungeon_master_agent=dm_agent,
@@ -1131,10 +1160,11 @@ def create_demo_session_manager(dm_model_name=None, api_key=None) -> tuple['Sess
         enable_turn_management=True,
         player_character_registry=player_registry,
         rules_cache_service=rules_cache_service,  # For DM context with cached rules
-        monster_spawner=monster_spawner  # For monster selection in combat
+        monster_spawner=monster_spawner,  # For monster selection in combat
+        logger=logger  # For tracing and debugging
     )
 
-    return session_manager, temp_dir
+    return session_manager, temp_dir, logger
 
 
 async def main():
@@ -1154,15 +1184,16 @@ async def main():
 
     print("\n[SYSTEM] Creating demo session...")
 
-    # Create session manager with temp directory and API key
-    session_manager, temp_dir = create_demo_session_manager(
+    # Create session manager with temp directory, API key, and logger
+    session_manager, temp_dir, logger = create_demo_session_manager(
         dm_model_name='gemini-2.5-flash',
-        api_key=api_key
+        api_key=api_key,
+        enable_logging=True
     )
     print("[SYSTEM] Demo session manager created.")
 
-    # Create and run terminal with temp directory for cleanup
-    terminal = DemoTerminal(session_manager, temp_character_dir=temp_dir)
+    # Create and run terminal with temp directory and logger for cleanup
+    terminal = DemoTerminal(session_manager, temp_character_dir=temp_dir, logger=logger)
     print("[SYSTEM] Starting demo terminal...")
     await terminal.run()
 
