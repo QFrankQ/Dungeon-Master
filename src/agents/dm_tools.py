@@ -5,6 +5,7 @@ as well as query detailed character ability information and spawn monsters for c
 """
 
 from typing import Optional, Literal, Union, List, Dict, Any
+from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
 from ..db.lance_rules_service import LanceRulesService
@@ -16,7 +17,22 @@ from ..characters.monster import Monster
 from ..characters.charactersheet import Character
 
 
-# Dependency types for tool context
+# ==================== Tool Parameter Models ====================
+
+
+class MonsterSelection(BaseModel):
+    """A monster type and count for encounter spawning."""
+    type: str = Field(description="Monster template name (e.g., 'goblin', 'orc', 'skeleton')")
+    count: int = Field(ge=1, description="Number of this monster type to spawn")
+
+
+class MonsterInitiativeRoll(BaseModel):
+    """A monster's initiative roll for combat."""
+    monster_id: str = Field(description="Monster ID (e.g., 'goblin_1', 'orc_2')")
+    roll: int = Field(description="Total initiative roll result (d20 + DEX modifier)")
+
+
+# ==================== Dependency Types ====================
 class DMToolsDependencies:
     """Dependencies required by DM tools."""
 
@@ -400,7 +416,7 @@ async def get_available_monsters(
 
 async def select_encounter_monsters(
     ctx: RunContext[DMToolsDependencies],
-    monsters: List[Dict[str, Any]]
+    monsters: List[MonsterSelection]
 ) -> str:
     """
     Select monsters for an encounter before narrating combat start.
@@ -410,30 +426,20 @@ async def select_encounter_monsters(
 
     Args:
         ctx: PydanticAI RunContext with DMToolsDependencies
-        monsters: List of monster selections, each with:
-            - type: str - Monster template name (e.g., "goblin", "orc")
-            - count: int - Number of this monster type to spawn
+        monsters: List of MonsterSelection objects specifying type and count
 
     Returns:
         Confirmation with created monster IDs and basic combat stats
 
     Examples:
         Spawn a small goblin ambush:
-        >>> await select_encounter_monsters(ctx, [{"type": "goblin", "count": 3}])
-        "Created 3 monsters:
-         - goblin_1: HP 7, AC 15, DEX +2
-         - goblin_2: HP 7, AC 15, DEX +2
-         - goblin_3: HP 7, AC 15, DEX +2"
+        >>> await select_encounter_monsters(ctx, [MonsterSelection(type="goblin", count=3)])
 
         Spawn mixed encounter:
         >>> await select_encounter_monsters(ctx, [
-        ...     {"type": "orc", "count": 2},
-        ...     {"type": "wolf", "count": 1}
+        ...     MonsterSelection(type="orc", count=2),
+        ...     MonsterSelection(type="wolf", count=1)
         ... ])
-        "Created 3 monsters:
-         - orc_1: HP 15, AC 13, DEX +1
-         - orc_2: HP 15, AC 13, DEX +1
-         - wolf_1: HP 11, AC 13, DEX +2"
 
     Side Effects:
         - Creates Monster objects in StateManager
@@ -445,21 +451,15 @@ async def select_encounter_monsters(
     if not monster_spawner:
         return "Error: Monster spawner not available. Cannot create monsters for encounter."
 
-    # Validate input format
     if not monsters:
-        return "Error: No monsters specified. Provide a list like [{\"type\": \"goblin\", \"count\": 2}]"
+        return "Error: No monsters specified."
 
-    for selection in monsters:
-        if "type" not in selection:
-            return f"Error: Missing 'type' in selection: {selection}"
-        if "count" not in selection:
-            return f"Error: Missing 'count' in selection: {selection}"
-        if not isinstance(selection["count"], int) or selection["count"] < 1:
-            return f"Error: 'count' must be a positive integer, got: {selection['count']}"
+    # Convert MonsterSelection objects to dicts for the spawner
+    selections = [{"type": m.type, "count": m.count} for m in monsters]
 
     # Spawn the monsters
     try:
-        created_ids = monster_spawner.spawn_monsters(monsters)
+        created_ids = monster_spawner.spawn_monsters(selections)
     except ValueError as e:
         return f"Error spawning monsters: {e}"
 
@@ -469,6 +469,77 @@ async def select_encounter_monsters(
     # Return summary for DM to use in narrative
     summary = monster_spawner.get_spawned_summary()
     return f"Created {len(created_ids)} monsters:\n{summary}"
+
+
+async def add_monster_initiative(
+    ctx: RunContext[DMToolsDependencies],
+    rolls: List[MonsterInitiativeRoll]
+) -> str:
+    """
+    Add initiative rolls for monsters during COMBAT_START phase.
+
+    Call this after spawning monsters with select_encounter_monsters() and rolling
+    their initiative (d20 + DEX modifier for each monster).
+
+    Args:
+        ctx: PydanticAI RunContext with DMToolsDependencies
+        rolls: List of MonsterInitiativeRoll objects with monster_id and roll
+
+    Returns:
+        Confirmation of added rolls and current initiative collection status
+
+    Examples:
+        Add initiative for spawned goblins:
+        >>> await add_monster_initiative(ctx, [
+        ...     MonsterInitiativeRoll(monster_id="goblin_1", roll=15),
+        ...     MonsterInitiativeRoll(monster_id="goblin_2", roll=12),
+        ...     MonsterInitiativeRoll(monster_id="orc_1", roll=8)
+        ... ])
+    """
+    turn_manager = ctx.deps.turn_manager
+    state_manager = ctx.deps.state_manager
+
+    if not turn_manager:
+        return "Error: Turn manager not available."
+
+    if not state_manager:
+        return "Error: State manager not available for monster lookups."
+
+    if not rolls:
+        return "Error: No initiative rolls provided."
+
+    results = []
+    for roll_entry in rolls:
+        monster = state_manager.get_monster(roll_entry.monster_id)
+        if not monster:
+            results.append(f"❌ {roll_entry.monster_id}: Not found in spawned monsters")
+            continue
+
+        # Get display name and DEX modifier for the entry
+        display_name = monster.name
+        dex_mod = monster.attributes.dexterity.modifier
+
+        try:
+            result = turn_manager.add_initiative_roll(
+                character_id=roll_entry.monster_id,
+                character_name=display_name,
+                roll=roll_entry.roll,
+                dex_modifier=dex_mod,
+                is_player=False  # Monsters are not player characters
+            )
+            results.append(f"✅ {display_name} ({roll_entry.monster_id}): Initiative {roll_entry.roll}")
+        except ValueError as e:
+            results.append(f"❌ {roll_entry.monster_id}: {e}")
+
+    # Get collection status
+    if turn_manager.combat_state:
+        collected = len(turn_manager.combat_state.initiative_order)
+        total = len(turn_manager.combat_state.participants)
+        status = f"\n\nInitiative collected: {collected}/{total}"
+    else:
+        status = ""
+
+    return "\n".join(results) + status
 
 
 def _query_monster_ability(
@@ -563,7 +634,7 @@ def create_dm_tools(
         dm_agent = create_dungeon_master_agent(tools=tools)
         result = await dm_agent.process_message(context, deps=deps)
     """
-    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters]
+    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, add_monster_initiative]
     dependencies = DMToolsDependencies(
         lance_service=lance_service,
         turn_manager=turn_manager,
