@@ -83,6 +83,28 @@ class CombatState(BaseModel):
         self.current_participant_index = 0
         self.encounter_name = encounter_name
 
+    def add_participants(self, new_participants: List[str]) -> List[str]:
+        """
+        Add new participants to the combat (e.g., spawned monsters).
+
+        Can be called during COMBAT_START phase before initiative is finalized.
+
+        Args:
+            new_participants: List of character IDs to add
+
+        Returns:
+            List of actually added participant IDs (excludes duplicates)
+        """
+        if self.phase != CombatPhase.COMBAT_START:
+            raise ValueError(f"Cannot add participants in phase {self.phase}")
+
+        added = []
+        for participant in new_participants:
+            if participant not in self.participants:
+                self.participants.append(participant)
+                added.append(participant)
+        return added
+
     def add_initiative_roll(self, entry: InitiativeEntry) -> None:
         """
         Add an initiative roll during Phase 1.
