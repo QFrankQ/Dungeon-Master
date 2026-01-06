@@ -555,6 +555,23 @@ async def select_encounter_monsters(
                      created_ids=created_ids,
                      count=len(created_ids))
 
+    # Register spawned monsters as combat participants if in COMBAT_START phase
+    turn_manager = ctx.deps.turn_manager
+    participants_added = []
+    if turn_manager and turn_manager.combat_state:
+        try:
+            participants_added = turn_manager.combat_state.add_participants(created_ids)
+            if logger and participants_added:
+                logger.dm_tool("Monsters added to combat participants",
+                             added_ids=participants_added,
+                             total_participants=len(turn_manager.combat_state.participants))
+        except ValueError as e:
+            # Not in COMBAT_START phase - that's OK, monsters can be spawned outside combat
+            if logger:
+                logger.dm_tool("Monsters not added to participants (not in COMBAT_START)",
+                             reason=str(e),
+                             level=LogLevel.DEBUG)
+
     # Return summary for DM to use in narrative
     summary = monster_spawner.get_spawned_summary()
     return f"Created {len(created_ids)} monsters:\n{summary}"
@@ -658,6 +675,189 @@ async def add_monster_initiative(
     return "\n".join(results) + status
 
 
+async def remove_defeated_participant(
+    ctx: RunContext[DMToolsDependencies],
+    character_id: str,
+    reason: str = "defeated"
+) -> str:
+    """
+    Remove a defeated participant from combat (died, fled, incapacitated, etc.).
+
+    Call this when a combatant is no longer able to participate in combat:
+    - Monster/NPC drops to 0 HP (they die)
+    - Monster/NPC flees or is banished
+    - Player character is permanently incapacitated (not just unconscious)
+
+    The participant will be removed from the initiative order and combat
+    will automatically end if one side is eliminated.
+
+    Args:
+        ctx: PydanticAI RunContext with DMToolsDependencies
+        character_id: The character ID to remove (e.g., "goblin_1", "orc_2")
+        reason: Why they're being removed (default: "defeated")
+
+    Returns:
+        Status message including whether combat has ended
+
+    Examples:
+        Remove a dead goblin:
+        >>> await remove_defeated_participant(ctx, "goblin_1", "killed")
+
+        Remove a fleeing enemy:
+        >>> await remove_defeated_participant(ctx, "orc_2", "fled the battle")
+    """
+    turn_manager = ctx.deps.turn_manager
+    logger = ctx.deps.logger
+
+    # Log tool invocation
+    if logger:
+        logger.dm_tool("remove_defeated_participant called",
+                     character_id=character_id,
+                     reason=reason)
+
+    if not turn_manager:
+        if logger:
+            logger.dm_tool("remove_defeated_participant failed: no turn manager",
+                         level=LogLevel.WARNING)
+        return "Error: Turn manager not available."
+
+    if not turn_manager.combat_state:
+        if logger:
+            logger.dm_tool("remove_defeated_participant failed: not in combat",
+                         level=LogLevel.WARNING)
+        return "Error: Not currently in combat."
+
+    # Remove the participant
+    removed = turn_manager.combat_state.remove_participant(character_id)
+
+    if not removed:
+        if logger:
+            logger.dm_tool("remove_defeated_participant failed: not found",
+                         character_id=character_id,
+                         level=LogLevel.WARNING)
+        return f"Error: Participant '{character_id}' not found in combat."
+
+    # Log successful removal
+    if logger:
+        logger.combat("Participant removed from combat",
+                     character_id=character_id,
+                     reason=reason,
+                     remaining_players=len(turn_manager.combat_state.get_remaining_player_ids()),
+                     remaining_monsters=len(turn_manager.combat_state.get_remaining_monster_ids()))
+
+    # Check if combat should end
+    result = f"✅ {character_id} has been removed from combat ({reason})."
+
+    if turn_manager.combat_state.is_combat_over():
+        players = turn_manager.combat_state.get_remaining_player_ids()
+        monsters = turn_manager.combat_state.get_remaining_monster_ids()
+
+        if len(monsters) == 0:
+            result += "\n\n⚔️ COMBAT OVER: All enemies have been defeated!"
+            result += f"\nPlayers remaining: {len(players)}"
+            result += "\n\nCall end_combat() to transition to combat conclusion phase."
+        elif len(players) == 0:
+            result += "\n\n💀 COMBAT OVER: All player characters have fallen!"
+            result += f"\nEnemies remaining: {len(monsters)}"
+            result += "\n\nCall end_combat() to transition to combat conclusion phase."
+
+        if logger:
+            logger.combat("Combat over - one side eliminated",
+                        players_remaining=len(players),
+                        monsters_remaining=len(monsters))
+    else:
+        players = turn_manager.combat_state.get_remaining_player_ids()
+        monsters = turn_manager.combat_state.get_remaining_monster_ids()
+        result += f"\nCombat continues: {len(players)} players, {len(monsters)} enemies remaining."
+
+    return result
+
+
+async def end_combat(
+    ctx: RunContext[DMToolsDependencies],
+    reason: str = "Combat conditions met"
+) -> str:
+    """
+    End combat and transition to the combat conclusion phase.
+
+    Call this when:
+    - All enemies have been defeated (use remove_defeated_participant first)
+    - All players have fallen
+    - Combat is ended for narrative reasons (enemies surrender, negotiation, etc.)
+
+    This transitions from COMBAT_ROUNDS to COMBAT_END phase, allowing for
+    post-combat narration before returning to exploration.
+
+    Args:
+        ctx: PydanticAI RunContext with DMToolsDependencies
+        reason: Reason for ending combat (default: "Combat conditions met")
+
+    Returns:
+        Combat summary and next steps
+
+    Examples:
+        End combat after victory:
+        >>> await end_combat(ctx, "All enemies defeated")
+
+        End combat due to surrender:
+        >>> await end_combat(ctx, "Enemies surrendered")
+    """
+    turn_manager = ctx.deps.turn_manager
+    logger = ctx.deps.logger
+
+    # Log tool invocation
+    if logger:
+        logger.dm_tool("end_combat called", reason=reason)
+
+    if not turn_manager:
+        if logger:
+            logger.dm_tool("end_combat failed: no turn manager",
+                         level=LogLevel.WARNING)
+        return "Error: Turn manager not available."
+
+    if not turn_manager.combat_state:
+        if logger:
+            logger.dm_tool("end_combat failed: not in combat",
+                         level=LogLevel.WARNING)
+        return "Error: Not currently in combat."
+
+    from src.models.combat_state import CombatPhase
+
+    if turn_manager.combat_state.phase != CombatPhase.COMBAT_ROUNDS:
+        if logger:
+            logger.dm_tool("end_combat failed: not in COMBAT_ROUNDS phase",
+                         current_phase=turn_manager.combat_state.phase.value,
+                         level=LogLevel.WARNING)
+        return f"Error: Cannot end combat from phase {turn_manager.combat_state.phase.value}. Must be in COMBAT_ROUNDS."
+
+    # Start combat end phase
+    try:
+        end_result = turn_manager.start_combat_end(reason=reason)
+
+        # Log successful combat end
+        if logger:
+            logger.combat("Combat ending",
+                        reason=reason,
+                        rounds_fought=end_result.get("rounds_fought", 0),
+                        players_remaining=len(end_result.get("players_remaining", [])),
+                        enemies_remaining=len(end_result.get("enemies_remaining", [])))
+
+        result = f"⚔️ COMBAT ENDED: {reason}\n"
+        result += f"Rounds fought: {end_result.get('rounds_fought', 0)}\n"
+        result += f"Players remaining: {', '.join(end_result.get('players_remaining', [])) or 'None'}\n"
+        result += f"Enemies remaining: {', '.join(end_result.get('enemies_remaining', [])) or 'None'}\n"
+        result += f"\nTransitioned to COMBAT_END phase. Narrate the conclusion of battle."
+
+        return result
+
+    except ValueError as e:
+        if logger:
+            logger.dm_tool("end_combat failed: error",
+                         error=str(e),
+                         level=LogLevel.ERROR)
+        return f"Error ending combat: {e}"
+
+
 def _query_monster_ability(
     monster: Monster,
     section: str,
@@ -752,7 +952,7 @@ def create_dm_tools(
         dm_agent = create_dungeon_master_agent(tools=tools)
         result = await dm_agent.process_message(context, deps=deps)
     """
-    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, add_monster_initiative]
+    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, add_monster_initiative, remove_defeated_participant, end_combat]
     dependencies = DMToolsDependencies(
         lance_service=lance_service,
         turn_manager=turn_manager,
