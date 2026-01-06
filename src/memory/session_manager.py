@@ -557,7 +557,7 @@ class SessionManager:
                 if self.logger:
                     self.logger.extraction("Commands extracted",
                                           command_count=len(state_commands.commands),
-                                          command_types=[cmd.command_type for cmd in state_commands.commands])
+                                          command_types=[cmd.type for cmd in state_commands.commands])
 
                 state_results = self.state_manager.apply_commands(state_commands)
 
@@ -762,7 +762,12 @@ class SessionManager:
 
                 # Log step advancement
                 if self.logger:
+                    current_turn = self.turn_manager.get_current_turn_context()
+                    step_index = current_turn.current_step_index if current_turn else None
+                    step_count = len(current_turn.game_step_list) if current_turn and current_turn.game_step_list else None
                     self.logger.step("Step advanced",
+                                   step_index=step_index,
+                                   step_count=step_count,
                                    new_objective=self.turn_manager.get_current_step_objective(),
                                    more_steps=more_steps)
                 # response_queue.append(f"[New step objective: {self.turn_manager.get_current_step_objective()}]\n")
