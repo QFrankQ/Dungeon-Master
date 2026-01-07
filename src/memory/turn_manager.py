@@ -475,8 +475,12 @@ class TurnManager:
         Async version: End current turn and get information about next turn to process.
         Combines end_turn() with queue management for GD orchestration.
 
+        Also handles deferred combat end - only processes when a Level 0 (main) turn
+        completes, ensuring all reactions resolve before combat transitions.
+
         Returns:
-            Dictionary with turn completion info and next turn details
+            Dictionary with turn completion info and next turn details.
+            If combat_ended is True, includes combat_end_result with transition info.
         """
         # Capture current level info BEFORE ending turn
         current_level_queue = self.turn_stack[-1] if self.turn_stack else []
@@ -484,6 +488,21 @@ class TurnManager:
 
         # End the current turn (this pops the completed turn and possibly the entire level)
         end_result = await self.end_turn()
+
+        # === PROCESS DEFERRED COMBAT END AT LEVEL 0 ONLY ===
+        # Only check for pending combat end when a main turn (Level 0) completes.
+        # This ensures all reactions/subturns resolve before combat transitions.
+        if end_result.get("turn_level") == 0:
+            combat_end_result = self.process_pending_combat_end()
+            if combat_end_result:
+                # Combat transitioning to COMBAT_END phase
+                # start_combat_end() creates a new COMBAT_END turn on the stack
+                return {
+                    **end_result,
+                    "combat_ended": True,
+                    "combat_end_result": combat_end_result,
+                    "next_pending": None
+                }
 
         # Check if there were more turns at the original level
         if remaining_turns_after_current > 0:
@@ -512,8 +531,12 @@ class TurnManager:
         Synchronous version: End current turn and get information about next turn to process.
         Combines end_turn() with queue management for GD orchestration.
 
+        Also handles deferred combat end - only processes when a Level 0 (main) turn
+        completes, ensuring all reactions resolve before combat transitions.
+
         Returns:
-            Dictionary with turn completion info and next turn details
+            Dictionary with turn completion info and next turn details.
+            If combat_ended is True, includes combat_end_result with transition info.
         """
         # Capture current level info BEFORE ending turn
         current_level_queue = self.turn_stack[-1] if self.turn_stack else []
@@ -521,6 +544,21 @@ class TurnManager:
 
         # End the current turn (this pops the completed turn and possibly the entire level)
         end_result = self.end_turn_sync()
+
+        # === PROCESS DEFERRED COMBAT END AT LEVEL 0 ONLY ===
+        # Only check for pending combat end when a main turn (Level 0) completes.
+        # This ensures all reactions/subturns resolve before combat transitions.
+        if end_result.get("turn_level") == 0:
+            combat_end_result = self.process_pending_combat_end()
+            if combat_end_result:
+                # Combat transitioning to COMBAT_END phase
+                # start_combat_end() creates a new COMBAT_END turn on the stack
+                return {
+                    **end_result,
+                    "combat_ended": True,
+                    "combat_end_result": combat_end_result,
+                    "next_pending": None
+                }
 
         # Check if there were more turns at the original level
         if remaining_turns_after_current > 0:
