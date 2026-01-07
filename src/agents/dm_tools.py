@@ -11,11 +11,153 @@ from pydantic_ai import RunContext
 from ..db.lance_rules_service import LanceRulesService
 from ..memory.turn_manager import TurnManager
 from ..memory.state_manager import StateManager
+from ..models.combat_state import CombatPhase
 from ..services.rules_cache_service import RulesCacheService
 from ..services.monster_spawner import MonsterSpawner
 from ..services.game_logger import GameLogger, LogLevel
 from ..characters.monster import Monster
 from ..characters.charactersheet import Character
+
+
+# ==================== Null Object Pattern for Logging ====================
+
+class _NullToolLogger:
+    """
+    Null object logger for DM tools when no logger is configured.
+
+    Accepts any method call with any arguments and does nothing.
+    This eliminates the need for 'if logger:' checks throughout tool code.
+    """
+    def dm_tool(self, *args, **kwargs) -> None:
+        pass
+
+    def combat(self, *args, **kwargs) -> None:
+        pass
+
+    def turn(self, *args, **kwargs) -> None:
+        pass
+
+    def extraction(self, *args, **kwargs) -> None:
+        pass
+
+    def step(self, *args, **kwargs) -> None:
+        pass
+
+    def __repr__(self) -> str:
+        return "<NullToolLogger>"
+
+
+# Singleton null logger instance
+_null_logger = _NullToolLogger()
+
+
+def _get_log(ctx: "RunContext[DMToolsDependencies]") -> Union[GameLogger, _NullToolLogger]:
+    """
+    Get a logger that's always safe to call (never None).
+
+    Returns the real logger if available, otherwise returns a null logger
+    that silently discards all log calls.
+    """
+    return ctx.deps.logger or _null_logger
+
+
+# ==================== Standardized Failure Codes ====================
+
+class FailureReason:
+    """
+    Standardized failure reason codes for DM tools.
+
+    Using a class with string constants instead of Enum for flexibility
+    with dynamic reasons (like character_not_found with ID interpolation).
+    """
+    # Dependency missing
+    TURN_MANAGER_MISSING = "turn_manager_not_available"
+    STATE_MANAGER_MISSING = "state_manager_not_available"
+    MONSTER_SPAWNER_MISSING = "monster_spawner_not_available"
+    LANCE_SERVICE_MISSING = "lance_service_not_available"
+
+    # Combat state
+    NOT_IN_COMBAT = "not_in_combat"
+    WRONG_PHASE = "wrong_combat_phase"
+
+    # Turn state
+    NO_ACTIVE_TURN = "no_active_turn"
+
+    # Input validation
+    NO_MONSTERS_SPECIFIED = "no_monsters_specified"
+    NO_ROLLS_PROVIDED = "no_rolls_provided"
+
+    # Entity not found
+    CHARACTER_NOT_FOUND = "character_not_found"
+    PARTICIPANT_NOT_FOUND = "participant_not_found"
+
+    # Operation failures
+    SPAWN_ERROR = "spawn_error"
+    NO_MONSTERS_CREATED = "no_monsters_created"
+    TRANSITION_ERROR = "transition_error"
+
+
+# ==================== Raise-for-Error Pattern ====================
+
+class ToolValidationError(Exception):
+    """
+    Exception raised when tool validation fails.
+
+    Contains the pre-formatted error message to return to the AI.
+    This enables the "raise for error" pattern where validation helpers
+    raise instead of returning tuples, eliminating if-error boilerplate.
+
+    Usage:
+        def some_tool(ctx):
+            turn_manager = _require_turn_manager(ctx, "some_tool")  # Raises if missing
+            # ... rest of logic (no if-error check needed)
+    """
+    def __init__(self, error_message: str):
+        self.error_message = error_message
+        super().__init__(error_message)
+
+
+def _fail(
+    log: Union[GameLogger, _NullToolLogger],
+    tool_name: str,
+    reason: str,
+    level: LogLevel = LogLevel.WARNING,
+    **extra_data
+) -> str:
+    """
+    Log a failure and return a formatted error string in one call.
+
+    Args:
+        log: Logger instance (real or null)
+        tool_name: Name of the tool that failed
+        reason: Machine-readable reason code (use FailureReason constants)
+        level: Log level (default: WARNING)
+        **extra_data: Additional fields to include in log
+
+    Returns:
+        Formatted error string for user display
+    """
+    log.dm_tool(f"{tool_name} failed: {reason}", level=level, **extra_data)
+    # Convert reason code to human-readable message
+    human_reason = reason.replace("_", " ").capitalize()
+    return f"Error: {human_reason}."
+
+
+def _raise_fail(
+    log: Union[GameLogger, _NullToolLogger],
+    tool_name: str,
+    reason: str,
+    level: LogLevel = LogLevel.WARNING,
+    **extra_data
+) -> None:
+    """
+    Log a failure and raise ToolValidationError.
+
+    Same as _fail() but raises instead of returning.
+    Use this in _require_* validation helpers.
+    """
+    error_msg = _fail(log, tool_name, reason, level, **extra_data)
+    raise ToolValidationError(error_msg)
 
 
 # ==================== Tool Parameter Models ====================
@@ -52,6 +194,103 @@ class DMToolsDependencies:
         self.state_manager = state_manager
         self.monster_spawner = monster_spawner
         self.logger = logger
+
+
+# ==================== Validation Helpers (Raise-for-Error Pattern) ====================
+
+def _require_turn_manager(ctx: RunContext[DMToolsDependencies], tool_name: str) -> TurnManager:
+    """
+    Validate that turn_manager is available.
+
+    Returns:
+        TurnManager instance
+
+    Raises:
+        ToolValidationError: If turn_manager is not available
+    """
+    turn_manager = ctx.deps.turn_manager
+    if not turn_manager:
+        _raise_fail(_get_log(ctx), tool_name, FailureReason.TURN_MANAGER_MISSING)
+
+    return turn_manager
+
+
+def _require_state_manager(ctx: RunContext[DMToolsDependencies], tool_name: str) -> StateManager:
+    """
+    Validate that state_manager is available.
+
+    Returns:
+        StateManager instance
+
+    Raises:
+        ToolValidationError: If state_manager is not available
+    """
+    state_manager = ctx.deps.state_manager
+    if not state_manager:
+        _raise_fail(_get_log(ctx), tool_name, FailureReason.STATE_MANAGER_MISSING)
+
+    return state_manager
+
+
+def _require_monster_spawner(ctx: RunContext[DMToolsDependencies], tool_name: str) -> MonsterSpawner:
+    """
+    Validate that monster_spawner is available.
+
+    Returns:
+        MonsterSpawner instance
+
+    Raises:
+        ToolValidationError: If monster_spawner is not available
+    """
+    monster_spawner = ctx.deps.monster_spawner
+    if not monster_spawner:
+        _raise_fail(_get_log(ctx), tool_name, FailureReason.MONSTER_SPAWNER_MISSING)
+
+    return monster_spawner
+
+
+def _require_combat_state(ctx: RunContext[DMToolsDependencies], tool_name: str) -> TurnManager:
+    """
+    Validate that turn_manager and combat_state are available.
+
+    Returns:
+        TurnManager instance (with combat_state guaranteed non-None)
+
+    Raises:
+        ToolValidationError: If not in combat
+    """
+    turn_manager = _require_turn_manager(ctx, tool_name)
+
+    if not turn_manager.combat_state:
+        _raise_fail(_get_log(ctx), tool_name, FailureReason.NOT_IN_COMBAT)
+
+    return turn_manager
+
+
+def _require_combat_phase(
+    ctx: RunContext[DMToolsDependencies],
+    tool_name: str,
+    required_phase: CombatPhase
+) -> TurnManager:
+    """
+    Validate that we're in a specific combat phase.
+
+    Returns:
+        TurnManager instance (with correct combat phase guaranteed)
+
+    Raises:
+        ToolValidationError: If not in the required phase
+    """
+    turn_manager = _require_combat_state(ctx, tool_name)
+
+    if turn_manager.combat_state.phase != required_phase:
+        _raise_fail(
+            _get_log(ctx), tool_name,
+            f"{FailureReason.WRONG_PHASE}_{turn_manager.combat_state.phase.value}_need_{required_phase.value}",
+            current_phase=turn_manager.combat_state.phase.value
+        )
+
+    return turn_manager
 
 
 async def query_rules_database(
@@ -94,21 +333,17 @@ async def query_rules_database(
         >>> await query_rules_database(ctx, "bonus action fireball concentration", limit=5)
         "Bonus Action (Action):\\n...\\n\\n---\\n\\nFireball (Spell, Level 3):\\n...\\n\\n---\\n\\n..."
     """
+    log = _get_log(ctx)
     lance_service = ctx.deps.lance_service
     turn_manager = ctx.deps.turn_manager
     rules_cache_service = ctx.deps.rules_cache_service
-    logger = ctx.deps.logger
 
-    # Log tool invocation
-    if logger:
-        logger.dm_tool("query_rules_database called", query=query, limit=limit)
+    log.dm_tool("query_rules_database called", query=query, limit=limit)
 
     # Get current turn for caching
     current_turn = turn_manager.get_current_turn_context()
     if not current_turn:
-        if logger:
-            logger.dm_tool("query_rules_database failed: no active turn", level=LogLevel.WARNING)
-        return "Error: No active turn to cache results."
+        return _fail(log, "query_rules_database", FailureReason.NO_ACTIVE_TURN)
 
     # Clamp limit to max 10
     limit = min(limit, 10)
@@ -120,23 +355,16 @@ async def query_rules_database(
             # Exact match found - cache and return single result
             cache_entry = _format_lance_entry_to_cache(rule_entry)
             rules_cache_service.add_to_cache(cache_entry, current_turn)
-            if logger:
-                logger.dm_tool("query_rules_database complete",
-                             query=query,
-                             results_count=1,
-                             match_type="exact",
-                             cached=True)
+            log.dm_tool("query_rules_database complete",
+                       query=query, results_count=1, match_type="exact", cached=True)
             return _format_rule_for_dm(cache_entry)
 
     # Fall through to hybrid search (or if query was long/no exact match)
     results = lance_service.search(query, limit=limit)
 
     if not results:
-        if logger:
-            logger.dm_tool("query_rules_database complete",
-                         query=query,
-                         results_count=0,
-                         match_type="hybrid")
+        log.dm_tool("query_rules_database complete",
+                   query=query, results_count=0, match_type="hybrid")
         return f"No rules found matching '{query}'"
 
     # Cache all results and format
@@ -146,12 +374,8 @@ async def query_rules_database(
         rules_cache_service.add_to_cache(cache_entry, current_turn)
         formatted_results.append(_format_rule_for_dm(cache_entry))
 
-    if logger:
-        logger.dm_tool("query_rules_database complete",
-                     query=query,
-                     results_count=len(results),
-                     match_type="hybrid",
-                     cached=True)
+    log.dm_tool("query_rules_database complete",
+               query=query, results_count=len(results), match_type="hybrid", cached=True)
 
     # Return formatted multi-result string with separator
     return "\n\n---\n\n".join(formatted_results)
@@ -308,38 +532,26 @@ async def query_character_ability(
         Get specific spell details:
         >>> await query_character_ability(ctx, "wizard", "spells", "Fireball")
     """
-    state_manager = ctx.deps.state_manager
-    logger = ctx.deps.logger
+    log = _get_log(ctx)
+    log.dm_tool("query_character_ability called",
+               character_id=character_id, section=section, ability_name=ability_name)
 
-    # Log tool invocation
-    if logger:
-        logger.dm_tool("query_character_ability called",
-                     character_id=character_id,
-                     section=section,
-                     ability_name=ability_name)
-
-    if not state_manager:
-        if logger:
-            logger.dm_tool("query_character_ability failed: no state manager",
-                         level=LogLevel.WARNING)
-        return "Error: State manager not available for character queries."
+    try:
+        state_manager = _require_state_manager(ctx, "query_character_ability")
+    except ToolValidationError as e:
+        return e.error_message
 
     # Load character (player character or monster)
     character = state_manager.get_character_by_id(character_id)
     if not character:
-        if logger:
-            logger.dm_tool("query_character_ability failed: character not found",
-                         character_id=character_id,
-                         level=LogLevel.WARNING)
-        return f"Error: '{character_id}' not found (checked both player characters and monsters)."
+        return _fail(log, "query_character_ability",
+                    f"{FailureReason.CHARACTER_NOT_FOUND}_{character_id}",
+                    character_id=character_id)
 
     # Log successful lookup
-    if logger:
-        char_type = "monster" if isinstance(character, Monster) else "player"
-        logger.dm_tool("query_character_ability found character",
-                     character_id=character_id,
-                     character_type=char_type,
-                     section=section)
+    char_type = "monster" if isinstance(character, Monster) else "player"
+    log.dm_tool("query_character_ability found character",
+               character_id=character_id, character_type=char_type, section=section)
 
     # Handle Monster
     if isinstance(character, Monster):
@@ -457,23 +669,16 @@ async def get_available_monsters(
          - skeleton (CR 1/4, Medium undead): HP 13, AC 13
          ..."
     """
-    monster_spawner = ctx.deps.monster_spawner
-    logger = ctx.deps.logger
+    log = _get_log(ctx)
+    log.dm_tool("get_available_monsters called")
 
-    # Log tool invocation
-    if logger:
-        logger.dm_tool("get_available_monsters called")
-
-    if not monster_spawner:
-        if logger:
-            logger.dm_tool("get_available_monsters failed: no monster spawner",
-                         level=LogLevel.WARNING)
-        return "Error: Monster spawner not available."
+    try:
+        monster_spawner = _require_monster_spawner(ctx, "get_available_monsters")
+    except ToolValidationError as e:
+        return e.error_message
 
     result = monster_spawner.get_available_monsters_context()
-
-    if logger:
-        logger.dm_tool("get_available_monsters complete")
+    log.dm_tool("get_available_monsters complete")
 
     return result
 
@@ -510,25 +715,17 @@ async def select_encounter_monsters(
         - Monsters are available for query_character_ability tool
         - Monsters can be targeted in combat and have HP tracked
     """
-    monster_spawner = ctx.deps.monster_spawner
-    logger = ctx.deps.logger
+    log = _get_log(ctx)
+    selections_summary = [{"type": m.type, "count": m.count} for m in monsters] if monsters else []
+    log.dm_tool("select_encounter_monsters called", selections=selections_summary)
 
-    # Log tool invocation
-    if logger:
-        selections_summary = [{"type": m.type, "count": m.count} for m in monsters] if monsters else []
-        logger.dm_tool("select_encounter_monsters called", selections=selections_summary)
-
-    if not monster_spawner:
-        if logger:
-            logger.dm_tool("select_encounter_monsters failed: no monster spawner",
-                         level=LogLevel.WARNING)
-        return "Error: Monster spawner not available. Cannot create monsters for encounter."
+    try:
+        monster_spawner = _require_monster_spawner(ctx, "select_encounter_monsters")
+    except ToolValidationError as e:
+        return e.error_message
 
     if not monsters:
-        if logger:
-            logger.dm_tool("select_encounter_monsters failed: no monsters specified",
-                         level=LogLevel.WARNING)
-        return "Error: No monsters specified."
+        return _fail(log, "select_encounter_monsters", FailureReason.NO_MONSTERS_SPECIFIED)
 
     # Convert MonsterSelection objects to dicts for the spawner
     selections = [{"type": m.type, "count": m.count} for m in monsters]
@@ -537,40 +734,27 @@ async def select_encounter_monsters(
     try:
         created_ids = monster_spawner.spawn_monsters(selections)
     except ValueError as e:
-        if logger:
-            logger.dm_tool("select_encounter_monsters failed: spawn error",
-                         error=str(e),
-                         level=LogLevel.ERROR)
-        return f"Error spawning monsters: {e}"
+        return _fail(log, "select_encounter_monsters", FailureReason.SPAWN_ERROR,
+                    level=LogLevel.ERROR, error=str(e))
 
     if not created_ids:
-        if logger:
-            logger.dm_tool("select_encounter_monsters failed: no monsters created",
-                         level=LogLevel.WARNING)
-        return "Error: No monsters were created. Check that monster types are valid."
+        return _fail(log, "select_encounter_monsters", FailureReason.NO_MONSTERS_CREATED)
 
-    # Log successful spawn
-    if logger:
-        logger.dm_tool("Monsters spawned",
-                     created_ids=created_ids,
-                     count=len(created_ids))
+    log.dm_tool("Monsters spawned", created_ids=created_ids, count=len(created_ids))
 
     # Register spawned monsters as combat participants if in COMBAT_START phase
     turn_manager = ctx.deps.turn_manager
-    participants_added = []
     if turn_manager and turn_manager.combat_state:
         try:
             participants_added = turn_manager.combat_state.add_participants(created_ids)
-            if logger and participants_added:
-                logger.dm_tool("Monsters added to combat participants",
-                             added_ids=participants_added,
-                             total_participants=len(turn_manager.combat_state.participants))
+            if participants_added:
+                log.dm_tool("Monsters added to combat participants",
+                           added_ids=participants_added,
+                           total_participants=len(turn_manager.combat_state.participants))
         except ValueError as e:
             # Not in COMBAT_START phase - that's OK, monsters can be spawned outside combat
-            if logger:
-                logger.dm_tool("Monsters not added to participants (not in COMBAT_START)",
-                             reason=str(e),
-                             level=LogLevel.DEBUG)
+            log.dm_tool("Monsters not added to participants (not in COMBAT_START)",
+                       reason=str(e), level=LogLevel.DEBUG)
 
     # Return summary for DM to use in narrative
     summary = monster_spawner.get_spawned_summary()
@@ -602,32 +786,18 @@ async def add_monster_initiative(
         ...     MonsterInitiativeRoll(monster_id="orc_1", roll=8)
         ... ])
     """
-    turn_manager = ctx.deps.turn_manager
-    state_manager = ctx.deps.state_manager
-    logger = ctx.deps.logger
+    log = _get_log(ctx)
+    rolls_summary = [{"id": r.monster_id, "roll": r.roll} for r in rolls] if rolls else []
+    log.dm_tool("add_monster_initiative called", rolls=rolls_summary)
 
-    # Log tool invocation
-    if logger:
-        rolls_summary = [{"id": r.monster_id, "roll": r.roll} for r in rolls] if rolls else []
-        logger.dm_tool("add_monster_initiative called", rolls=rolls_summary)
-
-    if not turn_manager:
-        if logger:
-            logger.dm_tool("add_monster_initiative failed: no turn manager",
-                         level=LogLevel.WARNING)
-        return "Error: Turn manager not available."
-
-    if not state_manager:
-        if logger:
-            logger.dm_tool("add_monster_initiative failed: no state manager",
-                         level=LogLevel.WARNING)
-        return "Error: State manager not available for monster lookups."
+    try:
+        turn_manager = _require_turn_manager(ctx, "add_monster_initiative")
+        state_manager = _require_state_manager(ctx, "add_monster_initiative")
+    except ToolValidationError as e:
+        return e.error_message
 
     if not rolls:
-        if logger:
-            logger.dm_tool("add_monster_initiative failed: no rolls provided",
-                         level=LogLevel.WARNING)
-        return "Error: No initiative rolls provided."
+        return _fail(log, "add_monster_initiative", FailureReason.NO_ROLLS_PROVIDED)
 
     results = []
     successful_count = 0
@@ -642,7 +812,7 @@ async def add_monster_initiative(
         dex_mod = monster.attributes.dexterity.modifier
 
         try:
-            result = turn_manager.add_initiative_roll(
+            turn_manager.add_initiative_roll(
                 character_id=roll_entry.monster_id,
                 character_name=display_name,
                 roll=roll_entry.roll,
@@ -659,18 +829,11 @@ async def add_monster_initiative(
         collected = len(turn_manager.combat_state.initiative_order)
         total = len(turn_manager.combat_state.participants)
         status = f"\n\nInitiative collected: {collected}/{total}"
-
-        # Log completion with status
-        if logger:
-            logger.dm_tool("add_monster_initiative complete",
-                         added_count=successful_count,
-                         collected=collected,
-                         total=total)
+        log.dm_tool("add_monster_initiative complete",
+                   added_count=successful_count, collected=collected, total=total)
     else:
         status = ""
-        if logger:
-            logger.dm_tool("add_monster_initiative complete",
-                         added_count=successful_count)
+        log.dm_tool("add_monster_initiative complete", added_count=successful_count)
 
     return "\n".join(results) + status
 
@@ -706,52 +869,36 @@ async def remove_defeated_participant(
         Remove a fleeing enemy:
         >>> await remove_defeated_participant(ctx, "orc_2", "fled the battle")
     """
-    turn_manager = ctx.deps.turn_manager
-    logger = ctx.deps.logger
+    log = _get_log(ctx)
+    log.dm_tool("remove_defeated_participant called",
+               character_id=character_id, reason=reason)
 
-    # Log tool invocation
-    if logger:
-        logger.dm_tool("remove_defeated_participant called",
-                     character_id=character_id,
-                     reason=reason)
-
-    if not turn_manager:
-        if logger:
-            logger.dm_tool("remove_defeated_participant failed: no turn manager",
-                         level=LogLevel.WARNING)
-        return "Error: Turn manager not available."
-
-    if not turn_manager.combat_state:
-        if logger:
-            logger.dm_tool("remove_defeated_participant failed: not in combat",
-                         level=LogLevel.WARNING)
-        return "Error: Not currently in combat."
+    try:
+        turn_manager = _require_combat_state(ctx, "remove_defeated_participant")
+    except ToolValidationError as e:
+        return e.error_message
 
     # Remove the participant
     removed = turn_manager.combat_state.remove_participant(character_id)
 
     if not removed:
-        if logger:
-            logger.dm_tool("remove_defeated_participant failed: not found",
-                         character_id=character_id,
-                         level=LogLevel.WARNING)
-        return f"Error: Participant '{character_id}' not found in combat."
+        return _fail(log, "remove_defeated_participant",
+                    f"{FailureReason.PARTICIPANT_NOT_FOUND}_{character_id}",
+                    character_id=character_id)
 
     # Log successful removal
-    if logger:
-        logger.combat("Participant removed from combat",
-                     character_id=character_id,
-                     reason=reason,
-                     remaining_players=len(turn_manager.combat_state.get_remaining_player_ids()),
-                     remaining_monsters=len(turn_manager.combat_state.get_remaining_monster_ids()))
+    log.combat("Participant removed from combat",
+              character_id=character_id, reason=reason,
+              remaining_players=len(turn_manager.combat_state.get_remaining_player_ids()),
+              remaining_monsters=len(turn_manager.combat_state.get_remaining_monster_ids()))
 
     # Check if combat should end
     result = f"✅ {character_id} has been removed from combat ({reason})."
 
-    if turn_manager.combat_state.is_combat_over():
-        players = turn_manager.combat_state.get_remaining_player_ids()
-        monsters = turn_manager.combat_state.get_remaining_monster_ids()
+    players = turn_manager.combat_state.get_remaining_player_ids()
+    monsters = turn_manager.combat_state.get_remaining_monster_ids()
 
+    if turn_manager.combat_state.is_combat_over():
         if len(monsters) == 0:
             result += "\n\n⚔️ COMBAT OVER: All enemies have been defeated!"
             result += f"\nPlayers remaining: {len(players)}"
@@ -761,13 +908,9 @@ async def remove_defeated_participant(
             result += f"\nEnemies remaining: {len(monsters)}"
             result += "\n\nCall end_combat() to transition to combat conclusion phase."
 
-        if logger:
-            logger.combat("Combat over - one side eliminated",
-                        players_remaining=len(players),
-                        monsters_remaining=len(monsters))
+        log.combat("Combat over - one side eliminated",
+                  players_remaining=len(players), monsters_remaining=len(monsters))
     else:
-        players = turn_manager.combat_state.get_remaining_player_ids()
-        monsters = turn_manager.combat_state.get_remaining_monster_ids()
         result += f"\nCombat continues: {len(players)} players, {len(monsters)} enemies remaining."
 
     return result
@@ -802,45 +945,23 @@ async def end_combat(
         End combat due to surrender:
         >>> await end_combat(ctx, "Enemies surrendered")
     """
-    turn_manager = ctx.deps.turn_manager
-    logger = ctx.deps.logger
+    log = _get_log(ctx)
+    log.dm_tool("end_combat called", reason=reason)
 
-    # Log tool invocation
-    if logger:
-        logger.dm_tool("end_combat called", reason=reason)
-
-    if not turn_manager:
-        if logger:
-            logger.dm_tool("end_combat failed: no turn manager",
-                         level=LogLevel.WARNING)
-        return "Error: Turn manager not available."
-
-    if not turn_manager.combat_state:
-        if logger:
-            logger.dm_tool("end_combat failed: not in combat",
-                         level=LogLevel.WARNING)
-        return "Error: Not currently in combat."
-
-    from src.models.combat_state import CombatPhase
-
-    if turn_manager.combat_state.phase != CombatPhase.COMBAT_ROUNDS:
-        if logger:
-            logger.dm_tool("end_combat failed: not in COMBAT_ROUNDS phase",
-                         current_phase=turn_manager.combat_state.phase.value,
-                         level=LogLevel.WARNING)
-        return f"Error: Cannot end combat from phase {turn_manager.combat_state.phase.value}. Must be in COMBAT_ROUNDS."
+    try:
+        turn_manager = _require_combat_phase(ctx, "end_combat", CombatPhase.COMBAT_ROUNDS)
+    except ToolValidationError as e:
+        return e.error_message
 
     # Start combat end phase
     try:
         end_result = turn_manager.start_combat_end(reason=reason)
 
-        # Log successful combat end
-        if logger:
-            logger.combat("Combat ending",
-                        reason=reason,
-                        rounds_fought=end_result.get("rounds_fought", 0),
-                        players_remaining=len(end_result.get("players_remaining", [])),
-                        enemies_remaining=len(end_result.get("enemies_remaining", [])))
+        log.combat("Combat ending",
+                  reason=reason,
+                  rounds_fought=end_result.get("rounds_fought", 0),
+                  players_remaining=len(end_result.get("players_remaining", [])),
+                  enemies_remaining=len(end_result.get("enemies_remaining", [])))
 
         result = f"⚔️ COMBAT ENDED: {reason}\n"
         result += f"Rounds fought: {end_result.get('rounds_fought', 0)}\n"
@@ -851,11 +972,7 @@ async def end_combat(
         return result
 
     except ValueError as e:
-        if logger:
-            logger.dm_tool("end_combat failed: error",
-                         error=str(e),
-                         level=LogLevel.ERROR)
-        return f"Error ending combat: {e}"
+        return _fail(log, "end_combat", FailureReason.TRANSITION_ERROR, level=LogLevel.ERROR, error=str(e))
 
 
 def _query_monster_ability(
