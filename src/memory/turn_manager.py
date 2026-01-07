@@ -1406,6 +1406,31 @@ class TurnManager:
             "summary": summary
         }
 
+    def process_pending_combat_end(self) -> Optional[Dict[str, Any]]:
+        """
+        Check for and process any pending combat end.
+
+        Called by session_manager after state extraction to handle deferred
+        combat end. This ensures the final action's damage/effects are properly
+        recorded before transitioning to COMBAT_END phase.
+
+        Returns:
+            Result from start_combat_end() if combat end was pending, None otherwise
+        """
+        if not self.combat_state:
+            return None
+
+        reason = self.combat_state.consume_pending_end()
+        if reason is None:
+            return None
+
+        # Log the deferred transition
+        if self.logger:
+            self.logger.combat("Processing deferred combat end", reason=reason)
+
+        # Now actually transition to combat end
+        return self.start_combat_end(reason=reason)
+
     def get_combat_phase(self) -> CombatPhase:
         """Get the current combat phase."""
         return self.combat_state.phase
