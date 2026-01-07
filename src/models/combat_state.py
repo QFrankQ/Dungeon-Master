@@ -66,6 +66,10 @@ class CombatState(BaseModel):
     encounter_name: Optional[str] = Field(default=None, description="Optional name for the encounter")
     combat_start_narrative: Optional[str] = Field(default=None, description="How combat started")
 
+    # Deferred combat end (set by end_combat tool, processed after state extraction)
+    pending_end: bool = Field(default=False, description="Combat end requested but not yet processed")
+    pending_end_reason: Optional[str] = Field(default=None, description="Reason for pending combat end")
+
     model_config = {"arbitrary_types_allowed": True}
 
     def start_combat(self, participants: List[str], encounter_name: Optional[str] = None) -> None:
@@ -229,11 +233,44 @@ class CombatState(BaseModel):
         self.initiative_order.append(entry)
         self.initiative_order = sorted(self.initiative_order)
 
+    def set_pending_end(self, reason: str) -> None:
+        """
+        Mark combat for deferred ending (called by end_combat tool).
+
+        Combat will actually transition after state extraction runs.
+
+        Args:
+            reason: Reason for combat ending (e.g., "All enemies defeated")
+        """
+        if self.phase != CombatPhase.COMBAT_ROUNDS:
+            raise ValueError(f"Cannot set pending end from phase {self.phase}")
+        self.pending_end = True
+        self.pending_end_reason = reason
+
+    def consume_pending_end(self) -> Optional[str]:
+        """
+        Consume the pending end flag and return the reason if set.
+
+        Returns:
+            The pending end reason if combat end was pending, None otherwise.
+            If pending but reason is None, returns a default reason.
+        """
+        if not self.pending_end:
+            return None
+        # Always return a non-None reason when pending is True
+        reason = self.pending_end_reason or "Combat ended"
+        self.pending_end = False
+        self.pending_end_reason = None
+        return reason
+
     def start_combat_end(self) -> None:
         """Transition to COMBAT_END phase (Phase 3)."""
         if self.phase != CombatPhase.COMBAT_ROUNDS:
             raise ValueError(f"Cannot end combat from phase {self.phase}")
         self.phase = CombatPhase.COMBAT_END
+        # Clear pending flags (in case they were set)
+        self.pending_end = False
+        self.pending_end_reason = None
 
     def finish_combat(self) -> None:
         """Complete combat and return to exploration mode."""
@@ -244,6 +281,8 @@ class CombatState(BaseModel):
         self.current_participant_index = 0
         self.encounter_name = None
         self.combat_start_narrative = None
+        self.pending_end = False
+        self.pending_end_reason = None
 
     def get_initiative_summary(self) -> str:
         """Get a formatted summary of the current initiative order."""
