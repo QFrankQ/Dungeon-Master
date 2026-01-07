@@ -1310,7 +1310,22 @@ class TurnManager:
         # Transition combat state
         self.combat_state.start_combat_end()
 
-        # Clear any remaining combat turns
+        # Properly end all remaining combat turns before clearing
+        # This ensures they're added to completed_turns with proper end_time
+        turns_ended = 0
+        for level_queue in self.turn_stack:
+            for turn in level_queue:
+                if turn.end_time is None:
+                    turn.end_time = datetime.now()
+                self.completed_turns.append(turn)
+                turns_ended += 1
+
+        if self.logger and turns_ended > 0:
+            self.logger.turn("Combat turns ended for combat conclusion",
+                           turns_ended=turns_ended,
+                           reason=reason)
+
+        # Clear the turn stack
         self.turn_stack = []
 
         # Create Phase 3 turn for conclusion using current game phase
