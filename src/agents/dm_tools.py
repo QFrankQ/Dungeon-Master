@@ -921,22 +921,23 @@ async def end_combat(
     reason: str = "Combat conditions met"
 ) -> str:
     """
-    End combat and transition to the combat conclusion phase.
+    Signal that combat should end after current actions resolve.
+
+    This uses DEFERRED ending - combat will actually transition to COMBAT_END
+    phase after state extraction runs for the current turn. This ensures the
+    final action's damage/effects are properly recorded before combat ends.
 
     Call this when:
     - All enemies have been defeated (use remove_defeated_participant first)
     - All players have fallen
     - Combat is ended for narrative reasons (enemies surrender, negotiation, etc.)
 
-    This transitions from COMBAT_ROUNDS to COMBAT_END phase, allowing for
-    post-combat narration before returning to exploration.
-
     Args:
         ctx: PydanticAI RunContext with DMToolsDependencies
         reason: Reason for ending combat (default: "Combat conditions met")
 
     Returns:
-        Combat summary and next steps
+        Confirmation that combat end is pending
 
     Examples:
         End combat after victory:
@@ -946,28 +947,34 @@ async def end_combat(
         >>> await end_combat(ctx, "Enemies surrendered")
     """
     log = _get_log(ctx)
-    log.dm_tool("end_combat called", reason=reason)
+    log.dm_tool("end_combat called (deferred)", reason=reason)
 
     try:
         turn_manager = _require_combat_phase(ctx, "end_combat", CombatPhase.COMBAT_ROUNDS)
     except ToolValidationError as e:
         return e.error_message
 
-    # Start combat end phase
+    # Set pending end flag (actual transition happens after state extraction)
     try:
-        end_result = turn_manager.start_combat_end(reason=reason)
+        turn_manager.combat_state.set_pending_end(reason=reason)
 
-        log.combat("Combat ending",
+        # Get current stats for the response
+        players = turn_manager.combat_state.get_remaining_player_ids()
+        monsters = turn_manager.combat_state.get_remaining_monster_ids()
+        rounds = turn_manager.combat_state.round_number
+
+        log.combat("Combat end pending",
                   reason=reason,
-                  rounds_fought=end_result.get("rounds_fought", 0),
-                  players_remaining=len(end_result.get("players_remaining", [])),
-                  enemies_remaining=len(end_result.get("enemies_remaining", [])))
+                  rounds_fought=rounds,
+                  players_remaining=len(players),
+                  monsters_remaining=len(monsters))
 
-        result = f"⚔️ COMBAT ENDED: {reason}\n"
-        result += f"Rounds fought: {end_result.get('rounds_fought', 0)}\n"
-        result += f"Players remaining: {', '.join(end_result.get('players_remaining', [])) or 'None'}\n"
-        result += f"Enemies remaining: {', '.join(end_result.get('enemies_remaining', [])) or 'None'}\n"
-        result += f"\nTransitioned to COMBAT_END phase. Narrate the conclusion of battle."
+        result = f"⚔️ COMBAT ENDING: {reason}\n"
+        result += f"Rounds fought: {rounds}\n"
+        result += f"Players remaining: {len(players)}\n"
+        result += f"Enemies remaining: {len(monsters)}\n"
+        result += f"\nCombat will transition to conclusion phase after current step resolves."
+        result += f"\nNarrate the conclusion of the final action, then set game_step_completed=True."
 
         return result
 
