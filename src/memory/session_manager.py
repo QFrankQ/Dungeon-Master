@@ -754,6 +754,9 @@ class SessionManager:
                 # Check if current step (before advancing) is a resolution step
                 state_results = await self._extract_state_if_resolution_step(response_queue)
 
+                # Note: Deferred combat end is now processed in TurnManager.end_turn_and_get_next_async()
+                # when a Level 0 (main) turn completes, ensuring all reactions resolve first.
+
                 # Advance the processing turn's step
                 # (This is the turn that was being processed when DM ran, even if tools created subturns)
                 # response_queue.append("[Advancing turn step...]\n")
@@ -774,7 +777,17 @@ class SessionManager:
                     # Processing turn is complete - end it and get next
                     end_result = await self.turn_manager.end_turn_and_get_next_async()
 
-                    if not (end_result.get("next_pending") or end_result.get("return_to_parent")):
+                    # Handle deferred combat end (processed when Level 0 turn completes)
+                    if end_result.get("combat_ended"):
+                        combat_end_result = end_result.get("combat_end_result", {})
+                        response_queue.append(f"\n[Combat transitioning to conclusion phase: {combat_end_result.get('reason', 'Combat ended')}]\n")
+                        if self.logger:
+                            self.logger.combat("Deferred combat end processed",
+                                             reason=combat_end_result.get('reason'),
+                                             rounds_fought=combat_end_result.get('rounds_fought'))
+                        # Don't break - COMBAT_END turn is now on the stack and needs processing
+
+                    if not (end_result.get("next_pending") or end_result.get("return_to_parent") or end_result.get("combat_ended")):
                         # All turns complete - exit loop
                         #TODO: not necessarily break
                         break
