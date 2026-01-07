@@ -713,10 +713,9 @@ class SessionManager:
         # Log DM response received
         if self.logger:
             self.logger.dm("DM response generated",
-                         narrative_length=len(dungeon_master_response.narrative),
-                         step_completed=dungeon_master_response.game_step_completed,
                          input_tokens=total_input_tokens,
-                         output_tokens=total_output_tokens)
+                         output_tokens=total_output_tokens,
+                         response=dungeon_master_response.model_dump())
 
         # === PHASE 3: PROCESS DM RESPONSE ===
         response_queue: List[str] = []
@@ -801,6 +800,11 @@ class SessionManager:
                     total_input_tokens += run_usage.input_tokens
                     total_output_tokens += run_usage.output_tokens
                     total_requests += run_usage.requests
+
+                # Log DM re-run response
+                if self.logger:
+                    self.logger.dm("DM response (re-run after step completion)",
+                                 response=dungeon_master_response.model_dump())
 
                 # Add new DM response to queue
                 response_queue.append(dungeon_master_response.narrative)
