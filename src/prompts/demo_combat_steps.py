@@ -179,17 +179,20 @@ DEMO_REACTION_STEPS = [
 # Used when combat concludes
 
 COMBAT_END_STEPS = [
-    # Step 1: Determine Conclusion
+    # Step 0: Determine Conclusion
     "Determine if combat conclusion conditions are met: One side is entirely neutralized (incapacitated, killed, or fled), OR a pre-determined objective has been achieved, OR both sides agree to cease hostilities. DO NOT announce combat has ended in this step.",
 
-    # Step 2: Announce End
+    # Step 1: Announce End
     "Formally announce that the structured combat encounter has concluded. Make the transition clear and dramatic. DO NOT summarize the outcome in this step.",
 
-    # Step 3: Summarize Outcome
+    # Step 2: Summarize Outcome
     "Provide a concise summary of the combat outcome: Who won/lost, casualties on both sides, any significant events that occurred, and the immediate aftermath. DO NOT report lasting effects in this step.",
 
-    # Step 4: Report Lasting Effects
-    "Identify and announce any ongoing effects that will persist beyond combat: Lingering spell effects with remaining duration, conditions that don't end with combat (exhaustion, curses), concentration spells still maintained, and any time-sensitive effects. DO NOT transition to exploration mode in this step."
+    # Step 3: Report Lasting Effects
+    "Identify and announce any ongoing effects that will persist beyond combat: Lingering spell effects with remaining duration, conditions that don't end with combat (exhaustion, curses), concentration spells still maintained, and any time-sensitive effects. DO NOT clean up effects in this step.",
+
+    # Step 4: Clean Up Combat-Only Effects (RESOLUTION STEP - triggers state extraction)
+    "Remove all combat-only effects that end when combat concludes: End Barbarian Rage, drop concentration spells no longer needed, clear 'until end of combat' conditions (like temporary frightened or charmed effects), and remove any combat-specific buffs. Announce what effects are ending. State extraction will capture these changes."
 ]
 
 # =============================================================================
@@ -217,8 +220,9 @@ REACTION_RESOLUTION_INDICES = {3}
 # Combat start doesn't have resolution steps (no game state changes)
 COMBAT_START_RESOLUTION_INDICES = set()
 
-# Combat end doesn't have resolution steps (summarizing, not changing state)
-COMBAT_END_RESOLUTION_INDICES = set()
+# Combat end: Resolution happens at step index 4 (Clean Up Combat-Only Effects)
+# - Index 4: Remove combat-only effects (rage, concentration, temporary conditions)
+COMBAT_END_RESOLUTION_INDICES = {4}
 
 
 def is_resolution_step_index(step_index: int, step_list: list[str]) -> bool:
