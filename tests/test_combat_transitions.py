@@ -834,7 +834,7 @@ class TestStepListSelection:
 
         steps = get_steps_for_phase(GamePhase.COMBAT_END)
         assert steps == COMBAT_END_STEPS
-        assert len(steps) == 4
+        assert len(steps) == 5  # 5 steps including cleanup step
 
     def test_exploration_uses_exploration_steps(self, turn_manager):
         """Verify exploration phase uses EXPLORATION_STEPS."""
