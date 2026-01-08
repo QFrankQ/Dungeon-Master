@@ -323,6 +323,58 @@ class TestMessageCoordinator:
         result = coordinator.add_response("Alice", "Roll 2")
         assert result == AddResult.DUPLICATE
 
+    def test_remove_response_allows_retry(self):
+        """remove_response allows player to retry after API error."""
+        coordinator = create_message_coordinator()
+        coordinator.enter_combat_mode()
+
+        coordinator.set_expectation(ResponseExpectation(
+            characters=["Alice"],
+            response_type=ResponseType.ACTION
+        ))
+
+        # Add response (simulating player sending message)
+        result = coordinator.add_response("Alice", "I attack")
+        assert result == AddResult.ACCEPTED
+
+        # Verify Alice has responded
+        validation = coordinator.validate_responder("Alice")
+        assert validation.result == MessageValidationResult.INVALID_ALREADY_RESPONDED
+
+        # Remove response (simulating API error cleanup)
+        removed = coordinator.remove_response("Alice")
+        assert removed is True
+
+        # Alice can now respond again
+        validation = coordinator.validate_responder("Alice")
+        assert validation.result == MessageValidationResult.VALID
+
+        # Retry succeeds
+        result = coordinator.add_response("Alice", "I attack again")
+        assert result == AddResult.ACCEPTED
+
+    def test_remove_response_not_found(self):
+        """remove_response returns False if character hasn't responded."""
+        coordinator = create_message_coordinator()
+        coordinator.enter_combat_mode()
+
+        coordinator.set_expectation(ResponseExpectation(
+            characters=["Alice"],
+            response_type=ResponseType.ACTION
+        ))
+
+        # Try to remove before adding
+        removed = coordinator.remove_response("Alice")
+        assert removed is False
+
+    def test_remove_response_no_collector(self):
+        """remove_response returns False if no collector exists."""
+        coordinator = create_message_coordinator()
+
+        # No expectation set, so no collector
+        removed = coordinator.remove_response("Alice")
+        assert removed is False
+
 # =============================================================================
 # MILESTONE 3: ResponseCollector
 # =============================================================================
