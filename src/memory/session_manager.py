@@ -531,7 +531,7 @@ class SessionManager:
                                       turn_id=current_turn.turn_id,
                                       step_index=current_step_index)
 
-            response_queue.append("[Resolution step detected - extracting state changes...]\n")
+            # response_queue.append("[Resolution step detected - extracting state changes...]\n")
 
             # Build state extraction context with character name→ID mapping
             character_map = self.state_manager.get_character_name_to_id_map()
@@ -575,13 +575,13 @@ class SessionManager:
 
                 return state_results
             else:
-                response_queue.append("[No state changes detected]\n")
+                # response_queue.append("[No state changes detected]\n")
                 if self.logger:
                     self.logger.extraction("No state changes detected")
                 return None
 
         except Exception as e:
-            response_queue.append(f"⚠ State extraction failed: {e}\n")
+            # response_queue.append(f"⚠ State extraction failed: {e}\n")
             if self.logger:
                 self.logger.extraction("State extraction failed",
                                       error=str(e),
