@@ -160,6 +160,24 @@ class MessageCoordinator:
 
         return self.response_collector.add_response(character_name, data)
 
+    def remove_response(self, character_name: str) -> bool:
+        """
+        Remove a previously collected response.
+
+        Used when processing fails (e.g., API 503 error) and the player
+        needs to be able to retry their action.
+
+        Args:
+            character_name: Name of the character whose response to remove
+
+        Returns:
+            True if response was removed, False if not found or no collector
+        """
+        if self.response_collector is None:
+            return False
+
+        return self.response_collector.remove_response(character_name)
+
     def is_collection_complete(self) -> bool:
         """
         Check if response collection is complete.

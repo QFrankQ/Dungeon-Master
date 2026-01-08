@@ -74,6 +74,24 @@ class ResponseCollector:
         self.collected[character_name] = data
         return AddResult.ACCEPTED
 
+    def remove_response(self, character_name: str) -> bool:
+        """
+        Remove a previously collected response.
+
+        Used when processing fails (e.g., API errors) and the player
+        needs to be able to retry their action.
+
+        Args:
+            character_name: Name of the character whose response to remove
+
+        Returns:
+            True if response was removed, False if not found
+        """
+        if character_name in self.collected:
+            del self.collected[character_name]
+            return True
+        return False
+
     def is_complete(self) -> bool:
         """
         Check if collection is complete based on the collection mode.
