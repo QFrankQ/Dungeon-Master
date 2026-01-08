@@ -173,6 +173,9 @@ class SessionCommands(commands.Cog):
             )
             return
 
+        # Track for cleanup on error
+        response_added_for_cleanup = None  # Will hold character_id if we need to clean up
+
         try:
             # Show typing indicator while processing
             async with message.channel.typing():
@@ -221,6 +224,10 @@ class SessionCommands(commands.Cog):
                     # Add response to collector (use character_id for tracking)
                     add_result = coordinator.add_response(character_id, chat_message)
 
+                    # Track for cleanup if processing fails later
+                    if add_result == AddResult.ACCEPTED:
+                        response_added_for_cleanup = character_id
+
                     if add_result == AddResult.DUPLICATE:
                         await message.reply(
                             "You've already responded! Waiting for others...",
@@ -267,6 +274,8 @@ class SessionCommands(commands.Cog):
                 if coordinator:
                     awaiting = result.get("awaiting_response")
                     coordinator.set_expectation(awaiting)
+                    # Clear cleanup flag - old collector is replaced, response was processed successfully
+                    response_added_for_cleanup = None
 
                 # Send DM responses (mirrors demo_terminal.py:201-202)
                 for response_text in result["responses"]:
@@ -309,6 +318,17 @@ class SessionCommands(commands.Cog):
                     )
 
         except Exception as e:
+            # Clean up: Remove response from collector so player can retry
+            # This handles cases like API 503 errors where the message was collected
+            # but processing failed before completing
+            if response_added_for_cleanup and session_context.message_coordinator:
+                try:
+                    removed = session_context.message_coordinator.remove_response(response_added_for_cleanup)
+                    if removed:
+                        logger.info(f"Cleaned up response for {response_added_for_cleanup} after error - player can retry")
+                except Exception as cleanup_error:
+                    logger.warning(f"Error during cleanup: {cleanup_error}")
+
             await message.channel.send(
                 f"❌ Error processing message: {str(e)}\n"
                 f"Please try again or use `/end` to restart the session."
