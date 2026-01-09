@@ -941,6 +941,30 @@ async def remove_defeated_participant(
         turn_manager = _require_combat_state(ctx, "remove_defeated_participant")
     except ToolValidationError as e:
         return e.error_message
+    # TODO: handle non hp reasons more robustly.
+    # Validate HP before allowing removal (unless reason indicates non-HP removal)
+    non_hp_reasons = {"fled", "fled the battle", "banished", "surrendered", "captured", "escaped"}
+    if reason.lower() not in non_hp_reasons:
+        state_manager = ctx.deps.state_manager
+        if state_manager:
+            character = state_manager.get_character_by_id(character_id)
+            if character:
+                # Get current HP - handle both Character (.hp property) and Monster (.hit_points.current)
+                if hasattr(character, 'hp'):
+                    current_hp = character.hp  # Character has .hp property
+                elif hasattr(character, 'hit_points'):
+                    current_hp = character.hit_points.current  # Monster has .hit_points.current
+                else:
+                    current_hp = None
+
+                if current_hp is not None and current_hp > 0:
+                    log.dm_tool("remove_defeated_participant blocked - character still has HP",
+                               character_id=character_id,
+                               current_hp=current_hp,
+                               reason=reason)
+                    return (f"❌ Cannot remove {character_id}: they still have {current_hp} HP remaining. "
+                            f"Only remove participants when they reach 0 HP (defeated/killed) or for "
+                            f"non-HP reasons (fled, banished, surrendered, captured, escaped).")
 
     # Remove the participant from initiative order
     removed = turn_manager.combat_state.remove_participant(character_id)
