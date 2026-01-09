@@ -1025,6 +1025,74 @@ class TestFullCombatFlow:
         tm.combat_state.remove_participant("goblin_2")
         assert tm.combat_state.is_combat_over() is True
 
+    def test_remove_queued_turns_for_defeated_character(self, turn_manager, sample_initiative_entries):
+        """Test that removing a participant also removes their queued turns."""
+        tm = turn_manager
+
+        # Setup combat with 4 participants
+        participants = ["fighter", "wizard", "goblin_1", "goblin_2"]
+        tm.enter_combat(participants, "Test")
+
+        for entry in sample_initiative_entries:
+            tm.add_initiative_roll(
+                character_id=entry.character_id,
+                character_name=entry.character_name,
+                roll=entry.roll,
+                is_player=entry.is_player,
+                dex_modifier=entry.dex_modifier
+            )
+
+        # Finalize initiative - this queues turns for all 4 participants
+        tm.finalize_initiative(combat_start_turn_already_ended=False)
+
+        # Verify 4 turns are queued (initiative order: fighter=20, wizard=15, goblin_2=12, goblin_1=10)
+        # All 4 participants have their turns queued at level 0
+        assert len(tm.turn_stack) == 1  # One level
+        assert len(tm.turn_stack[0]) == 4  # 4 turns queued
+
+        # Get the characters in the queue
+        queued_characters = [turn.active_character for turn in tm.turn_stack[0]]
+        assert "goblin_2" in queued_characters
+
+        # Now remove goblin_2's queued turns (simulating what happens when they're defeated)
+        removed_count = tm.remove_queued_turns_for_character("goblin_2")
+
+        # Should have removed 1 turn (goblin_2's turn)
+        # Note: The first turn (fighter) is the active turn and is not removed
+        # goblin_2 is at position 2 (0-indexed), so it should be removed
+        assert removed_count == 1
+
+        # Verify goblin_2's turn is no longer in the queue
+        remaining_characters = [turn.active_character for turn in tm.turn_stack[0]]
+        assert "goblin_2" not in remaining_characters
+        assert len(remaining_characters) == 3  # fighter, wizard, goblin_1
+
+    def test_remove_queued_turns_preserves_active_turn(self, turn_manager, sample_initiative_entries):
+        """Test that removing queued turns does NOT remove the currently active turn."""
+        tm = turn_manager
+
+        # Setup combat
+        participants = ["fighter", "wizard", "goblin_1"]
+        tm.enter_combat(participants, "Test")
+
+        # Add initiative: fighter=20, wizard=15, goblin_1=10
+        tm.add_initiative_roll("fighter", "Fighter", 20, True, 2)
+        tm.add_initiative_roll("wizard", "Wizard", 15, True, 1)
+        tm.add_initiative_roll("goblin_1", "Goblin 1", 10, False, 2)
+
+        tm.finalize_initiative(combat_start_turn_already_ended=False)
+
+        # fighter's turn is active (first in queue)
+        active_turn = tm.get_next_pending_turn()
+        assert active_turn.active_character == "fighter"
+
+        # Try to remove fighter's turns (should not remove the active turn)
+        removed_count = tm.remove_queued_turns_for_character("fighter")
+        assert removed_count == 0  # Active turn is not removed
+
+        # Active turn should still be fighter
+        assert tm.get_next_pending_turn().active_character == "fighter"
+
 
 # =============================================================================
 # MONSTER INITIATIVE TESTS
