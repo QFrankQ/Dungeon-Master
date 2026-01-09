@@ -756,9 +756,15 @@ async def select_encounter_monsters(
             log.dm_tool("Monsters not added to participants (not in COMBAT_START)",
                        reason=str(e), level=LogLevel.DEBUG)
 
-    # Return summary for DM to use in narrative
+    # Return summary for DM to use in narrative with prominent reminder
     summary = monster_spawner.get_spawned_summary()
-    return f"Created {len(created_ids)} monsters:\n{summary}"
+    id_list = ", ".join(created_ids)
+    return (
+        f"Created {len(created_ids)} monsters:\n{summary}\n\n"
+        f"⚠️ IMPORTANT: When describing combat and adding initiative, "
+        f"you MUST use ONLY these monster IDs: {id_list}\n"
+        f"Do NOT invent different monster types or IDs."
+    )
 
 
 async def add_monster_initiative(
@@ -799,12 +805,30 @@ async def add_monster_initiative(
     if not rolls:
         return _fail(log, "add_monster_initiative", FailureReason.NO_ROLLS_PROVIDED)
 
+    # Get list of valid monster IDs from combat participants for error messages
+    valid_monster_ids = []
+    if turn_manager.combat_state:
+        # Get monster IDs from initiative order (already registered) and participants (in combat)
+        registered_ids = {e.character_id for e in turn_manager.combat_state.initiative_order if not e.is_player}
+        for participant_id in turn_manager.combat_state.participants:
+            # Only include monsters (not players) that haven't registered initiative yet
+            monster = state_manager.get_monster(participant_id)
+            if monster and participant_id not in registered_ids:
+                valid_monster_ids.append(participant_id)
+
     results = []
     successful_count = 0
+    failed_ids = []
     for roll_entry in rolls:
         monster = state_manager.get_monster(roll_entry.monster_id)
         if not monster:
-            results.append(f"❌ {roll_entry.monster_id}: Not found in spawned monsters")
+            failed_ids.append(roll_entry.monster_id)
+            continue
+
+        # Also verify the monster is a combat participant
+        if turn_manager.combat_state and roll_entry.monster_id not in turn_manager.combat_state.participants:
+            failed_ids.append(roll_entry.monster_id)
+            results.append(f"❌ {roll_entry.monster_id}: Monster exists but is NOT in this combat encounter")
             continue
 
         # Get display name and DEX modifier for the entry
@@ -824,13 +848,53 @@ async def add_monster_initiative(
         except ValueError as e:
             results.append(f"❌ {roll_entry.monster_id}: {e}")
 
-    # Get collection status
+    # Add prominent error message for failed IDs with list of valid alternatives
+    if failed_ids:
+        # Build list of what monsters need initiative
+        if valid_monster_ids:
+            valid_list = ", ".join(valid_monster_ids)
+            error_msg = (
+                f"\n\n⚠️ INVALID MONSTER IDs: {', '.join(failed_ids)}\n"
+                f"These monsters do not exist in this combat!\n"
+                f"You MUST use only the monster IDs returned by select_encounter_monsters().\n"
+                f"Monsters still needing initiative: {valid_list}"
+            )
+        else:
+            error_msg = (
+                f"\n\n⚠️ INVALID MONSTER IDs: {', '.join(failed_ids)}\n"
+                f"These monsters do not exist in this combat!\n"
+                f"You MUST use only the monster IDs returned by select_encounter_monsters()."
+            )
+        results.append(error_msg)
+
+    # Get collection status and check for missing monsters
     if turn_manager.combat_state:
         collected = len(turn_manager.combat_state.initiative_order)
         total = len(turn_manager.combat_state.participants)
         status = f"\n\nInitiative collected: {collected}/{total}"
+
+        # Calculate which monsters are STILL missing initiative after this call
+        registered_ids = {e.character_id for e in turn_manager.combat_state.initiative_order}
+        missing_monsters = []
+        for participant_id in turn_manager.combat_state.participants:
+            if participant_id not in registered_ids:
+                monster = state_manager.get_monster(participant_id)
+                if monster:  # Only count monsters, not players (players roll their own)
+                    missing_monsters.append(participant_id)
+
+        # Add PROMINENT warning if monsters are still missing
+        if missing_monsters:
+            missing_list = ", ".join(missing_monsters)
+            status += (
+                f"\n\n🚨 ACTION REQUIRED: {len(missing_monsters)} monster(s) still need initiative! 🚨\n"
+                f"Missing: {missing_list}\n"
+                f"You MUST call add_monster_initiative() for ALL spawned monsters.\n"
+                f"Combat CANNOT proceed until all monsters have initiative."
+            )
+
         log.dm_tool("add_monster_initiative complete",
-                   added_count=successful_count, collected=collected, total=total)
+                   added_count=successful_count, collected=collected, total=total,
+                   missing_monsters=missing_monsters)
     else:
         status = ""
         log.dm_tool("add_monster_initiative complete", added_count=successful_count)
