@@ -519,6 +519,46 @@ class TurnManager:
         else:
             # No more turns at that level - check if we returned to parent
             has_parent = len(self.turn_stack) > 0
+
+            # === AUTO-ADVANCE COMBAT ROUND ===
+            # If this was a Level 0 turn in COMBAT_ROUNDS and no parent, advance to next round
+            if (end_result.get("turn_level") == 0
+                and not has_parent
+                and self._current_game_phase == GamePhase.COMBAT_ROUNDS
+                and self.combat_state
+                and self.combat_state.phase == CombatPhase.COMBAT_ROUNDS):
+
+                advance_result = self.advance_combat_turn()
+
+                if advance_result.get("combat_over"):
+                    # Combat ended naturally (one side eliminated)
+                    return {
+                        **end_result,
+                        "combat_ended": True,
+                        "combat_end_result": advance_result,
+                        "next_pending": None
+                    }
+
+                # New round started or next participant queued
+                if advance_result.get("new_round_queued") or self.turn_stack:
+                    next_turn = self.get_next_pending_turn()
+                    if next_turn:
+                        if self.logger:
+                            self.logger.combat("Combat round auto-advanced",
+                                             round_number=advance_result.get("round_number"),
+                                             next_participant=advance_result.get("next_participant"),
+                                             is_new_round=advance_result.get("is_new_round"))
+                        return {
+                            **end_result,
+                            "next_pending": {
+                                "subturn_id": next_turn.turn_id,
+                                "speaker": next_turn.active_character,
+                                "step_needed": next_turn.current_step_objective
+                            },
+                            "new_round": advance_result.get("is_new_round", False),
+                            "round_number": advance_result.get("round_number")
+                        }
+
             return {
                 **end_result,
                 "next_pending": None,
@@ -575,6 +615,46 @@ class TurnManager:
         else:
             # No more turns at that level - check if we returned to parent
             has_parent = len(self.turn_stack) > 0
+
+            # === AUTO-ADVANCE COMBAT ROUND ===
+            # If this was a Level 0 turn in COMBAT_ROUNDS and no parent, advance to next round
+            if (end_result.get("turn_level") == 0
+                and not has_parent
+                and self._current_game_phase == GamePhase.COMBAT_ROUNDS
+                and self.combat_state
+                and self.combat_state.phase == CombatPhase.COMBAT_ROUNDS):
+
+                advance_result = self.advance_combat_turn()
+
+                if advance_result.get("combat_over"):
+                    # Combat ended naturally (one side eliminated)
+                    return {
+                        **end_result,
+                        "combat_ended": True,
+                        "combat_end_result": advance_result,
+                        "next_pending": None
+                    }
+
+                # New round started or next participant queued
+                if advance_result.get("new_round_queued") or self.turn_stack:
+                    next_turn = self.get_next_pending_turn()
+                    if next_turn:
+                        if self.logger:
+                            self.logger.combat("Combat round auto-advanced",
+                                             round_number=advance_result.get("round_number"),
+                                             next_participant=advance_result.get("next_participant"),
+                                             is_new_round=advance_result.get("is_new_round"))
+                        return {
+                            **end_result,
+                            "next_pending": {
+                                "subturn_id": next_turn.turn_id,
+                                "speaker": next_turn.active_character,
+                                "step_needed": next_turn.current_step_objective
+                            },
+                            "new_round": advance_result.get("is_new_round", False),
+                            "round_number": advance_result.get("round_number")
+                        }
+
             return {
                 **end_result,
                 "next_pending": None,
