@@ -793,8 +793,8 @@ class TestStepListSelection:
 
         current_turn = turn_manager.get_next_pending_turn()
         assert current_turn.game_step_list == COMBAT_START_STEPS
-        # 6 steps: Step 0 (monster selection) + Steps 1-5 (announce, surprise, initiative, order, finalize)
-        assert len(current_turn.game_step_list) == 6
+        # 5 steps: Step 0 (monster selection + announce) + Steps 1-4 (surprise, initiative, order, finalize)
+        assert len(current_turn.game_step_list) == 5
 
     def test_player_main_turn_uses_combat_turn_steps(self, turn_manager_in_combat):
         """Verify player Level 0 turns use COMBAT_TURN_STEPS."""
