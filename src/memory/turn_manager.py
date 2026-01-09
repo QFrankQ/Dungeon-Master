@@ -489,13 +489,31 @@ class TurnManager:
         """
         removed_count = 0
 
+        if self.logger:
+            # Log the turn stack state before removal
+            all_turns = [(lvl, t.turn_id, t.active_character)
+                        for lvl, queue in enumerate(self.turn_stack)
+                        for t in queue]
+            self.logger.turn("Attempting to remove turns for character",
+                            target_character_id=character_id,
+                            turn_stack_before=str(all_turns),
+                            stack_depth=len(self.turn_stack))
+
         for level_idx, level_queue in enumerate(self.turn_stack):
             # Filter out turns for this character, but preserve active turn (first in top level)
             turns_to_keep = []
             for turn_idx, turn in enumerate(level_queue):
                 # Skip removal of the currently active turn (first turn in topmost level)
                 is_active_turn = (level_idx == len(self.turn_stack) - 1 and turn_idx == 0)
-                if is_active_turn or turn.active_character != character_id:
+
+                if is_active_turn:
+                    turns_to_keep.append(turn)
+                    if self.logger and turn.active_character == character_id:
+                        self.logger.turn("Turn preserved (is active turn)",
+                                        turn_id=turn.turn_id,
+                                        turn_active_character=turn.active_character,
+                                        target_character_id=character_id)
+                elif turn.active_character != character_id:
                     turns_to_keep.append(turn)
                 else:
                     removed_count += 1
@@ -503,13 +521,23 @@ class TurnManager:
                         self.logger.turn("Queued turn removed for defeated character",
                                         turn_id=turn.turn_id,
                                         character_id=character_id,
-                                        level=level_idx)
+                                        stack_level=level_idx)
 
             self.turn_stack[level_idx] = turns_to_keep
 
         # Clean up any empty levels (except the current active level)
         while len(self.turn_stack) > 1 and not self.turn_stack[-1]:
             self.turn_stack.pop()
+
+        if self.logger:
+            # Log the turn stack state after removal
+            all_turns_after = [(lvl, t.turn_id, t.active_character)
+                              for lvl, queue in enumerate(self.turn_stack)
+                              for t in queue]
+            self.logger.turn("Turn removal complete",
+                            target_character_id=character_id,
+                            turns_removed=removed_count,
+                            turn_stack_after=str(all_turns_after))
 
         return removed_count
 
@@ -565,11 +593,22 @@ class TurnManager:
 
             # === AUTO-ADVANCE COMBAT ROUND ===
             # If this was a Level 0 turn in COMBAT_ROUNDS and no parent, advance to next round
+            if self.logger:
+                self.logger.combat("Checking auto-advance conditions (async)",
+                                  turn_level=end_result.get("turn_level"),
+                                  has_parent=has_parent,
+                                  game_phase=self._current_game_phase.value if self._current_game_phase else None,
+                                  combat_state_exists=bool(self.combat_state),
+                                  combat_phase=self.combat_state.phase.value if self.combat_state else None)
+
             if (end_result.get("turn_level") == 0
                 and not has_parent
                 and self._current_game_phase == GamePhase.COMBAT_ROUNDS
                 and self.combat_state
                 and self.combat_state.phase == CombatPhase.COMBAT_ROUNDS):
+
+                if self.logger:
+                    self.logger.combat("Auto-advance conditions met, advancing combat turn (async)")
 
                 advance_result = self.advance_combat_turn()
 
@@ -601,6 +640,13 @@ class TurnManager:
                             "new_round": advance_result.get("is_new_round", False),
                             "round_number": advance_result.get("round_number")
                         }
+            else:
+                if self.logger:
+                    self.logger.combat("Auto-advance conditions NOT met (async)",
+                                      is_level_0=(end_result.get("turn_level") == 0),
+                                      no_parent=(not has_parent),
+                                      game_phase_match=(self._current_game_phase == GamePhase.COMBAT_ROUNDS),
+                                      combat_phase_match=(self.combat_state.phase == CombatPhase.COMBAT_ROUNDS if self.combat_state else False))
 
             return {
                 **end_result,
@@ -661,11 +707,22 @@ class TurnManager:
 
             # === AUTO-ADVANCE COMBAT ROUND ===
             # If this was a Level 0 turn in COMBAT_ROUNDS and no parent, advance to next round
+            if self.logger:
+                self.logger.combat("Checking auto-advance conditions (sync)",
+                                  turn_level=end_result.get("turn_level"),
+                                  has_parent=has_parent,
+                                  game_phase=self._current_game_phase.value if self._current_game_phase else None,
+                                  combat_state_exists=bool(self.combat_state),
+                                  combat_phase=self.combat_state.phase.value if self.combat_state else None)
+
             if (end_result.get("turn_level") == 0
                 and not has_parent
                 and self._current_game_phase == GamePhase.COMBAT_ROUNDS
                 and self.combat_state
                 and self.combat_state.phase == CombatPhase.COMBAT_ROUNDS):
+
+                if self.logger:
+                    self.logger.combat("Auto-advance conditions met, advancing combat turn")
 
                 advance_result = self.advance_combat_turn()
 
@@ -697,6 +754,13 @@ class TurnManager:
                             "new_round": advance_result.get("is_new_round", False),
                             "round_number": advance_result.get("round_number")
                         }
+            else:
+                if self.logger:
+                    self.logger.combat("Auto-advance conditions NOT met (sync)",
+                                      is_level_0=(end_result.get("turn_level") == 0),
+                                      no_parent=(not has_parent),
+                                      game_phase_match=(self._current_game_phase == GamePhase.COMBAT_ROUNDS),
+                                      combat_phase_match=(self.combat_state.phase == CombatPhase.COMBAT_ROUNDS if self.combat_state else False))
 
             return {
                 **end_result,
@@ -1534,8 +1598,8 @@ class TurnManager:
         )
 
         # Add summary message
-        players_remaining = self.combat_state.get_remaining_players()
-        enemies_remaining = self.combat_state.get_remaining_enemies()
+        players_remaining = self.combat_state.get_remaining_player_ids()
+        enemies_remaining = self.combat_state.get_remaining_monster_ids()
         combat_end_turn.add_live_message(
             f"Combat concluding. Rounds: {self.combat_state.round_number}. "
             f"Players remaining: {len(players_remaining)}. "
@@ -1576,8 +1640,8 @@ class TurnManager:
             "encounter_name": self.combat_state.encounter_name,
             "rounds_fought": self.combat_state.round_number,
             "final_participants": self.combat_state.participants.copy(),
-            "players_remaining": self.combat_state.get_remaining_players(),
-            "enemies_remaining": self.combat_state.get_remaining_enemies()
+            "players_remaining": self.combat_state.get_remaining_player_ids(),
+            "enemies_remaining": self.combat_state.get_remaining_monster_ids()
         }
 
         # End combat end turn if exists
