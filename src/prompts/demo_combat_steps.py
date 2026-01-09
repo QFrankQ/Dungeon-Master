@@ -52,22 +52,31 @@ EXPLORATION_STEPS = [
 # Used when entering combat - describes encounter, collects initiative, establishes order
 
 COMBAT_START_STEPS = [
-    # Step 0: Select Monsters for Encounter
-    "BEFORE describing the combat encounter: Call get_available_monsters() to see available monster templates, then call select_encounter_monsters() to spawn monsters that fit the narrative context and desired difficulty. Example: select_encounter_monsters([{type: 'goblin', count: 3}]). DO NOT describe the encounter until monsters are selected - you need their stat sheets for initiative and combat. Set awaiting_response with response_type='none' and game_step_completed=True after selecting monsters.",
+    # Step 0: Select Monsters and Announce Combat Initiation
+    "First, call get_available_monsters() to see available monster templates, then call select_encounter_monsters() to spawn monsters that fit the narrative context and desired difficulty. Example: select_encounter_monsters([{type: 'goblin', count: 2}]).\n"
+    "IMMEDIATELY AFTER selecting monsters, announce combat initiation. CRITICAL REQUIREMENTS:\n"
+    "1. You MUST describe ALL the monsters returned by select_encounter_monsters() - not just some of them.\n"
+    "2. If the tool returned 2 goblins (goblin_1, goblin_2), your narrative MUST mention BOTH goblins. Count the monsters and ensure your description matches the exact count.\n"
+    "3. DO NOT say 'a lone goblin' if you spawned 2 goblins. DO NOT invent different monster types.\n"
+    "4. Make the transition from exploration to combat dramatic and clear.\n"
+    "DO NOT call for initiative rolls in this step. Set awaiting_response with response_type='none' and game_step_completed=True after narrating.",
 
-    # Step 1: Announce Combat Initiation
-    "Announce combat initiation. Describe the encounter using the monsters you selected, identify all hostile participants by the IDs returned (e.g., goblin_1, goblin_2), and set the stage for battle. Make the transition from exploration to combat dramatic and clear. The monsters are now in StateManager with full stat sheets. DO NOT call for initiative rolls in this step. Set awaiting_response with response_type='none' (you are narrating).",
+    # Step 1: Determine Surprise and Initiative Modifiers
+    "Determine surprise and initiative modifiers. Assess which sides were aware of each other before combat. Per 2024 PHB: Surprised creatures roll initiative with DISADVANTAGE (they do NOT skip their first turn). Determine if anyone gets advantage on initiative from initiating combat. Use query_character_ability with the EXACT monster IDs from select_encounter_monsters() (e.g., goblin_1 NOT bugbear_1). DO NOT call for rolls in this step - only determine modifiers. Set awaiting_response with response_type='none' (you are narrating).",
 
-    # Step 2: Determine Surprise and Initiative Modifiers
-    "Determine surprise and initiative modifiers. Assess which sides were aware of each other before combat. Per 2024 PHB: Surprised creatures roll initiative with DISADVANTAGE (they do NOT skip their first turn). Determine if anyone gets advantage on initiative from initiating combat. Use query_character_ability to check monster DEX modifiers if needed. DO NOT call for rolls in this step - only determine modifiers. Set awaiting_response with response_type='none' (you are narrating).",
+    # Step 2: Call for Initiative Rolls
+    "Call for initiative rolls from ALL participants. CRITICAL REQUIREMENTS:\n"
+    "1. You MUST add initiative for EVERY monster spawned by select_encounter_monsters(). If you spawned 2 goblins (goblin_1, goblin_2), BOTH must have initiative rolls.\n"
+    "2. Use the EXACT monster IDs returned by select_encounter_monsters() (e.g., goblin_1, goblin_2, NOT bugbear_1 or other made-up IDs).\n"
+    "3. After calling add_monster_initiative(), CHECK THE RESPONSE for any '🚨 ACTION REQUIRED' warnings - if monsters are missing, call add_monster_initiative() again for the missing ones.\n"
+    "4. Combat CANNOT proceed until ALL monsters have initiative registered.\n"
+    "Roll initiative (d20 + DEX modifier) for EACH spawned monster. DO NOT announce initiative order in this step.\n"
+    "TWO SCENARIOS: (1) If you are ASKING for initiative rolls, first call add_monster_initiative() with ALL monster rolls, then set game_step_completed=False and awaiting_response with response_type='initiative' and characters=[list of ALL player character IDs who need to roll]. (2) If you SEE 'Initiative Results' in the new messages showing all rolls have been collected, acknowledge receipt briefly and set game_step_completed=True to proceed to the next step.",
 
-    # Step 3: Call for Initiative Rolls
-    "Call for initiative rolls from ALL participants. Specify any advantage or disadvantage determined in the previous step (surprised = disadvantage). For monsters, roll their initiative (d20 + DEX modifier) and use add_monster_initiative() to register the rolls. DO NOT announce initiative order in this step. TWO SCENARIOS: (1) If you are ASKING for initiative rolls, first call add_monster_initiative() with monster rolls, then set game_step_completed=False and awaiting_response with response_type='initiative' and characters=[list of ALL player character IDs who need to roll]. (2) If you SEE 'Initiative Results' in the new messages showing all rolls have been collected, acknowledge receipt briefly and set game_step_completed=True to proceed to the next step.",
-
-    # Step 4: Announce and Verify Initiative Order (reached only after initiative results are received)
+    # Step 3: Announce and Verify Initiative Order (reached only after initiative results are received)
     "You have received all initiative rolls. Announce the initial initiative order from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step. Set awaiting_response with response_type='free_form' and characters=[all player character names] to allow objections.",
 
-    # Step 5: Finalize Order and Begin Combat
+    # Step 4: Finalize Order and Begin Combat
     "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step. Set game_step_completed=True to signal that combat setup is complete. Set awaiting_response with response_type='none' (you are concluding setup)."
 ]
 
