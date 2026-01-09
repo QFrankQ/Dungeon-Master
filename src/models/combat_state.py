@@ -204,7 +204,12 @@ class CombatState(BaseModel):
                 # Current participant was removed, don't advance index
                 # (next call to advance_turn will get the new participant at this index)
                 if self.current_participant_index >= len(self.initiative_order):
+                    # Wrapped back to start - this counts as a new round
                     self.current_participant_index = 0
+                    self.round_number += 1
+            # Note: If removed_index > current_participant_index, no adjustment needed.
+            # The current index still points to the same participant since only
+            # items after it were shifted.
 
             # Remove from participants list
             if character_id in self.participants:
