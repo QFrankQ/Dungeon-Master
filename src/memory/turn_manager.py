@@ -730,17 +730,16 @@ class TurnManager:
     async def end_turn(self) -> Dict[str, Any]:
         """
         End the current turn, condense it, and embed in parent turn if applicable.
-        
+
         This method:
         1. Processes end-of-turn effects
         2. Condenses the completed turn into structured action-resolution format
         3. Embeds condensed result in parent turn (if exists)
         4. Removes completed turn from current level queue in stack
-        
+
         Returns:
             Dictionary with turn completion and condensation results
         """
-        print("[SYSTEM] Ending current turn...")
         if not self.turn_stack or not self.turn_stack[-1]:
             raise ValueError("No active turn to end")
 
@@ -751,7 +750,14 @@ class TurnManager:
         current_level_queue = self.turn_stack[-1]
         completed_turn = current_level_queue[0]
         completed_turn.end_time = datetime.now()
-        
+
+        if self.logger:
+            self.logger.turn("Ending turn",
+                           turn_id=completed_turn.turn_id,
+                           turn_level=completed_turn.turn_level,
+                           active_character=completed_turn.active_character,
+                           message_count=len(completed_turn.messages))
+
         # Condense the turn if condensation agent is available
         condensation_result = None
         if self.turn_condensation_agent:
@@ -771,9 +777,17 @@ class TurnManager:
                             condensation_result.structured_summary,
                             completed_turn.turn_id
                         )
-                    
+                        if self.logger:
+                            self.logger.turn("Subturn embedded in parent",
+                                           subturn_id=completed_turn.turn_id,
+                                           parent_turn_id=parent_turn.turn_id)
+
             except Exception as e:
-                print(f"Turn condensation failed for {completed_turn.turn_id}: {e}")
+                if self.logger:
+                    self.logger.turn("Turn condensation failed",
+                                   turn_id=completed_turn.turn_id,
+                                   error=str(e),
+                                   level=LogLevel.ERROR)
         
         # Remove completed turn from its queue
         current_level_queue.pop(0)  # Remove first turn from current level
@@ -793,17 +807,32 @@ class TurnManager:
             try:
                 # Pass True since we already handled turn completion above
                 self.finalize_initiative(combat_start_turn_already_ended=True)
-                print(f"[SYSTEM] Phase transitioned: COMBAT_START -> COMBAT_ROUNDS")
+                if self.logger:
+                    self.logger.combat("Phase transitioned",
+                                      from_phase="COMBAT_START",
+                                      to_phase="COMBAT_ROUNDS")
             except ValueError as e:
-                print(f"[SYSTEM] Could not finalize initiative: {e}")
+                if self.logger:
+                    self.logger.combat("Could not finalize initiative",
+                                      error=str(e),
+                                      level=LogLevel.WARNING)
 
         # Clear current messages after processing
         # self._current_messages = []
 
+        duration = (completed_turn.end_time - completed_turn.start_time).total_seconds()
+
+        if self.logger:
+            self.logger.turn("Turn completed",
+                           turn_id=completed_turn.turn_id,
+                           turn_level=completed_turn.turn_level,
+                           duration_seconds=duration,
+                           embedded_in_parent=len(self.turn_stack) >= 1)
+
         return {
             "turn_id": completed_turn.turn_id,
             "turn_level": completed_turn.turn_level,
-            "duration": (completed_turn.end_time - completed_turn.start_time).total_seconds(),
+            "duration": duration,
             "message_count": len(completed_turn.messages),
             # "end_of_turn_effects": end_of_turn_effects,
             "condensation_result": condensation_result,
