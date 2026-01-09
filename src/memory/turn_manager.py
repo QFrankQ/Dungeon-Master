@@ -1536,8 +1536,19 @@ class TurnManager:
             "round_number": self.combat_state.round_number
         }
 
-        # If new round, queue new turns
-        if is_new_round:
+        # Queue new turns if:
+        # 1. is_new_round is True (normal round wrap), OR
+        # 2. Turn stack is empty (all queued turns completed, need more)
+        # The second condition handles cases where participants were removed mid-round
+        # and the initiative index tracking got out of sync with the turn stack
+        needs_new_round = is_new_round or len(self.turn_stack) == 0
+
+        if needs_new_round:
+            if self.logger:
+                self.logger.combat("Queueing new combat round",
+                                  is_new_round_flag=is_new_round,
+                                  turn_stack_empty=(len(self.turn_stack) == 0),
+                                  round_number=self.combat_state.round_number)
             self._queue_combat_round()
             result["new_round_queued"] = True
 
