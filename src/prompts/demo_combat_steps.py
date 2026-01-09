@@ -94,7 +94,11 @@ COMBAT_TURN_STEPS = [
     "Receive and interpret the participant's declared action. Use action interpretation guidelines (Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize). VALIDATE character capability: check if character has the spell, ability, or equipment needed. If invalid, explain why and ask for a different action. If valid, confirm what action they are taking. DO NOT resolve the action in this step.",
 
     # Step 2: Pre-Resolution Reaction Window
-    "Provide pre-resolution reaction window: Ask if any PLAYER wants to use a Reaction BEFORE the action resolves. Set awaiting_response with response_type='reaction' and characters=[all player character IDs]. For MONSTERS with reactions: Internally decide if each monster would use their reaction based on the trigger and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative). Wait for player response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s). DO NOT resolve the main action in this step.",
+    "Provide pre-resolution reaction window.\n"
+    "TWO SCENARIOS:\n"
+    "(1) If you are ASKING for reactions: Ask if any PLAYER wants to use a Reaction BEFORE the action resolves. Set game_step_completed=False and awaiting_response with response_type='reaction' and characters=[all player character IDs]. For MONSTERS with reactions: Internally decide if each monster would use their reaction based on the trigger and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative).\n"
+    "(2) If you SEE 'Reaction Window Results' in the new messages: The reaction window has completed. If any reactions were declared, use start_and_queue_turns to create reaction turn(s). Then set game_step_completed=True to proceed to the next step.\n"
+    "DO NOT resolve the main action in this step.",
 
     # Step 3: Resolve Action (Resolution step)
     "Resolve the declared action: Validate the action, call for necessary rolls (attack rolls, saving throws, ability checks), determine outcome based on the rolls, and narrate the result vividly. Apply damage and effects. DO NOT handle status changes or post-resolution reactions in this step.",
@@ -103,7 +107,11 @@ COMBAT_TURN_STEPS = [
     "Handle critical status changes: Check if anyone dropped to 0 HP (PCs fall unconscious, NPCs typically die). Apply consequences immediately. DO NOT provide post-resolution reaction window in this step.",
 
     # Step 5: Post-Resolution Reaction Window
-    "Provide post-resolution reaction window: Ask if any PLAYER wants to use a Reaction in response to the outcome. Set awaiting_response with response_type='reaction' and characters=[all player character IDs]. For MONSTERS with reactions: Internally decide if each monster would use their reaction based on the outcome and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative). Wait for player response. If a reaction is declared, use start_and_queue_turns to create reaction turn(s). DO NOT ask about additional actions in this step.",
+    "Provide post-resolution reaction window.\n"
+    "TWO SCENARIOS:\n"
+    "(1) If you are ASKING for reactions: Ask if any PLAYER wants to use a Reaction in response to the outcome. Set game_step_completed=False and awaiting_response with response_type='reaction' and characters=[all player character IDs]. For MONSTERS with reactions: Internally decide if each monster would use their reaction based on the outcome and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative).\n"
+    "(2) If you SEE 'Reaction Window Results' in the new messages: The reaction window has completed. If any reactions were declared, use start_and_queue_turns to create reaction turn(s). Then set game_step_completed=True to proceed to the next step.\n"
+    "DO NOT ask about additional actions in this step.",
 
     # Step 6: Confirm End of Turn
     "Ask the active participant: 'Would you like to do anything else on your turn?' Options include: bonus action, movement, free object interaction, or additional actions from features. If they declare another action, resolve it immediately within this step (interpret, validate, resolve, narrate). If they have nothing more to do, set game_step_completed=True to proceed. DO NOT check for turn-end effects in this step.",
@@ -132,7 +140,11 @@ MONSTER_TURN_STEPS = [
     "Based on the monster's statblock, decide what action the monster takes. Consider: available actions, current HP, tactical situation, targets in range. Declare the monster's intended action clearly in the narrative. DO NOT resolve the action yet.",
 
     # Step 2: Pre-Resolution Reaction Window
-    "Provide pre-resolution reaction window: Ask if any PLAYER wants to use a Reaction BEFORE the monster's action resolves. Set awaiting_response with response_type='reaction' and characters=[all player character IDs]. For OTHER MONSTERS with reactions (not the active monster): Internally decide if each would use their reaction based on the trigger and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative). Wait for player responses. If any reactions are declared, use start_and_queue_turns to create reaction turn(s). DO NOT resolve the monster's action in this step.",
+    "Provide pre-resolution reaction window.\n"
+    "TWO SCENARIOS:\n"
+    "(1) If you are ASKING for reactions: Ask if any PLAYER wants to use a Reaction BEFORE the monster's action resolves. Set game_step_completed=False and awaiting_response with response_type='reaction' and characters=[all player character IDs]. For OTHER MONSTERS with reactions (not the active monster): Internally decide if each would use their reaction based on the trigger and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative).\n"
+    "(2) If you SEE 'Reaction Window Results' in the new messages: The reaction window has completed. If any reactions were declared, use start_and_queue_turns to create reaction turn(s). Then set game_step_completed=True to proceed to the next step.\n"
+    "DO NOT resolve the monster's action in this step.",
 
     # Step 3: Resolve Monster Action (Resolution step)
     "Resolve the monster's declared action: Make attack rolls, call for saving throws from players if needed, determine outcome, apply damage and effects. Narrate the result vividly. DO NOT handle status changes or post-resolution reactions in this step.",
@@ -141,7 +153,11 @@ MONSTER_TURN_STEPS = [
     "Handle critical status changes: Check if anyone dropped to 0 HP (PCs fall unconscious, NPCs typically die). Apply consequences immediately. DO NOT provide post-resolution reaction window in this step.",
 
     # Step 5: Post-Resolution Reaction Window
-    "Provide post-resolution reaction window: Ask if any PLAYER wants to use a Reaction in response to the outcome. Set awaiting_response with response_type='reaction' and characters=[all player character IDs]. For OTHER MONSTERS with reactions (not the active monster): Internally decide if each would use their reaction based on the outcome and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative). Wait for player responses. If any reactions are declared, use start_and_queue_turns to create reaction turn(s). DO NOT ask about additional actions in this step.",
+    "Provide post-resolution reaction window.\n"
+    "TWO SCENARIOS:\n"
+    "(1) If you are ASKING for reactions: Ask if any PLAYER wants to use a Reaction in response to the outcome. Set game_step_completed=False and awaiting_response with response_type='reaction' and characters=[all player character IDs]. For OTHER MONSTERS with reactions (not the active monster): Internally decide if each would use their reaction based on the outcome and record decisions in the monster_reactions field (hidden from players - DO NOT announce monster intent in narrative).\n"
+    "(2) If you SEE 'Reaction Window Results' in the new messages: The reaction window has completed. If any reactions were declared, use start_and_queue_turns to create reaction turn(s). Then set game_step_completed=True to proceed to the next step.\n"
+    "DO NOT ask about additional actions in this step.",
 
     # Step 6: Additional Actions (Bonus Action, Movement)
     "Decide if the monster uses a bonus action, additional movement, or free object interaction based on its statblock and the tactical situation. Resolve any additional actions. Set awaiting_response with response_type='none'.",
