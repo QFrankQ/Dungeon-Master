@@ -766,6 +766,59 @@ class TestCombatEndConditions:
         # Index should adjust
         assert combat_state.current_participant_index == 1  # Was 2, now 1
 
+    def test_remove_last_in_round_increments_round_number(self, combat_state, sample_initiative_entries):
+        """Removing the last participant in a round should increment round_number."""
+        # Setup: 4 participants in combat
+        combat_state.start_combat(["fighter", "wizard", "goblin_1", "goblin_2"])
+        for entry in sample_initiative_entries:
+            combat_state.add_initiative_roll(entry)
+        combat_state.finalize_initiative()
+
+        # Advance to the last participant (index 3)
+        combat_state.advance_turn()  # 0→1
+        combat_state.advance_turn()  # 1→2
+        combat_state.advance_turn()  # 2→3
+        assert combat_state.current_participant_index == 3
+        assert combat_state.round_number == 1
+
+        # Remove the last participant - should wrap and increment round
+        last_participant_id = combat_state.initiative_order[3].character_id
+        combat_state.remove_participant(last_participant_id)
+
+        # Index should wrap to 0 and round should increment
+        assert combat_state.current_participant_index == 0
+        assert combat_state.round_number == 2
+
+    def test_remove_after_current_no_adjustment(self, combat_state, sample_initiative_entries):
+        """Removing a participant after current index requires no adjustment."""
+        # Setup: 4 participants, current at index 2
+        combat_state.start_combat(["fighter", "wizard", "goblin_1", "goblin_2"])
+        for entry in sample_initiative_entries:
+            combat_state.add_initiative_roll(entry)
+        combat_state.finalize_initiative()
+
+        # Advance to index 2
+        combat_state.advance_turn()  # 0→1
+        combat_state.advance_turn()  # 1→2
+        assert combat_state.current_participant_index == 2
+        assert combat_state.round_number == 1
+
+        # Remove index 3 (after current) - no adjustment needed
+        participant_at_3 = combat_state.initiative_order[3].character_id
+        combat_state.remove_participant(participant_at_3)
+
+        # Index stays at 2, still points to same participant
+        assert combat_state.current_participant_index == 2
+        assert combat_state.round_number == 1
+
+        # Now remove index 0 (before current) - should decrement
+        participant_at_0 = combat_state.initiative_order[0].character_id
+        combat_state.remove_participant(participant_at_0)
+
+        # Index should adjust: was 2, now 1 (same participant, shifted position)
+        assert combat_state.current_participant_index == 1
+        assert combat_state.round_number == 1
+
     def test_get_remaining_player_and_monster_ids(self, combat_state, sample_initiative_entries):
         """Verify helper methods return correct IDs."""
         combat_state.start_combat(["fighter", "wizard", "goblin_1", "goblin_2"])
