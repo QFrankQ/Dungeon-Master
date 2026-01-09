@@ -942,7 +942,7 @@ async def remove_defeated_participant(
     except ToolValidationError as e:
         return e.error_message
 
-    # Remove the participant
+    # Remove the participant from initiative order
     removed = turn_manager.combat_state.remove_participant(character_id)
 
     if not removed:
@@ -950,9 +950,13 @@ async def remove_defeated_participant(
                     f"{FailureReason.PARTICIPANT_NOT_FOUND}_{character_id}",
                     character_id=character_id)
 
+    # Also remove any queued turns for this character from the turn stack
+    turns_removed = turn_manager.remove_queued_turns_for_character(character_id)
+
     # Log successful removal
     log.combat("Participant removed from combat",
               character_id=character_id, reason=reason,
+              turns_removed=turns_removed,
               remaining_players=len(turn_manager.combat_state.get_remaining_player_ids()),
               remaining_monsters=len(turn_manager.combat_state.get_remaining_monster_ids()))
 

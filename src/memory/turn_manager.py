@@ -470,6 +470,49 @@ class TurnManager:
         current_level_queue = self.turn_stack[-1]
         return current_level_queue[0] if current_level_queue else None
 
+    def remove_queued_turns_for_character(self, character_id: str) -> int:
+        """
+        Remove all queued (non-active) turns for a specific character from the turn stack.
+
+        This should be called when a participant is removed from combat (died, fled, etc.)
+        to prevent their queued turns from being processed.
+
+        Note: Does NOT remove the currently active turn (first turn in the top level queue).
+        If the removed character is currently active, their turn should complete or be
+        handled separately.
+
+        Args:
+            character_id: The character_id whose turns should be removed
+
+        Returns:
+            Number of turns removed
+        """
+        removed_count = 0
+
+        for level_idx, level_queue in enumerate(self.turn_stack):
+            # Filter out turns for this character, but preserve active turn (first in top level)
+            turns_to_keep = []
+            for turn_idx, turn in enumerate(level_queue):
+                # Skip removal of the currently active turn (first turn in topmost level)
+                is_active_turn = (level_idx == len(self.turn_stack) - 1 and turn_idx == 0)
+                if is_active_turn or turn.active_character != character_id:
+                    turns_to_keep.append(turn)
+                else:
+                    removed_count += 1
+                    if self.logger:
+                        self.logger.turn("Queued turn removed for defeated character",
+                                        turn_id=turn.turn_id,
+                                        character_id=character_id,
+                                        level=level_idx)
+
+            self.turn_stack[level_idx] = turns_to_keep
+
+        # Clean up any empty levels (except the current active level)
+        while len(self.turn_stack) > 1 and not self.turn_stack[-1]:
+            self.turn_stack.pop()
+
+        return removed_count
+
     async def end_turn_and_get_next_async(self) -> Dict[str, Any]:
         """
         Async version: End current turn and get information about next turn to process.
