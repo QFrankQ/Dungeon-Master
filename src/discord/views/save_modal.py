@@ -62,53 +62,64 @@ class SaveModal(Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         """Handle saving throw submission."""
-        # Determine roll value
-        if self.manual_roll.value and self.manual_roll.value.strip():
+        try:
+            # Determine roll value
+            if self.manual_roll.value and self.manual_roll.value.strip():
+                try:
+                    roll = int(self.manual_roll.value.strip())
+                    source = "manual"
+                except ValueError:
+                    await interaction.response.send_message(
+                        "Invalid roll value! Please enter a number.",
+                        ephemeral=True
+                    )
+                    return
+            else:
+                # Auto-roll: d20 + save modifier
+                base_roll = random.randint(1, 20)
+                roll = base_roll + self.modifier
+                source = f"auto (d20={base_roll} + {self.save_type}={self.modifier})"
+
+            # Determine success/failure if DC is known
+            success = None
+            result_text = ""
+            if self.dc is not None:
+                success = roll >= self.dc
+                result_text = " - **SUCCESS!**" if success else " - **FAILURE!**"
+
+            # Store the roll in the parent view
+            self.view.collected[self.character_name] = {
+                "roll": roll,
+                "source": source,
+                "modifier": self.modifier,
+                "save_type": self.save_type,
+                "success": success,
+            }
+
+            # Build response message
+            source_text = f" ({source})" if source != "manual" else ""
+            dc_text = f" vs DC {self.dc}" if self.dc else ""
+
+            await interaction.response.send_message(
+                f"🎲 **{self.character_name}** rolls **{roll}** on {self.save_type} save{dc_text}!{source_text}{result_text}\n"
+                f"({len(self.view.collected)}/{len(self.view.expected)} collected)"
+            )
+
+            # Check if all have rolled
+            if self.view._check_complete():
+                self.view.stop()
+                if self.view._on_complete:
+                    await self.view._on_complete(self.view.get_results())
+        except Exception as e:
+            # Ensure we always respond to the interaction to prevent "This interaction failed"
             try:
-                roll = int(self.manual_roll.value.strip())
-                source = "manual"
-            except ValueError:
-                await interaction.response.send_message(
-                    "Invalid roll value! Please enter a number.",
-                    ephemeral=True
-                )
-                return
-        else:
-            # Auto-roll: d20 + save modifier
-            base_roll = random.randint(1, 20)
-            roll = base_roll + self.modifier
-            source = f"auto (d20={base_roll} + {self.save_type}={self.modifier})"
-
-        # Determine success/failure if DC is known
-        success = None
-        result_text = ""
-        if self.dc is not None:
-            success = roll >= self.dc
-            result_text = " - **SUCCESS!**" if success else " - **FAILURE!**"
-
-        # Store the roll in the parent view
-        self.view.collected[self.character_name] = {
-            "roll": roll,
-            "source": source,
-            "modifier": self.modifier,
-            "save_type": self.save_type,
-            "success": success,
-        }
-
-        # Build response message
-        source_text = f" ({source})" if source != "manual" else ""
-        dc_text = f" vs DC {self.dc}" if self.dc else ""
-
-        await interaction.response.send_message(
-            f"🎲 **{self.character_name}** rolls **{roll}** on {self.save_type} save{dc_text}!{source_text}{result_text}\n"
-            f"({len(self.view.collected)}/{len(self.view.expected)} collected)"
-        )
-
-        # Check if all have rolled
-        if self.view._check_complete():
-            self.view.stop()
-            if self.view._on_complete:
-                await self.view._on_complete(self.view.get_results())
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        f"An error occurred: {str(e)}",
+                        ephemeral=True
+                    )
+            except Exception:
+                pass  # Last resort - at least we tried
 
 
 class SaveView(View):
@@ -217,40 +228,51 @@ class SaveView(View):
     @discord.ui.button(label="Roll Save", style=discord.ButtonStyle.danger, emoji="🎲")
     async def roll_button(self, interaction: discord.Interaction, button: Button):
         """Handle save roll button click."""
-        character = await self._get_character(interaction.user.id)
+        try:
+            character = await self._get_character(interaction.user.id)
 
-        if character is None:
-            await interaction.response.send_message(
-                "You're not registered in this session! Use `/register` first.",
-                ephemeral=True
+            if character is None:
+                await interaction.response.send_message(
+                    "You're not registered in this session! Use `/register` first.",
+                    ephemeral=True
+                )
+                return
+
+            if character not in self.expected:
+                await interaction.response.send_message(
+                    "You're not affected by this effect!",
+                    ephemeral=True
+                )
+                return
+
+            if character in self.collected:
+                roll_info = self.collected[character]
+                result_text = ""
+                if roll_info.get("success") is not None:
+                    result_text = " (SUCCESS)" if roll_info["success"] else " (FAILURE)"
+                await interaction.response.send_message(
+                    f"You already rolled: **{roll_info['roll']}**{result_text}",
+                    ephemeral=True
+                )
+                return
+
+            # Get save modifier for this character
+            modifier = self._get_save_mod(character)
+
+            # Open the save modal
+            await interaction.response.send_modal(
+                SaveModal(self, character, self.save_type, modifier, self.dc)
             )
-            return
-
-        if character not in self.expected:
-            await interaction.response.send_message(
-                "You're not affected by this effect!",
-                ephemeral=True
-            )
-            return
-
-        if character in self.collected:
-            roll_info = self.collected[character]
-            result_text = ""
-            if roll_info.get("success") is not None:
-                result_text = " (SUCCESS)" if roll_info["success"] else " (FAILURE)"
-            await interaction.response.send_message(
-                f"You already rolled: **{roll_info['roll']}**{result_text}",
-                ephemeral=True
-            )
-            return
-
-        # Get save modifier for this character
-        modifier = self._get_save_mod(character)
-
-        # Open the save modal
-        await interaction.response.send_modal(
-            SaveModal(self, character, self.save_type, modifier, self.dc)
-        )
+        except Exception as e:
+            # Ensure we always respond to the interaction to prevent "This interaction failed"
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        f"An error occurred: {str(e)}",
+                        ephemeral=True
+                    )
+            except Exception:
+                pass  # Last resort - at least we tried
 
 #NOTE: may need a better implementation in the future
 def parse_save_from_prompt(prompt: str) -> tuple[str, Optional[int]]:

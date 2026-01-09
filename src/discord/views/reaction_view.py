@@ -138,87 +138,109 @@ class ReactionView(View):
     @discord.ui.button(label="Pass", style=discord.ButtonStyle.secondary, emoji="⏭️")
     async def pass_button(self, interaction: discord.Interaction, button: Button):
         """Handle player passing on their reaction."""
-        character = await self._get_character(interaction.user.id)
+        try:
+            character = await self._get_character(interaction.user.id)
 
-        if character is None:
+            if character is None:
+                await interaction.response.send_message(
+                    "You're not registered in this session! Use `/register` first.",
+                    ephemeral=True
+                )
+                return
+
+            if character not in self.expected:
+                await interaction.response.send_message(
+                    "You're not eligible for a reaction in this situation.",
+                    ephemeral=True
+                )
+                return
+
+            if character in self.passed or character in self.reactions:
+                await interaction.response.send_message(
+                    "You've already responded to this reaction window.",
+                    ephemeral=True
+                )
+                return
+
+            # Record the pass
+            self.passed.add(character)
+
+            # Send ephemeral confirmation (only sender sees)
             await interaction.response.send_message(
-                "You're not registered in this session! Use `/register` first.",
+                f"{character} passes on the reaction.",
                 ephemeral=True
             )
-            return
 
-        if character not in self.expected:
-            await interaction.response.send_message(
-                "You're not eligible for a reaction in this situation.",
-                ephemeral=True
-            )
-            return
-
-        if character in self.passed or character in self.reactions:
-            await interaction.response.send_message(
-                "You've already responded to this reaction window.",
-                ephemeral=True
-            )
-            return
-
-        # Record the pass
-        self.passed.add(character)
-
-        # Send ephemeral confirmation (only sender sees)
-        await interaction.response.send_message(
-            f"{character} passes on the reaction.",
-            ephemeral=True
-        )
-
-        # Check if all have responded - short-circuit
-        if self._check_complete():
-            self.stop()
-            if self._on_complete:
-                await self._on_complete(self.get_results())
+            # Check if all have responded - short-circuit
+            if self._check_complete():
+                self.stop()
+                if self._on_complete:
+                    await self._on_complete(self.get_results())
+        except Exception as e:
+            # Ensure we always respond to the interaction to prevent "This interaction failed"
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        f"An error occurred: {str(e)}",
+                        ephemeral=True
+                    )
+            except Exception:
+                pass  # Last resort - at least we tried
 
     @discord.ui.button(label="Use Reaction", style=discord.ButtonStyle.primary, emoji="🛡️")
     async def use_reaction_button(self, interaction: discord.Interaction, button: Button):
         """Handle player wanting to use their reaction."""
-        character = await self._get_character(interaction.user.id)
+        try:
+            character = await self._get_character(interaction.user.id)
 
-        if character is None:
+            if character is None:
+                await interaction.response.send_message(
+                    "You're not registered in this session! Use `/register` first.",
+                    ephemeral=True
+                )
+                return
+
+            if character not in self.expected:
+                await interaction.response.send_message(
+                    "You're not eligible for a reaction in this situation.",
+                    ephemeral=True
+                )
+                return
+
+            if character in self.passed or character in self.reactions:
+                await interaction.response.send_message(
+                    "You've already responded to this reaction window.",
+                    ephemeral=True
+                )
+                return
+
+            # Simple yes - record intent to use reaction (DM will queue the turn)
+            # NOTE: In the future, ReactionModal could be enabled to let players
+            # narrate their reaction and queue turns directly.
+            self.reactions[character] = {
+                "type": "declared",  # Simple declaration, DM will determine specifics
+                "description": "",
+            }
+
+            # Send ephemeral confirmation (only sender sees)
+            # Public announcement happens via on_complete callback after ALL responses collected
             await interaction.response.send_message(
-                "You're not registered in this session! Use `/register` first.",
+                f"You want to use a reaction. Waiting for others to respond...",
                 ephemeral=True
             )
-            return
 
-        if character not in self.expected:
-            await interaction.response.send_message(
-                "You're not eligible for a reaction in this situation.",
-                ephemeral=True
-            )
-            return
-
-        if character in self.passed or character in self.reactions:
-            await interaction.response.send_message(
-                "You've already responded to this reaction window.",
-                ephemeral=True
-            )
-            return
-
-        # Simple yes - record intent to use reaction (DM will queue the turn)
-        # NOTE: In the future, ReactionModal could be enabled to let players
-        # narrate their reaction and queue turns directly.
-        self.reactions[character] = {
-            "type": "declared",  # Simple declaration, DM will determine specifics
-            "description": "",
-        }
-
-        # Send ephemeral confirmation (only sender sees)
-        # Public announcement happens via on_complete callback after ALL responses collected
-        await interaction.response.send_message(
-            f"You want to use a reaction. Waiting for others to respond...",
-            ephemeral=True
-        )
-
-        # Check if all have responded - short-circuit
-        if self._check_complete():
-            self.stop()
-            if self._on_complete:
-                await self._on_complete(self.get_results())
+            # Check if all have responded - short-circuit
+            if self._check_complete():
+                self.stop()
+                if self._on_complete:
+                    await self._on_complete(self.get_results())
+        except Exception as e:
+            # Ensure we always respond to the interaction to prevent "This interaction failed"
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        f"An error occurred: {str(e)}",
+                        ephemeral=True
+                    )
+            except Exception:
+                pass  # Last resort - at least we tried
