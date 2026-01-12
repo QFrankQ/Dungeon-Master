@@ -650,11 +650,12 @@ class SessionManager:
         if not self.dungeon_master_agent:
             raise ValueError("No DungeonMasterAgent configured.")
 
-        # Log player input received
+        # Log player input received with message content
         if self.logger:
             self.logger.player("Player input received",
                              message_count=len(new_messages),
-                             speakers=[m.player_id for m in new_messages])
+                             speakers=[m.player_id for m in new_messages],
+                             messages=[{"player_id": m.player_id, "character_id": m.character_id, "text": m.text} for m in new_messages])
 
         # === PHASE 0: BEGIN TURN PROCESSING ===
         # Set processing turn to current stack top (only if turn is active)
