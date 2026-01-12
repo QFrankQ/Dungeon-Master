@@ -4,6 +4,7 @@ Provides tools for DM to query LanceDB for D&D rules and cache results in curren
 as well as query detailed character ability information and spawn monsters for combat.
 """
 
+import random
 from typing import Optional, Literal, Union, List, Dict, Any
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
@@ -173,6 +174,17 @@ class MonsterInitiativeRoll(BaseModel):
     """A monster's initiative roll for combat."""
     monster_id: str = Field(description="Monster ID (e.g., 'goblin_1', 'orc_2')")
     roll: int = Field(description="Total initiative roll result (d20 + DEX modifier)")
+
+
+class DiceRollRequest(BaseModel):
+    """A request to roll dice for a character."""
+    character_id: str = Field(description="Character ID to roll for (e.g., 'goblin_1', 'fighter')")
+    num_dice: int = Field(default=1, ge=1, le=20, description="Number of dice to roll (1-20)")
+    die_type: int = Field(default=20, description="Type of die (4, 6, 8, 10, 12, 20, or 100)")
+    modifier: int = Field(default=0, description="Modifier to add to total (can be negative)")
+    advantage: bool = Field(default=False, description="Roll with advantage (roll 2d20, take highest)")
+    disadvantage: bool = Field(default=False, description="Roll with disadvantage (roll 2d20, take lowest)")
+    label: str = Field(default="", description="Optional label for the roll (e.g., 'initiative', 'attack')")
 
 
 # ==================== Dependency Types ====================
@@ -902,6 +914,109 @@ async def add_monster_initiative(
     return "\n".join(results) + status
 
 
+async def roll_dice(
+    ctx: RunContext[DMToolsDependencies],
+    rolls: List[DiceRollRequest]
+) -> str:
+    """
+    Roll dice for one or more characters. Use this tool to generate random rolls
+    for monsters and NPCs instead of making up values.
+
+    IMPORTANT: You MUST use this tool before calling add_monster_initiative() to
+    get actual random initiative rolls for monsters. Do not invent roll values.
+
+    Args:
+        ctx: PydanticAI RunContext with DMToolsDependencies
+        rolls: List of DiceRollRequest objects specifying what to roll for each character
+
+    Returns:
+        Formatted results showing each roll with character ID, dice rolled, and total
+
+    Examples:
+        Roll initiative for multiple monsters:
+        >>> await roll_dice(ctx, [
+        ...     DiceRollRequest(character_id="goblin_1", die_type=20, modifier=2, label="initiative"),
+        ...     DiceRollRequest(character_id="goblin_2", die_type=20, modifier=2, label="initiative"),
+        ... ])
+
+        Roll damage for an attack:
+        >>> await roll_dice(ctx, [
+        ...     DiceRollRequest(character_id="orc_1", num_dice=2, die_type=6, modifier=3, label="greatsword damage")
+        ... ])
+
+        Roll with advantage:
+        >>> await roll_dice(ctx, [
+        ...     DiceRollRequest(character_id="goblin_1", die_type=20, modifier=2, advantage=True, label="attack")
+        ... ])
+    """
+    log = _get_log(ctx)
+    rolls_summary = [{"id": r.character_id, "dice": f"{r.num_dice}d{r.die_type}+{r.modifier}", "label": r.label}
+                     for r in rolls] if rolls else []
+    log.dm_tool("roll_dice called", rolls=rolls_summary)
+
+    if not rolls:
+        return _fail(log, "roll_dice", "no_rolls_specified")
+
+    # Valid die types
+    valid_dice = {4, 6, 8, 10, 12, 20, 100}
+
+    results = []
+    for roll_request in rolls:
+        char_id = roll_request.character_id
+        num_dice = roll_request.num_dice
+        die_type = roll_request.die_type
+        modifier = roll_request.modifier
+        label = roll_request.label or "roll"
+
+        # Validate die type
+        if die_type not in valid_dice:
+            results.append(f"❌ {char_id}: Invalid die type d{die_type}. Use d4, d6, d8, d10, d12, d20, or d100.")
+            continue
+
+        # Handle advantage/disadvantage (only for d20 rolls)
+        if roll_request.advantage and roll_request.disadvantage:
+            # They cancel out - just a normal roll
+            individual_rolls = [random.randint(1, die_type) for _ in range(num_dice)]
+            roll_used = sum(individual_rolls)
+            roll_desc = f"{num_dice}d{die_type}"
+        elif roll_request.advantage and die_type == 20 and num_dice == 1:
+            # Roll 2d20, take highest
+            roll1 = random.randint(1, 20)
+            roll2 = random.randint(1, 20)
+            roll_used = max(roll1, roll2)
+            individual_rolls = [roll_used]
+            roll_desc = f"2d20 (advantage: {roll1}, {roll2} -> {roll_used})"
+        elif roll_request.disadvantage and die_type == 20 and num_dice == 1:
+            # Roll 2d20, take lowest
+            roll1 = random.randint(1, 20)
+            roll2 = random.randint(1, 20)
+            roll_used = min(roll1, roll2)
+            individual_rolls = [roll_used]
+            roll_desc = f"2d20 (disadvantage: {roll1}, {roll2} -> {roll_used})"
+        else:
+            # Normal roll
+            individual_rolls = [random.randint(1, die_type) for _ in range(num_dice)]
+            roll_used = sum(individual_rolls)
+            if num_dice > 1:
+                roll_desc = f"{num_dice}d{die_type} ({', '.join(map(str, individual_rolls))})"
+            else:
+                roll_desc = f"d{die_type} ({individual_rolls[0]})"
+
+        # Calculate total with modifier
+        total = roll_used + modifier
+        mod_str = f"+{modifier}" if modifier >= 0 else str(modifier)
+        if modifier != 0:
+            total_desc = f"{roll_used} {mod_str} = {total}"
+        else:
+            total_desc = str(total)
+
+        results.append(f"🎲 {char_id} [{label}]: {roll_desc} {mod_str if modifier != 0 else ''} = **{total}**")
+
+    log.dm_tool("roll_dice complete", roll_count=len(rolls))
+
+    return "\n".join(results)
+
+
 async def remove_defeated_participant(
     ctx: RunContext[DMToolsDependencies],
     character_id: str,
@@ -1168,7 +1283,7 @@ def create_dm_tools(
         dm_agent = create_dungeon_master_agent(tools=tools)
         result = await dm_agent.process_message(context, deps=deps)
     """
-    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, add_monster_initiative, remove_defeated_participant, end_combat]
+    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, roll_dice, add_monster_initiative, remove_defeated_participant, end_combat]
     dependencies = DMToolsDependencies(
         lance_service=lance_service,
         turn_manager=turn_manager,
