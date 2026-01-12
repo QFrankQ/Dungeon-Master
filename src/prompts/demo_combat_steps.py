@@ -66,15 +66,18 @@ COMBAT_START_STEPS = [
 
     # Step 2: Call for Initiative Rolls
     "Call for initiative rolls from ALL participants. CRITICAL REQUIREMENTS:\n"
-    "1. You MUST add initiative for EVERY monster spawned by select_encounter_monsters(). If you spawned 2 goblins (goblin_1, goblin_2), BOTH must have initiative rolls.\n"
+    "1. You MUST roll initiative for EVERY monster spawned by select_encounter_monsters(). If you spawned 2 goblins (goblin_1, goblin_2), BOTH must have initiative rolls.\n"
     "2. Use the EXACT monster IDs returned by select_encounter_monsters() (e.g., goblin_1, goblin_2, NOT bugbear_1 or other made-up IDs).\n"
-    "3. After calling add_monster_initiative(), CHECK THE RESPONSE for any '🚨 ACTION REQUIRED' warnings - if monsters are missing, call add_monster_initiative() again for the missing ones.\n"
-    "4. Combat CANNOT proceed until ALL monsters have initiative registered.\n"
-    "Roll initiative (d20 + DEX modifier) for EACH spawned monster. DO NOT announce initiative order in this step.\n"
-    "TWO SCENARIOS: (1) If you are ASKING for initiative rolls, first call add_monster_initiative() with ALL monster rolls, then set game_step_completed=False and awaiting_response with response_type='initiative' and characters=[list of ALL player character IDs who need to roll]. (2) If you SEE 'Initiative Results' in the new messages showing all rolls have been collected, acknowledge receipt briefly and set game_step_completed=True to proceed to the next step.",
+    "3. IMPORTANT: Use roll_dice() tool FIRST to get actual random rolls for monsters. Example: roll_dice([{character_id: 'goblin_1', die_type: 20, modifier: 2, label: 'initiative'}, {character_id: 'goblin_2', die_type: 20, modifier: 2, label: 'initiative'}]). DO NOT make up roll values.\n"
+    "4. THEN call add_monster_initiative() with the actual roll results from roll_dice().\n"
+    "5. After calling add_monster_initiative(), CHECK THE RESPONSE for any '🚨 ACTION REQUIRED' warnings - if monsters are missing, call add_monster_initiative() again for the missing ones.\n"
+    "6. Combat CANNOT proceed until ALL monsters have initiative registered.\n"
+    "DO NOT announce initiative order in this step.\n"
+    "TWO SCENARIOS: (1) If you are ASKING for initiative rolls, first use roll_dice() to roll for ALL monsters, then call add_monster_initiative() with those actual roll values, then set game_step_completed=False and awaiting_response with response_type='initiative' and characters=[list of ALL player character IDs who need to roll]. (2) If you SEE 'Initiative Results' in the new messages showing all rolls have been collected, acknowledge receipt briefly and set game_step_completed=True to proceed to the next step.",
 
     # Step 3: Announce and Verify Initiative Order (reached only after initiative results are received)
-    "You have received all initiative rolls. Announce the initial initiative order from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step. Set awaiting_response with response_type='free_form' and characters=[all player character names] to allow objections.",
+    "You have received all initiative rolls. IMPORTANT: Refer to the <combat_state><initiative_order> section in your context for the ACTUAL initiative order stored by the system. DO NOT reconstruct the order from memory - use the EXACT order shown in the context.\n"
+    "Announce the initiative order EXACTLY as shown in <initiative_order>, from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step. Set awaiting_response with response_type='free_form' and characters=[all player character names] to allow objections.",
 
     # Step 4: Finalize Order and Begin Combat
     "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step. Set game_step_completed=True to signal that combat setup is complete. Set awaiting_response with response_type='none' (you are concluding setup)."
@@ -88,7 +91,7 @@ COMBAT_START_STEPS = [
 
 COMBAT_TURN_STEPS = [
     # Step 0: Announce Current Turn (Resolution step for turn-start effects)
-    "Announce whose turn it is. Check for any effects that trigger at the start of this turn (ongoing damage, concentration checks, spell effects). If any turn-start effects apply, resolve them before requesting actions. DO NOT request actions in this step if there are turn-start effects to resolve.",
+    "Check the <combat_state><current_turn> element in your context to confirm whose turn it is according to the system. Announce that character's turn. Check for any effects that trigger at the start of this turn (ongoing damage, concentration checks, spell effects). If any turn-start effects apply, resolve them before requesting actions. DO NOT request actions in this step if there are turn-start effects to resolve.",
 
     # Step 1: Receive and Interpret Action
     "Receive and interpret the participant's declared action. Use action interpretation guidelines (Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize). VALIDATE character capability: check if character has the spell, ability, or equipment needed. If invalid, explain why and ask for a different action. If valid, confirm what action they are taking. DO NOT resolve the action in this step.",
@@ -120,7 +123,7 @@ COMBAT_TURN_STEPS = [
     "Check for turn-end effects: Apply effects that trigger at the end of this turn (saving throws against conditions, concentration checks, Legendary Actions if facing a legendary creature). Resolve any triggered effects. DO NOT announce the next turn in this step.",
 
     # Step 8: Announce Next Turn
-    "Announce the end of current participant's turn. State which participant is next in initiative order and prompt them for their intended action. If this was the last turn in the round, also announce the start of the new round. DO NOT begin processing the next participant's actions in this step."
+    "Announce the end of current participant's turn. Check the <combat_state><initiative_order> in your context to confirm who is next according to the system, then state which participant is next in initiative order and prompt them for their intended action. If this was the last turn in the round, also announce the start of the new round. DO NOT begin processing the next participant's actions in this step."
 ]
 
 # Legacy alias for backward compatibility
@@ -134,7 +137,7 @@ DEMO_MAIN_ACTION_STEPS = COMBAT_TURN_STEPS
 
 MONSTER_TURN_STEPS = [
     # Step 0: Announce Turn + Turn-Start Effects (Resolution step for turn-start effects)
-    "Announce it is the monster's turn. Check for any effects that trigger at the start of this turn (ongoing damage, concentration checks, spell effects). Resolve turn-start effects before deciding actions. DO NOT decide monster action in this step.",
+    "Check the <combat_state><current_turn> element in your context to confirm it is the monster's turn according to the system. Announce it is the monster's turn. Check for any effects that trigger at the start of this turn (ongoing damage, concentration checks, spell effects). Resolve turn-start effects before deciding actions. DO NOT decide monster action in this step.",
 
     # Step 1: Decide and Declare Action
     "Based on the monster's statblock, decide what action the monster takes. Consider: available actions, current HP, tactical situation, targets in range. Declare the monster's intended action clearly in the narrative. DO NOT resolve the action yet.",
@@ -166,7 +169,7 @@ MONSTER_TURN_STEPS = [
     "Check for turn-end effects: Apply effects that trigger at the end of this turn (saving throws against conditions, concentration checks). Resolve any triggered effects. DO NOT announce the next turn in this step.",
 
     # Step 8: Announce Next Turn
-    "Announce the end of the monster's turn. State which participant is next in initiative order. If this was the last turn in the round, also announce the start of the new round. DO NOT begin processing the next participant's actions in this step."
+    "Announce the end of the monster's turn. Check the <combat_state><initiative_order> in your context to confirm who is next according to the system, then state which participant is next in initiative order. If this was the last turn in the round, also announce the start of the new round. DO NOT begin processing the next participant's actions in this step."
 ]
 
 # Legacy alias for backward compatibility
