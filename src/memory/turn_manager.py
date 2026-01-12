@@ -176,6 +176,7 @@ class TurnManagerSnapshot:
     current_step_objective: str
     turn_counter: int
     active_turns_by_level: List[TurnContext]  # First TurnContext from each level for context building
+    combat_state: Optional[CombatState] = None  # Combat state for initiative order, phase, etc.
 
 
 class TurnManager:
@@ -1202,7 +1203,8 @@ class TurnManager:
             completed_turns=self.completed_turns.copy(),
             current_step_objective=current_step_objective,
             turn_counter=self._turn_counter,
-            active_turns_by_level=active_turns_by_level
+            active_turns_by_level=active_turns_by_level,
+            combat_state=self.combat_state  # Include combat state for initiative order access
         )
 
     # =========================================================================
