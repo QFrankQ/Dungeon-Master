@@ -13,6 +13,7 @@ from ..memory.state_manager import StateManager
 from ..services.rules_cache_service import RulesCacheService
 from ..memory.turn_manager import TurnManagerSnapshot
 from ..models.turn_context import TurnContext
+from ..models.combat_state import CombatState, CombatPhase
 from ..characters.monster import Monster
 from ..characters.charactersheet import Character
 
@@ -227,6 +228,58 @@ class DMContextBuilder:
 
         return "\n".join(lines)
 
+    def _format_combat_state(self, combat_state: CombatState) -> str:
+        """
+        Format combat state for DM context including initiative order.
+
+        Only returns content when in combat (not in NOT_IN_COMBAT phase).
+        Includes initiative order with current turn indicator so DM always
+        has access to the correct order without needing to call a tool.
+
+        Args:
+            combat_state: CombatState object from turn_manager
+
+        Returns:
+            Formatted XML string with combat state, or empty string if not in combat
+        """
+        # Don't include if not in combat
+        if combat_state.phase == CombatPhase.NOT_IN_COMBAT:
+            return ""
+
+        lines = ["<combat_state>"]
+        lines.append(f"  <phase>{combat_state.phase.value}</phase>")
+        lines.append(f"  <round>{combat_state.round_number}</round>")
+
+        # Include initiative order if established
+        if combat_state.initiative_order:
+            lines.append("  <initiative_order>")
+            lines.append("    <!-- IMPORTANT: Use this EXACT order when narrating turns. Do NOT make up different values. -->")
+            for i, entry in enumerate(combat_state.initiative_order):
+                player_marker = "PC" if entry.is_player else "NPC"
+                current_marker = ' current="true"' if i == combat_state.current_participant_index else ""
+                lines.append(
+                    f'    <entry position="{i+1}" id="{entry.character_id}" '
+                    f'name="{entry.character_name}" roll="{entry.roll}" '
+                    f'type="{player_marker}"{current_marker}/>'
+                )
+            lines.append("  </initiative_order>")
+
+            # Add explicit current turn info for clarity
+            current_entry = combat_state.get_current_entry()
+            if current_entry:
+                lines.append(f"  <current_turn character_id=\"{current_entry.character_id}\" "
+                           f"name=\"{current_entry.character_name}\"/>")
+        else:
+            lines.append("  <initiative_order>Not yet established</initiative_order>")
+
+        # Combat statistics
+        players = combat_state.get_remaining_player_ids()
+        monsters = combat_state.get_remaining_monster_ids()
+        lines.append(f"  <remaining_combatants players=\"{len(players)}\" monsters=\"{len(monsters)}\"/>")
+
+        lines.append("</combat_state>")
+        return "\n".join(lines)
+
     # ===== DEMO METHOD (Simplified for demo purposes) =====
 
     def build_demo_context(
@@ -279,6 +332,13 @@ class DMContextBuilder:
         context_parts.append(turn_manager_snapshots.current_step_objective or "Begin the adventure")
         context_parts.append("</step_objective>")
         context_parts.append("")
+
+        # Add combat state (initiative order, phase, etc.) when in combat
+        if turn_manager_snapshots.combat_state:
+            combat_context = self._format_combat_state(turn_manager_snapshots.combat_state)
+            if combat_context:
+                context_parts.append(combat_context)
+                context_parts.append("")
 
         # Add recent completed turns history (if available)
         if completed_turns:
