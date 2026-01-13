@@ -1290,7 +1290,11 @@ async def complete_step(ctx: RunContext[DMToolsDependencies]) -> str:
     # Check if turn is complete
     if not more_steps:
         ctx.deps.turn_complete = True
-        return f"Step completed: '{completed_short}'. TURN FINISHED - no more steps remaining."
+        return (
+            f"Step completed: '{completed_short}'. TURN FINISHED - no more steps remaining.\n"
+            f"Write your final narrative for this turn and return your response. "
+            f"The system will automatically handle the turn transition."
+        )
 
     # Return new current step info
     new_idx = current_turn.current_step_index
