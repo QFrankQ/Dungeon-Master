@@ -16,6 +16,7 @@ from ..models.turn_context import TurnContext
 from ..models.combat_state import CombatState, CombatPhase
 from ..characters.monster import Monster
 from ..characters.charactersheet import Character
+from ..prompts.demo_combat_steps import is_resolution_step_index
 
 
 
@@ -327,11 +328,17 @@ class DMContextBuilder:
                 context_parts.append("</registered_player_characters>")
                 context_parts.append("")
 
-        # Add current step objective
-        context_parts.append("<step_objective>")
-        context_parts.append(turn_manager_snapshots.current_step_objective or "Begin the adventure")
-        context_parts.append("</step_objective>")
-        context_parts.append("")
+        # Add combat step context (shows current step and upcoming steps as guidance)
+        step_context = self._build_combat_step_context(turn_manager_snapshots)
+        if step_context:
+            context_parts.append(step_context)
+            context_parts.append("")
+        else:
+            # Fallback to simple objective if no step list
+            context_parts.append("<step_objective>")
+            context_parts.append(turn_manager_snapshots.current_step_objective or "Begin the adventure")
+            context_parts.append("</step_objective>")
+            context_parts.append("")
 
         # Add combat state (initiative order, phase, etc.) when in combat
         if turn_manager_snapshots.combat_state:
@@ -394,3 +401,68 @@ class DMContextBuilder:
                 context_parts.append("")
 
         return "\n".join(context_parts)
+
+    def _build_combat_step_context(self, turn_manager_snapshots: TurnManagerSnapshot) -> Optional[str]:
+        """
+        Build step context showing current step and remaining steps as guidance.
+
+        Presents steps as a todo-list that the DM follows, with clear indication
+        of which step is current and what comes next. Use complete_step() tool
+        to mark steps as done.
+
+        Args:
+            turn_manager_snapshots: Current turn manager state snapshot
+
+        Returns:
+            Formatted step context string, or None if no step list
+        """
+        if not turn_manager_snapshots.active_turns_by_level:
+            return None
+
+        # Get current turn (deepest level)
+        current_turn = turn_manager_snapshots.active_turns_by_level[-1]
+
+        if not current_turn.game_step_list:
+            return None
+
+        current_idx = current_turn.current_step_index
+        steps = current_turn.game_step_list
+
+        # Handle case where all steps are complete (shouldn't normally happen - turn should be transitioning)
+        if current_idx >= len(steps):
+            return "<combat_steps>\n  <status>All steps completed. Turn is transitioning.</status>\n</combat_steps>"
+
+        parts = ["<combat_steps>"]
+
+        # Progress summary
+        parts.append(f"  <progress>Step {current_idx + 1} of {len(steps)}</progress>")
+
+        # Current step - full objective with resolution marker
+        current_step = steps[current_idx]
+        resolution = " [RESOLUTION - state extraction will trigger]" if is_resolution_step_index(current_idx, steps) else ""
+        parts.append(f"  <current_step>{resolution}")
+        parts.append(f"    {current_step}")
+        parts.append("  </current_step>")
+
+        # Remaining steps - abbreviated
+        remaining = steps[current_idx + 1:]
+        if remaining:
+            parts.append("  <upcoming_steps>")
+            for i, step in enumerate(remaining, start=current_idx + 1):
+                marker = " [RESOLUTION]" if is_resolution_step_index(i, steps) else ""
+                # Show first 60 chars of each step
+                short_desc = step[:60] + "..." if len(step) > 60 else step
+                parts.append(f"    {i + 1}. {short_desc}{marker}")
+            parts.append("  </upcoming_steps>")
+
+        # Add instructions for complete_step() usage
+        parts.append("")
+        parts.append("  <tool_instructions>")
+        parts.append("    Call complete_step() when you have achieved the current step's objective.")
+        parts.append("    You can call it multiple times to complete multiple steps.")
+        parts.append("    DO NOT call it if you need clarification or the step isn't fully met.")
+        parts.append("  </tool_instructions>")
+
+        parts.append("</combat_steps>")
+
+        return "\n".join(parts)
