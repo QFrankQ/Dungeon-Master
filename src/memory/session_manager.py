@@ -681,10 +681,11 @@ class SessionManager:
             self.turn_manager.add_messages(message_dicts)
 
         # === PHASE 2: RESET DEPS STATE ===
-        # Get deps and reset turn_complete flag before DM runs
+        # Get deps and reset flags/accumulators before DM runs
         deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
         if deps:
             deps.turn_complete = False  # Reset flag before each DM run
+            deps.step_narratives = []  # Reset accumulated narratives
 
         # === PHASE 3: DM PROCESSING ===
         response_queue: List[str] = []
@@ -725,15 +726,26 @@ class SessionManager:
                          output_tokens=total_output_tokens,
                          response=dm_response.model_dump())
 
-        # Add narrative to response queue
+        # Add accumulated step narratives to response queue (from complete_step calls)
+        if deps and deps.step_narratives:
+            response_queue.extend(deps.step_narratives)
+
+        # Add final narrative to response queue
         if dm_response.narrative and dm_response.narrative.strip():
             response_queue.append(dm_response.narrative)
 
-        # Add DM narrative to turn context
-        self.turn_manager.add_messages(
-            [{"content": dm_response.narrative, "speaker": "DM"}],
-            is_new=False
+        # Combine all narratives for turn context storage
+        all_narratives = (deps.step_narratives if deps else []) + (
+            [dm_response.narrative] if dm_response.narrative and dm_response.narrative.strip() else []
         )
+        combined_narrative = "\n\n".join(all_narratives) if all_narratives else ""
+
+        # Add combined DM narrative to turn context
+        if combined_narrative:
+            self.turn_manager.add_messages(
+                [{"content": combined_narrative, "speaker": "DM"}],
+                is_new=False
+            )
 
         # Mark player messages as responded
         self.turn_manager.mark_new_messages_as_responded()
@@ -768,6 +780,7 @@ class SessionManager:
             # Prepare for next turn
             self.turn_manager.update_processing_turn_to_current()
             deps.turn_complete = False  # Reset flag before next DM run
+            deps.step_narratives = []  # Reset accumulated narratives
 
             # Build fresh context for the new turn
             turn_manager_snapshot = self.turn_manager.get_snapshot()
@@ -798,15 +811,26 @@ class SessionManager:
                              output_tokens=run_usage.output_tokens if run_usage else 0,
                              response=dm_response.model_dump())
 
-            # Add narrative to response queue
+            # Add accumulated step narratives to response queue
+            if deps.step_narratives:
+                response_queue.extend(deps.step_narratives)
+
+            # Add final narrative to response queue
             if dm_response.narrative and dm_response.narrative.strip():
                 response_queue.append(dm_response.narrative)
 
-            # Add DM narrative to turn context
-            self.turn_manager.add_messages(
-                [{"content": dm_response.narrative, "speaker": "DM"}],
-                is_new=False
+            # Combine all narratives for turn context storage
+            loop_narratives = deps.step_narratives + (
+                [dm_response.narrative] if dm_response.narrative and dm_response.narrative.strip() else []
             )
+            combined_loop_narrative = "\n\n".join(loop_narratives) if loop_narratives else ""
+
+            # Add combined DM narrative to turn context
+            if combined_loop_narrative:
+                self.turn_manager.add_messages(
+                    [{"content": combined_loop_narrative, "speaker": "DM"}],
+                    is_new=False
+                )
 
             # Store monster reactions if any
             self._store_pending_monster_reactions(dm_response)
