@@ -487,10 +487,10 @@ class SessionCommands(commands.Cog):
 
             if reactions:
                 for char, info in reactions.items():
-                    summary_lines.append(f"• **{char}** wants to use a reaction!")
+                    summary_lines.append(f"- **{char}** wants to use a reaction!")
 
             if passed:
-                summary_lines.append(f"• Passed: {', '.join(passed)}")
+                summary_lines.append(f"- Passed: {', '.join(passed)}")
 
             if timed_out:
                 summary_lines.append("\n*Window timed out - non-responders treated as passing.*")
