@@ -33,18 +33,23 @@ EnemyReactionDecision = MonsterReactionDecision
 
 class DungeonMasterResponse(BaseModel):
     """
-    Simple structured response from the DM agent.
+    Structured response from the DM agent.
 
-    Contains the narrative response and optional basic tool calls.
-    State extraction will be handled by a separate agent.
+    The narrative field is the primary output - write your full response to players here.
+    Use the complete_step() tool to mark steps as complete (do NOT set a field for this).
 
     Character validation for awaiting_response happens automatically via
     ResponseExpectation's model_validator when ResponseExpectation.registered_characters
     is set (use character_registry_context before calling the DM agent).
     """
-    narrative: str = Field(..., description="The game narrative and your message to the active player(s)")
-    # tool_calls: Optional[List[ToolCall]] = Field(None, description="Optional list of tool calls to execute")
-    game_step_completed: bool = Field(..., description='''"True" only if current game step objectives are met; "False" if game step objectives are not met or if you're asking the players for more information.''')
+    narrative: str = Field(
+        ...,
+        description=(
+            "Your response to the player. This is the main output that players see. "
+            "Include all narrative, descriptions, questions, and dialogue here. "
+            "To complete a step, use the complete_step() tool - do NOT set any field."
+        )
+    )
 
     # Multiplayer coordination - REQUIRED field
     awaiting_response: ResponseExpectation = Field(
@@ -75,7 +80,6 @@ class DungeonMasterResponse(BaseModel):
             "examples": [
                 {
                     "narrative": "You successfully cast the healing spell, feeling warmth flow through your wounds. The goblin falls unconscious from its wounds, ending the combat encounter.",
-                    "game_step_completed": True,
                     "awaiting_response": {
                         "characters": ["Tharion"],
                         "response_type": "action"
@@ -83,7 +87,6 @@ class DungeonMasterResponse(BaseModel):
                 },
                 {
                     "narrative": "What would you like to do? You can attack, cast a spell, or try to negotiate.",
-                    "game_step_completed": False,
                     "awaiting_response": {
                         "characters": ["Lyralei"],
                         "response_type": "action"
@@ -91,7 +94,6 @@ class DungeonMasterResponse(BaseModel):
                 },
                 {
                     "narrative": "A fireball erupts in your midst! Tharion and Lyralei, roll Dexterity saving throws!",
-                    "game_step_completed": False,
                     "awaiting_response": {
                         "characters": ["Tharion", "Lyralei"],
                         "response_type": "saving_throw",
@@ -100,7 +102,6 @@ class DungeonMasterResponse(BaseModel):
                 },
                 {
                     "narrative": "Roll for initiative!",
-                    "game_step_completed": False,
                     "awaiting_response": {
                         "characters": ["Tharion", "Lyralei", "Kira"],
                         "response_type": "initiative"
