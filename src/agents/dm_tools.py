@@ -5,11 +5,14 @@ as well as query detailed character ability information and spawn monsters for c
 """
 
 import random
-from typing import Optional, Literal, Union, List, Dict, Any
+from typing import Optional, Literal, Union, List, Dict, Any, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
 from ..db.lance_rules_service import LanceRulesService
+
+if TYPE_CHECKING:
+    from .state_extraction_orchestrator import StateExtractionOrchestrator
 from ..memory.turn_manager import TurnManager
 from ..memory.state_manager import StateManager
 from ..models.combat_state import CombatPhase
@@ -18,6 +21,7 @@ from ..services.monster_spawner import MonsterSpawner
 from ..services.game_logger import GameLogger, LogLevel
 from ..characters.monster import Monster
 from ..characters.charactersheet import Character
+from ..prompts.demo_combat_steps import is_resolution_step_index
 
 
 # ==================== Null Object Pattern for Logging ====================
@@ -198,7 +202,8 @@ class DMToolsDependencies:
         rules_cache_service: RulesCacheService,
         state_manager: Optional[StateManager] = None,
         monster_spawner: Optional[MonsterSpawner] = None,
-        logger: Optional[GameLogger] = None
+        logger: Optional[GameLogger] = None,
+        state_extractor: Optional["StateExtractionOrchestrator"] = None
     ):
         self.lance_service = lance_service
         self.turn_manager = turn_manager
@@ -206,6 +211,9 @@ class DMToolsDependencies:
         self.state_manager = state_manager
         self.monster_spawner = monster_spawner
         self.logger = logger
+        # Combat step tool dependencies
+        self.state_extractor = state_extractor
+        self.turn_complete: bool = False  # Flag set by complete_step when turn is done
 
 
 # ==================== Validation Helpers (Raise-for-Error Pattern) ====================
@@ -1181,12 +1189,116 @@ async def end_combat(
         result += f"Players remaining: {len(players)}\n"
         result += f"Enemies remaining: {len(monsters)}\n"
         result += f"\nCombat will transition to conclusion phase after current step resolves."
-        result += f"\nNarrate the conclusion of the final action, then set game_step_completed=True."
+        result += f"\nNarrate the conclusion of the final action, then call complete_step() to proceed."
 
         return result
 
     except ValueError as e:
         return _fail(log, "end_combat", FailureReason.TRANSITION_ERROR, level=LogLevel.ERROR, error=str(e))
+
+
+# ==================== Combat Step Tool ====================
+
+async def complete_step(ctx: RunContext[DMToolsDependencies]) -> str:
+    """
+    Mark the current combat step as complete and advance to the next.
+
+    Call this when you have achieved the current step's objective.
+    You may call this multiple times to complete multiple steps before
+    returning your response.
+
+    DO NOT call this if:
+    - You need clarification from the player
+    - The step objective hasn't been fully met
+    - You're handling an off-topic question
+    - The step requires player input you haven't received yet
+
+    Returns:
+        Status message with the new current step, or turn completion notice.
+    """
+    log = _get_log(ctx)
+    log.dm_tool("complete_step called")
+
+    turn_manager = ctx.deps.turn_manager
+    if not turn_manager:
+        return _fail(log, "complete_step", FailureReason.TURN_MANAGER_MISSING)
+
+    # Get current turn (top of stack)
+    current_turn = turn_manager.get_current_turn_context()
+    if not current_turn:
+        return _fail(log, "complete_step", FailureReason.NO_ACTIVE_TURN)
+
+    current_idx = current_turn.current_step_index
+    step_list = current_turn.game_step_list
+
+    if not step_list:
+        log.dm_tool("complete_step failed: no step list for current turn",
+                   level=LogLevel.WARNING)
+        return "Error: No step list for current turn."
+
+    if current_idx >= len(step_list):
+        log.dm_tool("complete_step failed: already completed all steps",
+                   level=LogLevel.WARNING)
+        return "Error: Already completed all steps in this turn."
+
+    completed_step_name = step_list[current_idx]
+    # Truncate for display
+    completed_short = completed_step_name[:60] + "..." if len(completed_step_name) > 60 else completed_step_name
+
+    # State extraction at resolution steps (BEFORE advancing)
+    if is_resolution_step_index(current_idx, step_list):
+        state_extractor = ctx.deps.state_extractor
+        state_manager = ctx.deps.state_manager
+
+        if state_extractor and state_manager:
+            try:
+                log.extraction("Resolution step - triggering state extraction",
+                             turn_id=current_turn.turn_id,
+                             step_index=current_idx)
+
+                snapshot = turn_manager.get_snapshot()
+                current_turn_ctx = snapshot.turn_stack[-1][0] if snapshot.turn_stack else None
+
+                if current_turn_ctx:
+                    state_commands = await state_extractor.extract_state_changes(
+                        formatted_turn_context=current_turn_ctx,
+                        game_context={
+                            "turn_id": current_turn_ctx.turn_id,
+                            "turn_level": current_turn_ctx.turn_level,
+                            "active_character": current_turn_ctx.active_character
+                        },
+                        turn_snapshot=snapshot
+                    )
+
+                    if state_commands and state_commands.commands:
+                        state_results = state_manager.apply_commands(state_commands)
+                        log.extraction("State commands applied",
+                                     commands_executed=state_results.get('commands_executed', 0))
+            except Exception as e:
+                log.extraction("State extraction failed (continuing)",
+                             error=str(e), level=LogLevel.WARNING)
+                # Don't fail the step completion - just log and continue
+
+    # Advance the step
+    more_steps = current_turn.advance_step()
+
+    log.step("Step completed",
+            completed_step=completed_short,
+            more_steps=more_steps,
+            new_step_index=current_turn.current_step_index if more_steps else None)
+
+    # Check if turn is complete
+    if not more_steps:
+        ctx.deps.turn_complete = True
+        return f"Step completed: '{completed_short}'. TURN FINISHED - no more steps remaining."
+
+    # Return new current step info
+    new_idx = current_turn.current_step_index
+    new_step = step_list[new_idx]
+    new_step_short = new_step[:60] + "..." if len(new_step) > 60 else new_step
+    resolution_marker = " [RESOLUTION]" if is_resolution_step_index(new_idx, step_list) else ""
+
+    return f"Step completed: '{completed_short}'. Now on step {new_idx + 1}: '{new_step_short}'{resolution_marker}"
 
 
 def _query_monster_ability(
@@ -1260,7 +1372,8 @@ def create_dm_tools(
     rules_cache_service: RulesCacheService,
     state_manager: Optional[StateManager] = None,
     monster_spawner: Optional[MonsterSpawner] = None,
-    logger: Optional[GameLogger] = None
+    logger: Optional[GameLogger] = None,
+    state_extractor: Optional["StateExtractionOrchestrator"] = None
 ) -> tuple[list, DMToolsDependencies]:
     """
     Factory function to create DM tools and their dependencies.
@@ -1272,6 +1385,7 @@ def create_dm_tools(
         state_manager: Optional StateManager for character ability queries
         monster_spawner: Optional MonsterSpawner for creating monsters in encounters
         logger: Optional GameLogger for tracing tool invocations
+        state_extractor: Optional StateExtractionOrchestrator for complete_step tool
 
     Returns:
         Tuple of (tool_list, dependencies) where:
@@ -1283,14 +1397,15 @@ def create_dm_tools(
         dm_agent = create_dungeon_master_agent(tools=tools)
         result = await dm_agent.process_message(context, deps=deps)
     """
-    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, roll_dice, add_monster_initiative, remove_defeated_participant, end_combat]
+    tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, roll_dice, add_monster_initiative, remove_defeated_participant, end_combat, complete_step]
     dependencies = DMToolsDependencies(
         lance_service=lance_service,
         turn_manager=turn_manager,
         rules_cache_service=rules_cache_service,
         state_manager=state_manager,
         monster_spawner=monster_spawner,
-        logger=logger
+        logger=logger,
+        state_extractor=state_extractor
     )
 
     return tools, dependencies
