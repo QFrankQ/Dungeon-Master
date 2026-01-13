@@ -59,10 +59,10 @@ COMBAT_START_STEPS = [
     "2. If the tool returned 2 goblins (goblin_1, goblin_2), your narrative MUST mention BOTH goblins. Count the monsters and ensure your description matches the exact count.\n"
     "3. DO NOT say 'a lone goblin' if you spawned 2 goblins. DO NOT invent different monster types.\n"
     "4. Make the transition from exploration to combat dramatic and clear.\n"
-    "DO NOT call for initiative rolls in this step. Set awaiting_response with response_type='none' and call complete_step() after narrating.",
+    "DO NOT call for initiative rolls in this step. Call complete_step() after processing - the tool will tell you whether to continue or return.",
 
     # Step 1: Determine Surprise and Initiative Modifiers
-    "Determine surprise and initiative modifiers. Assess which sides were aware of each other before combat. Per 2024 PHB: Surprised creatures roll initiative with DISADVANTAGE (they do NOT skip their first turn). Determine if anyone gets advantage on initiative from initiating combat. Use query_character_ability with the EXACT monster IDs from select_encounter_monsters() (e.g., goblin_1 NOT bugbear_1). DO NOT call for rolls in this step - only determine modifiers. Set awaiting_response with response_type='none' (you are narrating).",
+    "Determine surprise and initiative modifiers. Assess which sides were aware of each other before combat. Per 2024 PHB: Surprised creatures roll initiative with DISADVANTAGE (they do NOT skip their first turn). Determine if anyone gets advantage on initiative from initiating combat. Use query_character_ability with the EXACT monster IDs from select_encounter_monsters() (e.g., goblin_1 NOT bugbear_1). DO NOT call for rolls in this step - only determine modifiers. Call complete_step() after processing - the tool will tell you whether to continue or return.",
 
     # Step 2: Call for Initiative Rolls
     "Call for initiative rolls from ALL participants. CRITICAL REQUIREMENTS:\n"
@@ -80,7 +80,7 @@ COMBAT_START_STEPS = [
     "Announce the initiative order EXACTLY as shown in <initiative_order>, from highest to lowest. Provide a window for players to declare any abilities that modify initiative (e.g., Alert feat, class features). If contested, reference the exact rule text and adjust accordingly. DO NOT finalize the order in this step. Set awaiting_response with response_type='free_form' and characters=[all player character names] to allow objections.",
 
     # Step 4: Finalize Order and Begin Combat
-    "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step. Set call complete_step() to signal that combat setup is complete. Set awaiting_response with response_type='none' (you are concluding setup)."
+    "Finalize the initiative order. Announce the final order clearly and state which participant acts first. DO NOT begin the first participant's turn in this step. Call complete_step() to signal that combat setup is complete - the turn will transition automatically."
 ]
 
 # =============================================================================
@@ -163,7 +163,7 @@ MONSTER_TURN_STEPS = [
     "DO NOT ask about additional actions in this step.",
 
     # Step 6: Additional Actions (Bonus Action, Movement)
-    "Decide if the monster uses a bonus action, additional movement, or free object interaction based on its statblock and the tactical situation. Resolve any additional actions. Set awaiting_response with response_type='none'.",
+    "Decide if the monster uses a bonus action, additional movement, or free object interaction based on its statblock and the tactical situation. Resolve any additional actions. Call complete_step() after processing - the tool will tell you whether to continue or return.",
 
     # Step 7: Turn-End Effects (Resolution step for turn-end effects)
     "Check for turn-end effects: Apply effects that trigger at the end of this turn (saving throws against conditions, concentration checks). Resolve any triggered effects. DO NOT announce the next turn in this step.",
