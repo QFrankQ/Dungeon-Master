@@ -16,7 +16,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.memory.turn_manager import create_turn_manager, ActionDeclaration
-from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS
+from src.prompts.demo_combat_steps import DEMO_MAIN_ACTION_STEPS, DEMO_REACTION_STEPS, GamePhase, COMBAT_TURN_STEPS
 
 
 def test_turn_manager_auto_step_selection():
@@ -29,8 +29,12 @@ def test_turn_manager_auto_step_selection():
     turn_manager = create_turn_manager()
     print("\n✓ TurnManager created")
 
-    # Start a Level 0 turn (should use DEMO_MAIN_ACTION_STEPS)
-    print("\n--- Starting Level 0 turn (should use DEMO_MAIN_ACTION_STEPS) ---")
+    # Set game phase to COMBAT_ROUNDS (TurnManager defaults to EXPLORATION)
+    turn_manager.set_phase(GamePhase.COMBAT_ROUNDS)
+    print("✓ Set game phase to COMBAT_ROUNDS")
+
+    # Start a Level 0 turn (should use COMBAT_TURN_STEPS)
+    print("\n--- Starting Level 0 turn (should use COMBAT_TURN_STEPS) ---")
     result = turn_manager.start_and_queue_turns(
         actions=[ActionDeclaration(speaker="Test Hero", content="I attack the orc!")]
     )
@@ -44,15 +48,15 @@ def test_turn_manager_auto_step_selection():
     assert turn is not None, "Should have a pending turn"
     print(f"\n✓ Retrieved pending turn: {turn.turn_id}")
 
-    # Verify it used DEMO_MAIN_ACTION_STEPS
+    # Verify it used COMBAT_TURN_STEPS (DEMO_MAIN_ACTION_STEPS is an alias)
     assert turn.game_step_list is not None, "game_step_list should be set"
-    assert turn.game_step_list == DEMO_MAIN_ACTION_STEPS, \
-        "Level 0 should use DEMO_MAIN_ACTION_STEPS"
-    print(f"✓ Automatically used DEMO_MAIN_ACTION_STEPS ({len(turn.game_step_list)} steps)")
+    assert turn.game_step_list == COMBAT_TURN_STEPS, \
+        "Level 0 in COMBAT_ROUNDS phase should use COMBAT_TURN_STEPS"
+    print(f"✓ Automatically used COMBAT_TURN_STEPS ({len(turn.game_step_list)} steps)")
 
     # Verify current step
     assert turn.current_step_index == 0, "Should start at step 0"
-    assert turn.current_step_objective == DEMO_MAIN_ACTION_STEPS[0], \
+    assert turn.current_step_objective == COMBAT_TURN_STEPS[0], \
         "Current objective should match first step"
     print(f"✓ Starting at step 0: {turn.current_step_objective[:60]}...")
 
@@ -66,8 +70,6 @@ def test_turn_manager_auto_step_selection():
 
     print(f"✓ Successfully advanced through 3 steps")
 
-    return turn_manager
-
 
 def test_reaction_auto_selection():
     """Test TurnManager automatically uses DEMO_REACTION_STEPS for Level 1+."""
@@ -78,6 +80,10 @@ def test_reaction_auto_selection():
     # Create TurnManager and start main turn
     turn_manager = create_turn_manager()
 
+    # Set game phase to COMBAT_ROUNDS (TurnManager defaults to EXPLORATION)
+    turn_manager.set_phase(GamePhase.COMBAT_ROUNDS)
+    print("✓ Set game phase to COMBAT_ROUNDS")
+
     # Start Level 0 main turn
     print("\n--- Starting Level 0 main turn ---")
     turn_manager.start_and_queue_turns(
@@ -85,8 +91,8 @@ def test_reaction_auto_selection():
     )
     main_turn = turn_manager.get_next_pending_turn()
     assert main_turn.turn_level == 0, "Should be level 0"
-    assert main_turn.game_step_list == DEMO_MAIN_ACTION_STEPS, "Should use main action steps"
-    print(f"✓ Level 0 turn uses DEMO_MAIN_ACTION_STEPS")
+    assert main_turn.game_step_list == COMBAT_TURN_STEPS, "Should use combat turn steps"
+    print(f"✓ Level 0 turn uses COMBAT_TURN_STEPS")
 
     # Start Level 1 reaction turn (sub-turn)
     print("\n--- Starting Level 1 reaction sub-turn ---")
@@ -160,7 +166,7 @@ def main():
         print("✓ ALL TESTS PASSED")
         print("=" * 70)
         print("\nVerified:")
-        print("  • Level 0 automatically uses DEMO_MAIN_ACTION_STEPS")
+        print("  • Level 0 in COMBAT_ROUNDS phase uses COMBAT_TURN_STEPS")
         print("  • Level 1+ automatically uses DEMO_REACTION_STEPS")
         print("  • ActionDeclaration Pydantic model works (Gemini compatible)")
         print("  • No Dict[str, str] used (avoids additionalProperties issue)")

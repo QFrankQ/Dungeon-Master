@@ -77,7 +77,6 @@ IMPORTANT: Bob has declared a reaction (Counterspell). You MUST use the start_an
         print(f"\n✓ DM agent processed successfully")
         print(f"\nDM Response:")
         print(f"  Narrative: {result.output.narrative[:150]}...")
-        print(f"  Step Complete: {result.output.game_step_completed}")
 
         # Check if tool was called
         # PydanticAI stores tool calls in the result

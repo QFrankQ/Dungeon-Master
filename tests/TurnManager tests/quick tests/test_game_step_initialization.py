@@ -47,14 +47,22 @@ def test_step_initialization():
         "Current step objective should match first step in list"
     print(f"\n✓ Current step objective matches first step in list")
 
-    return turn
 
-
-def test_advance_step(turn):
+def test_advance_step():
     """Test that advance_step() properly progresses through steps."""
     print("\n" + "=" * 70)
     print("TEST 2: Step Advancement")
     print("=" * 70)
+
+    # Create a TurnContext for this test
+    turn = TurnContext(
+        turn_id="test_advance",
+        turn_level=0,
+        current_step_objective=DEMO_MAIN_ACTION_STEPS[0],
+        active_character="Test Hero",
+        game_step_list=DEMO_MAIN_ACTION_STEPS,
+        current_step_index=0
+    )
 
     total_steps = len(turn.game_step_list)
     print(f"\nTotal steps in list: {total_steps}")
@@ -166,10 +174,10 @@ def main():
 
     try:
         # Test 1: Initialization
-        turn = test_step_initialization()
+        test_step_initialization()
 
         # Test 2: Step advancement
-        test_advance_step(turn)
+        test_advance_step()
 
         # Test 3: Get current step objective
         test_get_current_step_objective()

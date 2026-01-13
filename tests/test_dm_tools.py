@@ -540,7 +540,7 @@ class TestFactoryFunction:
         )
 
         # Verify tools list (query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, roll_dice, add_monster_initiative, remove_defeated_participant, end_combat)
-        assert len(tools) == 8
+        assert len(tools) == 9  # 8 original tools + complete_step
         assert query_rules_database in tools
         assert get_available_monsters in tools
         assert select_encounter_monsters in tools

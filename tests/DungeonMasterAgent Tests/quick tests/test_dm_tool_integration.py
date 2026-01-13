@@ -97,8 +97,8 @@ def test_demo_session_manager():
         "turn_manager should be created before dm_agent"
     print("✓ turn_manager is created before dm_agent")
 
-    # Check that tools parameter is passed
-    assert "tools=[turn_manager.start_and_queue_turns]" in content, \
+    # Check that tools parameter is passed (may include additional tools like dm_tools)
+    assert "turn_manager.start_and_queue_turns" in content, \
         "Should pass start_and_queue_turns as a tool"
     print("✓ start_and_queue_turns is passed as a tool")
 
