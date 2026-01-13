@@ -1101,6 +1101,7 @@ def create_demo_session_manager(dm_model_name=None, api_key=None, enable_logging
     from src.services.monster_spawner import create_monster_spawner
     from src.agents.dm_tools import create_dm_tools
     from src.memory.state_manager import create_state_manager
+    from src.agents.state_extraction_orchestrator import create_state_extraction_orchestrator
 
     lance_service = create_lance_rules_service()
     rules_cache_service = create_rules_cache_service()
@@ -1111,14 +1112,22 @@ def create_demo_session_manager(dm_model_name=None, api_key=None, enable_logging
     # Create monster spawner for DM to select monsters from templates
     monster_spawner = create_monster_spawner(state_manager=state_manager)
 
-    # Create DM tools and dependencies (with monster spawner and logger)
+    # Create state extraction orchestrator (needed for complete_step tool)
+    state_extraction_orchestrator = create_state_extraction_orchestrator(
+        model_name="gemini-2.5-flash-lite",
+        api_key=api_key,
+        rules_cache_service=rules_cache_service
+    )
+
+    # Create DM tools and dependencies (with monster spawner, logger, and state_extractor)
     dm_tools, dm_deps = create_dm_tools(
         lance_service=lance_service,
         turn_manager=turn_manager,
         rules_cache_service=rules_cache_service,
         state_manager=state_manager,
         monster_spawner=monster_spawner,
-        logger=logger
+        logger=logger,
+        state_extractor=state_extraction_orchestrator
     )
 
     # Create DM agent with all tools (turn management + rules database + monster selection)
@@ -1140,14 +1149,8 @@ def create_demo_session_manager(dm_model_name=None, api_key=None, enable_logging
     player_registry = create_player_character_registry(registry_file_path=registry_path)
     print(f"[SYSTEM] Created per-session player registry: {registry_path}")
 
-    # Create state extraction orchestrator
-    from src.agents.state_extraction_orchestrator import create_state_extraction_orchestrator
-
-    state_extraction_orchestrator = create_state_extraction_orchestrator(
-        model_name="gemini-2.5-flash-lite",
-        api_key=api_key,
-        rules_cache_service=rules_cache_service  # Share with DM tools
-    )
+    # Note: state_extraction_orchestrator is created earlier for complete_step tool
+    # and reused here for session manager
 
     # Create session manager with all components (including monster spawner and logger)
     session_manager = SessionManager(
