@@ -629,23 +629,26 @@ class SessionManager:
         mock_next_objective: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        DEMO VERSION: Simplified process_player_input without GD and state management.
+        Process player input with tool-based step management.
 
-        Differences from original:
-        - No GD agent invocation (uses mock objective instead)
-        - No state extraction or updates
-        - Simplified context building (turn logs + new messages only)
-        - Re-runs DM with new objective when step completes
-        - Returns responses with usage tracking
+        The DM decides when to advance steps by calling complete_step() tool.
+        Session manager handles turn transitions when turns complete.
+
+        Key differences from previous implementation:
+        - No while loop for step advancement - DM controls via complete_step() tool
+        - DM can complete multiple steps in a single response
+        - Turn transitions trigger recursive call for next turn processing
+        - Simpler flow - less session manager logic, more DM autonomy
 
         Args:
             new_messages: List of player chat messages
-            mock_next_objective: Optional mock objective for when step completes
+            mock_next_objective: Optional mock objective (deprecated, unused)
 
         Returns:
             Dictionary with:
                 - "responses": List of narrative response strings
                 - "usage": Dict with token and request counts
+                - "awaiting_response": Who should respond next
         """
         if not self.dungeon_master_agent:
             raise ValueError("No DungeonMasterAgent configured.")
@@ -674,171 +677,146 @@ class SessionManager:
             })
 
         # Add messages to current turn using unified interface
-        # Automatically handles single vs batch (MessageGroup) based on count
         if message_dicts:
             self.turn_manager.add_messages(message_dicts)
 
-        # === PHASE 2: DM PROCESSING ===
-        # Get turn manager snapshot (includes the unprocessed MessageGroup)
-        turn_manager_snapshot = self.turn_manager.get_snapshot()
+        # === PHASE 2: RESET DEPS STATE ===
+        # Get deps and reset turn_complete flag before DM runs
+        deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
+        if deps:
+            deps.turn_complete = False  # Reset flag before each DM run
 
-        # Build simplified DM context (will automatically highlight unprocessed groups)
+        # === PHASE 3: DM PROCESSING ===
+        response_queue: List[str] = []
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_requests = 0
+
+        # Build context with current step info
+        turn_manager_snapshot = self.turn_manager.get_snapshot()
         dungeon_master_context = self.dm_context_builder.build_demo_context(
-            turn_manager_snapshots=turn_manager_snapshot,
-            # new_message_entries=None  # No longer needed - groups detected automatically
+            turn_manager_snapshots=turn_manager_snapshot
         )
 
-        # Set registered character IDs for ResponseExpectation validation (Milestone 6)
-        # This allows the DM to get immediate feedback if it references invalid characters
+        # Set registered character IDs for ResponseExpectation validation
         registered_chars = set(self.player_character_registry.get_all_character_ids())
-
-        # Run DM agent and get result (with usage tracking)
-        # Pass deps if available (for DM tools like query_rules_database)
-        #TODO: if exception, roll back the added messages.
-        deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
 
         # Log DM processing start
         if self.logger:
             self.logger.dm("Processing DM response", context_length=len(dungeon_master_context))
 
+        # Run DM (may call complete_step() zero or more times)
         with character_registry_context(registered_chars):
             dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
-        dungeon_master_response: DungeonMasterResponse = dm_result.output
 
-        # Track usage from this run
+        # Track usage
         run_usage = dm_result.usage()
-        total_input_tokens = run_usage.input_tokens if run_usage else 0
-        total_output_tokens = run_usage.output_tokens if run_usage else 0
-        total_requests = run_usage.requests if run_usage else 0
+        if run_usage:
+            total_input_tokens = run_usage.input_tokens
+            total_output_tokens = run_usage.output_tokens
+            total_requests = run_usage.requests
+
+        dm_response = dm_result.output
 
         # Log DM response received
         if self.logger:
             self.logger.dm("DM response generated",
                          input_tokens=total_input_tokens,
                          output_tokens=total_output_tokens,
-                         response=dungeon_master_response.model_dump())
+                         response=dm_response.model_dump())
 
-        # === PHASE 3: PROCESS DM RESPONSE ===
-        response_queue: List[str] = []
-        response_queue.append(dungeon_master_response.narrative)
+        # Add narrative to response queue
+        if dm_response.narrative and dm_response.narrative.strip():
+            response_queue.append(dm_response.narrative)
 
-        # Mark the player message(s) as responded to (DM has now responded to it)
-        self.turn_manager.mark_new_messages_as_responded()
-
-        # Add DM narrative using unified TurnManager interface
-        # Use is_new=False so DM response doesn't appear as "new" in next run
+        # Add DM narrative to turn context
         self.turn_manager.add_messages(
-            [{"content": dungeon_master_response.narrative, "speaker": "DM"}],
+            [{"content": dm_response.narrative, "speaker": "DM"}],
             is_new=False
         )
 
-        # Store any monster reactions for later merging with player reactions
-        # This enables automatic merging when DM calls start_and_queue_turns for reactions
-        self._store_pending_monster_reactions(dungeon_master_response)
+        # Mark player messages as responded
+        self.turn_manager.mark_new_messages_as_responded()
 
-        # === PHASE 4: CHECK FOR STEP COMPLETION ===
-        state_results = None
-        if not dungeon_master_response.game_step_completed:
-            # No step completion - done processing
-            pass
-        else:
-            # Log step completion
+        # Store monster reactions if any
+        self._store_pending_monster_reactions(dm_response)
+
+        # === PHASE 4: HANDLE TURN TRANSITIONS ===
+        # While loop handles sequential turn completions (e.g., monster turns, reactions)
+        # This avoids recursion which could cause stack overflow with many sequential turns
+        while deps and deps.turn_complete:
             if self.logger:
-                self.logger.step("Step completed - entering advancement loop")
+                self.logger.step("Turn complete flag set - handling turn transition")
 
-            # WHILE loop for step completion
-            # Processes multiple steps in same turn OR switches to subturns
-            while dungeon_master_response.game_step_completed:
-                # response_queue.append("\n[DM has indicated step completion - processing resolution...]\n")
+            end_result = await self.turn_manager.end_turn_and_get_next_async()
 
-                # === STATE EXTRACTION BEFORE ADVANCING STEP ===
-                # Check if current step (before advancing) is a resolution step
-                state_results = await self._extract_state_if_resolution_step(response_queue)
-
-                # Note: Deferred combat end is now processed in TurnManager.end_turn_and_get_next_async()
-                # when a Level 0 (main) turn completes, ensuring all reactions resolve first.
-
-                # Advance the processing turn's step
-                # (This is the turn that was being processed when DM ran, even if tools created subturns)
-                # response_queue.append("[Advancing turn step...]\n")
-                more_steps = self.turn_manager.advance_processing_turn_step()
-
-                # Log step advancement
-                if self.logger:
-                    current_turn = self.turn_manager.get_current_turn_context()
-                    step_index = current_turn.current_step_index if current_turn else None
-                    step_count = len(current_turn.game_step_list) if current_turn and current_turn.game_step_list else None
-                    self.logger.step("Step advanced",
-                                   step_index=step_index,
-                                   step_count=step_count,
-                                   new_objective=self.turn_manager.get_current_step_objective(),
-                                   more_steps=more_steps)
-                # response_queue.append(f"[New step objective: {self.turn_manager.get_current_step_objective()}]\n")
-                if not more_steps:
-                    # Processing turn is complete - end it and get next
-                    end_result = await self.turn_manager.end_turn_and_get_next_async()
-
-                    # Handle deferred combat end (processed when Level 0 turn completes)
-                    if end_result.get("combat_ended"):
-                        combat_end_result = end_result.get("combat_end_result", {})
-                        response_queue.append(f"\n[Combat transitioning to conclusion phase: {combat_end_result.get('reason', 'Combat ended')}]\n")
-                        if self.logger:
-                            self.logger.combat("Deferred combat end processed",
-                                             reason=combat_end_result.get('reason'),
-                                             rounds_fought=combat_end_result.get('rounds_fought'))
-                        # Don't break - COMBAT_END turn is now on the stack and needs processing
-
-                    if not (end_result.get("next_pending") or end_result.get("return_to_parent") or end_result.get("combat_ended")):
-                        # All turns complete - exit loop
-                        #TODO: not necessarily break
-                        break
-
-                # Update processing turn to current stack top
-                # This handles: subturns created, turn ended, returned to parent
-                self.turn_manager.update_processing_turn_to_current()
-
-                # RE-RUN DM with updated processing turn
-                turn_manager_snapshot = self.turn_manager.get_snapshot()
-                dungeon_master_context = self.dm_context_builder.build_demo_context(
-                    turn_manager_snapshots=turn_manager_snapshot,
-                    # new_message_entries=None  # All messages already added
+            # Handle deferred combat end
+            if end_result.get("combat_ended"):
+                combat_result = end_result.get("combat_end_result", {})
+                response_queue.append(
+                    f"\n[Combat ended: {combat_result.get('reason', 'Victory')}]\n"
                 )
-                deps = getattr(self.dungeon_master_agent, 'dm_deps', None)
-                with character_registry_context(registered_chars):
-                    dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
-                dungeon_master_response = dm_result.output
-
-                # Track usage from re-run
-                run_usage = dm_result.usage()
-                if run_usage:
-                    total_input_tokens += run_usage.input_tokens
-                    total_output_tokens += run_usage.output_tokens
-                    total_requests += run_usage.requests
-
-                # Log DM re-run response
                 if self.logger:
-                    self.logger.dm("DM response (re-run after step completion)",
-                                 response=dungeon_master_response.model_dump())
+                    self.logger.combat("Deferred combat end processed",
+                                     reason=combat_result.get('reason'),
+                                     rounds_fought=combat_result.get('rounds_fought'))
 
-                # Add new DM response to queue
-                response_queue.append(dungeon_master_response.narrative)
+            # If no more turns, exit loop
+            if not (end_result.get("next_pending") or end_result.get("return_to_parent") or end_result.get("combat_ended")):
+                break
 
-                # Add new DM narrative using unified TurnManager interface
-                # Use is_new=False so DM response doesn't appear as "new" in next run
-                self.turn_manager.add_messages(
-                    [{"content": dungeon_master_response.narrative, "speaker": "DM"}],
-                    is_new=False
-                )
+            # Prepare for next turn
+            self.turn_manager.update_processing_turn_to_current()
+            deps.turn_complete = False  # Reset flag before next DM run
 
-                # Store any monster reactions for later merging with player reactions
-                self._store_pending_monster_reactions(dungeon_master_response)
+            # Build fresh context for the new turn
+            turn_manager_snapshot = self.turn_manager.get_snapshot()
+            dungeon_master_context = self.dm_context_builder.build_demo_context(
+                turn_manager_snapshots=turn_manager_snapshot
+            )
 
-                # Continue loop if DM still signals step completion
+            # Run DM for the new turn
+            if self.logger:
+                self.logger.dm("Processing next turn", context_length=len(dungeon_master_context))
 
-        # Get filtered characters warning if any were removed during validation
+            with character_registry_context(registered_chars):
+                dm_result = await self.dungeon_master_agent.process_message(dungeon_master_context, deps=deps)
+
+            # Track usage
+            run_usage = dm_result.usage()
+            if run_usage:
+                total_input_tokens += run_usage.input_tokens
+                total_output_tokens += run_usage.output_tokens
+                total_requests += run_usage.requests
+
+            dm_response = dm_result.output
+
+            # Log DM response
+            if self.logger:
+                self.logger.dm("DM response generated",
+                             input_tokens=run_usage.input_tokens if run_usage else 0,
+                             output_tokens=run_usage.output_tokens if run_usage else 0,
+                             response=dm_response.model_dump())
+
+            # Add narrative to response queue
+            if dm_response.narrative and dm_response.narrative.strip():
+                response_queue.append(dm_response.narrative)
+
+            # Add DM narrative to turn context
+            self.turn_manager.add_messages(
+                [{"content": dm_response.narrative, "speaker": "DM"}],
+                is_new=False
+            )
+
+            # Store monster reactions if any
+            self._store_pending_monster_reactions(dm_response)
+
+            # Loop continues if deps.turn_complete is True again
+
+        # === PHASE 5: COMPILE RESPONSE ===
         filtered_warning = None
-        if dungeon_master_response.awaiting_response:
-            filtered = dungeon_master_response.awaiting_response.get_filtered_characters()
+        if dm_response.awaiting_response:
+            filtered = dm_response.awaiting_response.get_filtered_characters()
             if filtered:
                 filtered_warning = f"Skipped unknown characters: {', '.join(filtered)}"
 
@@ -850,9 +828,8 @@ class SessionManager:
                 "total_tokens": total_input_tokens + total_output_tokens,
                 "requests": total_requests
             },
-            "state_results": state_results,  # State extraction results
-            "awaiting_response": dungeon_master_response.awaiting_response,  # Multiplayer coordination
-            "filtered_characters_warning": filtered_warning  # Milestone 6: Warning if chars were filtered
+            "awaiting_response": dm_response.awaiting_response,
+            "filtered_characters_warning": filtered_warning
         }
 
     def demo_process_player_input_sync(
