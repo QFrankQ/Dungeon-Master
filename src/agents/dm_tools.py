@@ -214,6 +214,7 @@ class DMToolsDependencies:
         # Combat step tool dependencies
         self.state_extractor = state_extractor
         self.turn_complete: bool = False  # Flag set by complete_step when turn is done
+        self.step_narratives: List[str] = []  # Accumulated narratives from complete_step calls
 
 
 # ==================== Validation Helpers (Raise-for-Error Pattern) ====================
@@ -1199,13 +1200,23 @@ async def end_combat(
 
 # ==================== Combat Step Tool ====================
 
-async def complete_step(ctx: RunContext[DMToolsDependencies]) -> str:
+
+async def complete_step(
+    ctx: RunContext[DMToolsDependencies],
+    narrative: Optional[str] = None
+) -> str:
     """
     Mark the current combat step as complete and advance to the next.
 
     Call this when you have achieved the current step's objective.
     You may call this multiple times to complete multiple steps before
     returning your response.
+
+    Args:
+        narrative: Optional narrative text for this step. Use this to capture
+                   important context, decisions, or descriptions that should be
+                   shown to players. Accumulated narratives are prepended to
+                   your final response.
 
     DO NOT call this if:
     - You need clarification from the player
@@ -1217,7 +1228,13 @@ async def complete_step(ctx: RunContext[DMToolsDependencies]) -> str:
         Status message with the new current step, or turn completion notice.
     """
     log = _get_log(ctx)
-    log.dm_tool("complete_step called")
+
+    # Log the narrative if provided
+    if narrative and narrative.strip():
+        ctx.deps.step_narratives.append(narrative.strip())
+        log.dm_tool("complete_step called", narrative=narrative.strip())
+    else:
+        log.dm_tool("complete_step called")
 
     turn_manager = ctx.deps.turn_manager
     if not turn_manager:
@@ -1296,13 +1313,15 @@ async def complete_step(ctx: RunContext[DMToolsDependencies]) -> str:
             f"The system will automatically handle the turn transition."
         )
 
-    # Return new current step info
+    # Return the full next step objective so DM can read and decide
     new_idx = current_turn.current_step_index
     new_step = step_list[new_idx]
-    new_step_short = new_step[:60] + "..." if len(new_step) > 60 else new_step
     resolution_marker = " [RESOLUTION]" if is_resolution_step_index(new_idx, step_list) else ""
 
-    return f"Step completed: '{completed_short}'. Now on step {new_idx + 1}: '{new_step_short}'{resolution_marker}"
+    return (
+        f"Step {current_idx + 1} completed. Now on step {new_idx + 1} of {len(step_list)}{resolution_marker}:\n"
+        f"{new_step}"
+    )
 
 
 def _query_monster_ability(
