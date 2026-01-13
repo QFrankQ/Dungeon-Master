@@ -12,6 +12,7 @@ from src.agents.dm_tools import (
     roll_dice,
     remove_defeated_participant,
     end_combat,
+    complete_step,
     DMToolsDependencies,
     create_dm_tools,
     _format_lance_entry_to_cache,
@@ -630,3 +631,137 @@ class TestDMToolsIntegration:
 
         # Verify all were cached
         assert mock_rules_cache_service.add_to_cache.call_count == 3
+
+
+# ==================== Complete Step Tests ====================
+
+class TestCompleteStep:
+    """Tests for complete_step tool functionality."""
+
+    @pytest.fixture
+    def mock_deps_with_steps(self, mock_lance_service, mock_rules_cache_service):
+        """Create deps with a turn that has steps."""
+        turn_manager = Mock()
+        current_turn = TurnContext(
+            turn_id="1",
+            turn_level=0,
+            current_step_objective="Test step",
+            game_step_list=["Step 1", "Step 2", "Step 3"],
+            current_step_index=0,
+            metadata={}
+        )
+        turn_manager.get_current_turn_context = Mock(return_value=current_turn)
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service
+        )
+        return deps, current_turn
+
+    @pytest.mark.asyncio
+    async def test_complete_step_advances_index(self, mock_deps_with_steps):
+        """Test that complete_step advances the step index."""
+        deps, current_turn = mock_deps_with_steps
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        result = await complete_step(ctx)
+
+        assert current_turn.current_step_index == 1
+        assert "Step 1 completed" in result
+        assert "Step 2" in result  # Should show next step
+
+    @pytest.mark.asyncio
+    async def test_complete_step_with_narrative(self, mock_deps_with_steps):
+        """Test that narrative parameter accumulates narratives."""
+        deps, current_turn = mock_deps_with_steps
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Call with narrative
+        await complete_step(ctx, narrative="Combat begins!")
+
+        # Verify narrative was accumulated
+        assert len(deps.step_narratives) == 1
+        assert deps.step_narratives[0] == "Combat begins!"
+
+    @pytest.mark.asyncio
+    async def test_complete_step_multiple_narratives(self, mock_deps_with_steps):
+        """Test that multiple narratives accumulate."""
+        deps, current_turn = mock_deps_with_steps
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Call multiple times with narratives
+        await complete_step(ctx, narrative="Two goblins emerge!")
+        await complete_step(ctx, narrative="No surprise detected.")
+
+        # Verify all narratives accumulated
+        assert len(deps.step_narratives) == 2
+        assert deps.step_narratives[0] == "Two goblins emerge!"
+        assert deps.step_narratives[1] == "No surprise detected."
+
+    @pytest.mark.asyncio
+    async def test_complete_step_empty_narrative_not_added(self, mock_deps_with_steps):
+        """Test that empty/whitespace narratives are not accumulated."""
+        deps, current_turn = mock_deps_with_steps
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Call with empty/whitespace narratives
+        await complete_step(ctx, narrative="")
+        await complete_step(ctx, narrative="   ")
+        await complete_step(ctx)  # No narrative
+
+        # Verify no narratives accumulated
+        assert len(deps.step_narratives) == 0
+
+    @pytest.mark.asyncio
+    async def test_complete_step_turn_complete_flag(self, mock_deps_with_steps):
+        """Test that turn_complete flag is set when all steps exhausted."""
+        deps, current_turn = mock_deps_with_steps
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Complete all 3 steps
+        await complete_step(ctx)  # Step 1 -> 2
+        await complete_step(ctx)  # Step 2 -> 3
+        result = await complete_step(ctx)  # Step 3 -> done
+
+        # Verify turn_complete flag is set
+        assert deps.turn_complete is True
+        assert "TURN FINISHED" in result
+
+    @pytest.mark.asyncio
+    async def test_complete_step_no_turn_manager(self, mock_lance_service, mock_rules_cache_service):
+        """Test error when no turn manager."""
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=None,
+            rules_cache_service=mock_rules_cache_service
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        result = await complete_step(ctx)
+
+        assert "Error" in result
+
+    @pytest.mark.asyncio
+    async def test_complete_step_no_active_turn(self, mock_lance_service, mock_rules_cache_service):
+        """Test error when no active turn."""
+        turn_manager = Mock()
+        turn_manager.get_current_turn_context = Mock(return_value=None)
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        result = await complete_step(ctx)
+
+        assert "Error" in result
