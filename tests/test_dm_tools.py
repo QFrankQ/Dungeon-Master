@@ -765,3 +765,346 @@ class TestCompleteStep:
         result = await complete_step(ctx)
 
         assert "Error" in result
+
+
+# ==================== Complete Step State Extraction Tests ====================
+
+class TestCompleteStepStateExtraction:
+    """Tests for state extraction in complete_step tool at resolution steps."""
+
+    @pytest.fixture
+    def mock_state_extractor(self):
+        """Create mock StateExtractionOrchestrator."""
+        extractor = AsyncMock()
+        # Mock successful extraction result
+        mock_result = Mock()
+        mock_result.commands = [
+            Mock(target_id="fighter_1", damage=8)  # Sample HP change command
+        ]
+        mock_result.notes = "Extracted 1 command"
+        extractor.extract_state_changes = AsyncMock(return_value=mock_result)
+        return extractor
+
+    @pytest.fixture
+    def mock_state_manager(self):
+        """Create mock StateManager."""
+        manager = Mock()
+        manager.get_character_name_to_id_map = Mock(return_value={
+            "Tharion": "fighter_1",
+            "Elara": "wizard_1"
+        })
+        manager.apply_commands = Mock(return_value={
+            "commands_executed": 1,
+            "results": ["HP updated for fighter_1"]
+        })
+        return manager
+
+    @pytest.fixture
+    def mock_context_builder(self):
+        """Create mock StateExtractorContextBuilder."""
+        builder = Mock()
+        builder.build_context = Mock(return_value="<turn_context>Formatted context for extraction</turn_context>")
+        return builder
+
+    @pytest.fixture
+    def mock_turn_manager_for_extraction(self):
+        """Create mock TurnManager configured for resolution step testing."""
+        from src.prompts.demo_combat_steps import COMBAT_TURN_STEPS
+
+        turn_manager = Mock()
+
+        # Create turn at resolution step index 3
+        current_turn = TurnContext(
+            turn_id="1",
+            turn_level=0,
+            current_step_objective="Resolve the declared action",
+            game_step_list=COMBAT_TURN_STEPS,  # Use actual step list for resolution detection
+            current_step_index=3,  # Index 3 is a resolution step
+            active_character="Tharion",
+            metadata={}
+        )
+        turn_manager.get_current_turn_context = Mock(return_value=current_turn)
+
+        # Mock get_snapshot to return turn context
+        mock_snapshot = Mock()
+        mock_snapshot.turn_stack = [(current_turn, [])]
+        turn_manager.get_snapshot = Mock(return_value=mock_snapshot)
+
+        return turn_manager, current_turn
+
+    @pytest.mark.asyncio
+    async def test_state_extraction_triggered_at_resolution_step(
+        self,
+        mock_lance_service,
+        mock_rules_cache_service,
+        mock_state_extractor,
+        mock_state_manager,
+        mock_context_builder,
+        mock_turn_manager_for_extraction
+    ):
+        """Test that state extraction is triggered when completing a resolution step."""
+        turn_manager, current_turn = mock_turn_manager_for_extraction
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service,
+            state_extractor=mock_state_extractor,
+            state_manager=mock_state_manager,
+            state_extractor_context_builder=mock_context_builder
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Execute complete_step at resolution step
+        result = await complete_step(ctx)
+
+        # Verify context builder was called with TurnContext
+        mock_context_builder.build_context.assert_called_once()
+        call_args = mock_context_builder.build_context.call_args
+        assert call_args[1]["current_turn"] == current_turn
+        assert call_args[1]["character_map"] == {"Tharion": "fighter_1", "Elara": "wizard_1"}
+
+        # Verify state extractor was called with formatted string (not TurnContext object)
+        mock_state_extractor.extract_state_changes.assert_called_once()
+        extract_call = mock_state_extractor.extract_state_changes.call_args
+        formatted_context = extract_call[1]["formatted_turn_context"]
+        assert isinstance(formatted_context, str)
+        assert "Formatted context for extraction" in formatted_context
+
+        # Verify state manager applied commands
+        mock_state_manager.apply_commands.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_state_extraction_skipped_at_non_resolution_step(
+        self,
+        mock_lance_service,
+        mock_rules_cache_service,
+        mock_state_extractor,
+        mock_state_manager,
+        mock_context_builder
+    ):
+        """Test that state extraction is NOT triggered at non-resolution steps."""
+        from src.prompts.demo_combat_steps import COMBAT_TURN_STEPS
+
+        turn_manager = Mock()
+
+        # Create turn at non-resolution step index 1
+        current_turn = TurnContext(
+            turn_id="1",
+            turn_level=0,
+            current_step_objective="Receive action",
+            game_step_list=COMBAT_TURN_STEPS,
+            current_step_index=1,  # Index 1 is NOT a resolution step
+            metadata={}
+        )
+        turn_manager.get_current_turn_context = Mock(return_value=current_turn)
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service,
+            state_extractor=mock_state_extractor,
+            state_manager=mock_state_manager,
+            state_extractor_context_builder=mock_context_builder
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Execute complete_step at non-resolution step
+        await complete_step(ctx)
+
+        # Verify state extraction was NOT triggered
+        mock_context_builder.build_context.assert_not_called()
+        mock_state_extractor.extract_state_changes.assert_not_called()
+        mock_state_manager.apply_commands.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_state_extraction_context_has_game_context(
+        self,
+        mock_lance_service,
+        mock_rules_cache_service,
+        mock_state_extractor,
+        mock_state_manager,
+        mock_context_builder,
+        mock_turn_manager_for_extraction
+    ):
+        """Test that extract_state_changes receives proper game_context."""
+        turn_manager, current_turn = mock_turn_manager_for_extraction
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service,
+            state_extractor=mock_state_extractor,
+            state_manager=mock_state_manager,
+            state_extractor_context_builder=mock_context_builder
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        await complete_step(ctx)
+
+        # Verify game_context was passed correctly
+        extract_call = mock_state_extractor.extract_state_changes.call_args
+        game_context = extract_call[1]["game_context"]
+
+        assert game_context["turn_id"] == "1"
+        assert game_context["turn_level"] == 0
+        assert game_context["active_character"] == "Tharion"
+
+    @pytest.mark.asyncio
+    async def test_state_extraction_continues_on_error(
+        self,
+        mock_lance_service,
+        mock_rules_cache_service,
+        mock_state_manager,
+        mock_context_builder,
+        mock_turn_manager_for_extraction
+    ):
+        """Test that step completion continues even if state extraction fails."""
+        turn_manager, current_turn = mock_turn_manager_for_extraction
+
+        # Create extractor that raises an exception
+        failing_extractor = AsyncMock()
+        failing_extractor.extract_state_changes = AsyncMock(side_effect=Exception("Extraction failed"))
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service,
+            state_extractor=failing_extractor,
+            state_manager=mock_state_manager,
+            state_extractor_context_builder=mock_context_builder
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Execute - should not raise, just log and continue
+        result = await complete_step(ctx)
+
+        # Step should still complete successfully
+        assert "Error" not in result or "state" not in result.lower()
+        # Step index should have advanced
+        assert current_turn.current_step_index == 4
+
+    @pytest.mark.asyncio
+    async def test_state_extraction_skipped_without_context_builder(
+        self,
+        mock_lance_service,
+        mock_rules_cache_service,
+        mock_state_extractor,
+        mock_state_manager,
+        mock_turn_manager_for_extraction
+    ):
+        """Test that state extraction is skipped if context_builder is None."""
+        turn_manager, current_turn = mock_turn_manager_for_extraction
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service,
+            state_extractor=mock_state_extractor,
+            state_manager=mock_state_manager,
+            state_extractor_context_builder=None  # No context builder
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Execute
+        result = await complete_step(ctx)
+
+        # State extraction should be skipped
+        mock_state_extractor.extract_state_changes.assert_not_called()
+
+        # But step should still complete
+        assert current_turn.current_step_index == 4
+
+    @pytest.mark.asyncio
+    async def test_state_extraction_no_commands_extracted(
+        self,
+        mock_lance_service,
+        mock_rules_cache_service,
+        mock_state_manager,
+        mock_context_builder,
+        mock_turn_manager_for_extraction
+    ):
+        """Test behavior when state extraction returns no commands."""
+        turn_manager, current_turn = mock_turn_manager_for_extraction
+
+        # Create extractor that returns empty commands
+        extractor = AsyncMock()
+        mock_result = Mock()
+        mock_result.commands = []  # No commands extracted
+        mock_result.notes = "No state changes detected"
+        extractor.extract_state_changes = AsyncMock(return_value=mock_result)
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service,
+            state_extractor=extractor,
+            state_manager=mock_state_manager,
+            state_extractor_context_builder=mock_context_builder
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Execute
+        result = await complete_step(ctx)
+
+        # State extractor was called
+        extractor.extract_state_changes.assert_called_once()
+
+        # But apply_commands should NOT be called (no commands)
+        mock_state_manager.apply_commands.assert_not_called()
+
+        # Step should still complete
+        assert current_turn.current_step_index == 4
+
+    @pytest.mark.asyncio
+    async def test_state_extraction_with_multiple_commands(
+        self,
+        mock_lance_service,
+        mock_rules_cache_service,
+        mock_state_manager,
+        mock_context_builder,
+        mock_turn_manager_for_extraction
+    ):
+        """Test state extraction with multiple commands applies all of them."""
+        turn_manager, current_turn = mock_turn_manager_for_extraction
+
+        # Create extractor with multiple commands
+        extractor = AsyncMock()
+        mock_result = Mock()
+        mock_result.commands = [
+            Mock(target_id="fighter_1", damage=8),
+            Mock(target_id="goblin_1", damage=12),
+            Mock(character_id="wizard_1", effect="poisoned")
+        ]
+        mock_result.notes = "Extracted 3 commands"
+        extractor.extract_state_changes = AsyncMock(return_value=mock_result)
+
+        mock_state_manager.apply_commands = Mock(return_value={
+            "commands_executed": 3,
+            "results": ["HP updated for fighter_1", "HP updated for goblin_1", "Effect applied to wizard_1"]
+        })
+
+        deps = DMToolsDependencies(
+            lance_service=mock_lance_service,
+            turn_manager=turn_manager,
+            rules_cache_service=mock_rules_cache_service,
+            state_extractor=extractor,
+            state_manager=mock_state_manager,
+            state_extractor_context_builder=mock_context_builder
+        )
+        ctx = Mock(spec=RunContext)
+        ctx.deps = deps
+
+        # Execute
+        await complete_step(ctx)
+
+        # Verify apply_commands was called with the result containing all commands
+        mock_state_manager.apply_commands.assert_called_once()
+        call_arg = mock_state_manager.apply_commands.call_args[0][0]
+        assert len(call_arg.commands) == 3
