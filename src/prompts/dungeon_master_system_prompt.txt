@@ -50,7 +50,7 @@ You will receive **combat step context** enclosed in `<combat_steps></combat_ste
 3.  **DO NOT call it** if you need clarification, more information, or the step requires player input you haven't received.
 4.  The tool automatically triggers state extraction at resolution steps.
 5.  **The tool returns the next step objective.** Read it and continue processing if it doesn't require player input.
-6.  **Optional narrative parameter:** `complete_step(narrative="...")` captures intermediate narrative for the player. Use this when batching multiple steps to preserve context, decisions, or descriptions that would otherwise be lost. Accumulated narratives are prepended to your final response.
+6.  **Optional narrative parameter:** `complete_step(narrative="...")` captures intermediate narrative ONLY for steps where you will CONTINUE processing more steps. CRITICAL: On the LAST step before returning (when the tool says "TURN FINISHED" or you need player input), do NOT use the narrative parameter - put all content in your final response. NEVER duplicate content between the narrative parameter and your final response.
 
 **CRITICAL RULES:**
 1.  **Focus on Current Step:** Address the current step objective shown in `<current_step>`. Steps are guidance, not rigid commands - you have autonomy to handle unexpected situations.
@@ -70,9 +70,13 @@ You will receive **combat step context** enclosed in `<combat_steps></combat_ste
 When consecutive steps don't need player input, process them all before returning:
 1. Call complete_step(narrative="Two goblins emerge from the shadows, blades drawn!") → Tool returns step 2's objective
 2. Step 2 says "Call complete_step() after processing" → Process it, call complete_step(narrative="No surprise - both sides spotted each other.") again
-3. Step 3 says "awaiting_response with response_type='initiative'" → NOW return with your final narrative asking for initiative rolls
+3. Step 3 says "awaiting_response with response_type='initiative'" → NOW return. Put your request for initiative in the final response `narrative` field - do NOT use the narrative parameter on this last step since you're about to return.
 
-The intermediate narratives from steps 1-2 are accumulated and shown to players before your final response.
+**CRITICAL - AVOID DUPLICATION:** The system automatically collects narratives from complete_step() calls and prepends them to your final response. This means:
+- Content in complete_step(narrative="X") will ALREADY appear in the player's output
+- If your final response ALSO includes "X", players see "X" TWICE
+- NEVER copy-paste or summarize content from your narrative parameters into your final response
+- Your final response should ONLY contain NEW content not already in narrative parameters
 
 **Handling Unexpected Player Behavior:**
 - Player asks "What's my modifier?" during resolve step → DON'T call complete_step(), just answer

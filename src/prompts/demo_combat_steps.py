@@ -72,8 +72,9 @@ COMBAT_START_STEPS = [
     "4. THEN call add_monster_initiative() with the actual roll results from roll_dice().\n"
     "5. After calling add_monster_initiative(), CHECK THE RESPONSE for any '🚨 ACTION REQUIRED' warnings - if monsters are missing, call add_monster_initiative() again for the missing ones.\n"
     "6. Combat CANNOT proceed until ALL monsters have initiative registered.\n"
+    "7. CRITICAL: DO NOT announce the monster initiative roll results to players. Keep monster rolls secret - only use them internally for add_monster_initiative(). Players should only see their own initiative prompts, not what the monsters rolled.\n"
     "DO NOT announce initiative order in this step.\n"
-    "TWO SCENARIOS: (1) If you are ASKING for initiative rolls, first use roll_dice() to roll for ALL monsters, then call add_monster_initiative() with those actual roll values, then set DO NOT call complete_step() yet and awaiting_response with response_type='initiative' and characters=[list of ALL player character IDs who need to roll]. (2) If you SEE 'Initiative Results' in the new messages showing all rolls have been collected, acknowledge receipt briefly and set call complete_step() to proceed to the next step.",
+    "TWO SCENARIOS: (1) If you are ASKING for initiative rolls, first use roll_dice() to roll for ALL monsters, then call add_monster_initiative() with those actual roll values (without announcing monster rolls to players), then set DO NOT call complete_step() yet and awaiting_response with response_type='initiative' and characters=[list of ALL player character IDs who need to roll]. (2) If you SEE 'Initiative Results' in the new messages showing all rolls have been collected, acknowledge receipt briefly and set call complete_step() to proceed to the next step.",
 
     # Step 3: Announce and Verify Initiative Order (reached only after initiative results are received)
     "You have received all initiative rolls. IMPORTANT: Refer to the <combat_state><initiative_order> section in your context for the ACTUAL initiative order stored by the system. DO NOT reconstruct the order from memory - use the EXACT order shown in the context.\n"
@@ -104,7 +105,10 @@ COMBAT_TURN_STEPS = [
     "DO NOT resolve the main action in this step.",
 
     # Step 3: Resolve Action (Resolution step)
-    "Resolve the declared action: Validate the action, call for necessary rolls (attack rolls, saving throws, ability checks), determine outcome based on the rolls, and narrate the result vividly. Apply damage and effects. DO NOT handle status changes or post-resolution reactions in this step.",
+    "Resolve the declared action: ASK THE PLAYER to make their roll (attack, damage, save, or check). CRITICAL: DO NOT use roll_dice() for player characters - this includes attack rolls AND damage rolls. Only monsters/NPCs roll with roll_dice(). Wait for the player to provide each result. Once you have ALL results needed, determine outcome and narrate it vividly. Apply damage and effects. DO NOT handle status changes or post-resolution reactions in this step.\n"
+    "TWO SCENARIOS:\n"
+    "(1) If you need a roll from the player (attack, damage, save, check): Set DO NOT call complete_step() yet and awaiting_response with response_type='action' asking for their roll.\n"
+    "(2) If you SEE the roll result in new messages: Resolve the action, apply effects, call complete_step() to proceed.",
 
     # Step 4: Handle Critical Status Changes
     "Handle critical status changes: Check if anyone dropped to 0 HP (PCs fall unconscious, NPCs typically die). Apply consequences immediately. DO NOT provide post-resolution reaction window in this step.",
@@ -123,7 +127,12 @@ COMBAT_TURN_STEPS = [
     "Check for turn-end effects: Apply effects that trigger at the end of this turn (saving throws against conditions, concentration checks, Legendary Actions if facing a legendary creature). Resolve any triggered effects. DO NOT announce the next turn in this step.",
 
     # Step 8: Announce Next Turn
-    "Announce the end of current participant's turn. Check the <combat_state><initiative_order> in your context to confirm who is next according to the system, then state which participant is next in initiative order and prompt them for their intended action. If this was the last turn in the round, also announce the start of the new round. DO NOT begin processing the next participant's actions in this step."
+    "Announce the end of current participant's turn. Check the <combat_state><initiative_order> in your context to confirm who is next according to the system, then briefly state which participant is next in initiative order. CRITICAL RESTRICTIONS:\n"
+    "1. DO NOT begin processing the next participant's actions, attacks, or decisions - only announce who is next.\n"
+    "2. DO NOT narrate the next participant attacking, moving, or taking any action - the system will handle their turn separately.\n"
+    "3. DO NOT use start_and_queue_turns() - the system automatically handles turn transitions.\n"
+    "4. If this was the last turn in the round, also announce the start of the new round.\n"
+    "Call complete_step() to signal the turn is complete - the system will automatically transition to the next turn and run it."
 ]
 
 # Legacy alias for backward compatibility
@@ -169,7 +178,12 @@ MONSTER_TURN_STEPS = [
     "Check for turn-end effects: Apply effects that trigger at the end of this turn (saving throws against conditions, concentration checks). Resolve any triggered effects. DO NOT announce the next turn in this step.",
 
     # Step 8: Announce Next Turn
-    "Announce the end of the monster's turn. Check the <combat_state><initiative_order> in your context to confirm who is next according to the system, then state which participant is next in initiative order. If this was the last turn in the round, also announce the start of the new round. DO NOT begin processing the next participant's actions in this step."
+    "Announce the end of the monster's turn. Check the <combat_state><initiative_order> in your context to confirm who is next according to the system, then briefly state which participant is next in initiative order. CRITICAL RESTRICTIONS:\n"
+    "1. DO NOT begin processing the next participant's actions, attacks, or decisions - only announce who is next.\n"
+    "2. DO NOT narrate the next participant attacking, moving, or taking any action - the system will handle their turn separately.\n"
+    "3. DO NOT use start_and_queue_turns() - the system automatically handles turn transitions.\n"
+    "4. If this was the last turn in the round, also announce the start of the new round.\n"
+    "Call complete_step() to signal the turn is complete - the system will automatically transition to the next turn and run it."
 ]
 
 # Legacy alias for backward compatibility
