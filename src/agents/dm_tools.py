@@ -14,6 +14,7 @@ from ..db.lance_rules_service import LanceRulesService
 if TYPE_CHECKING:
     from .state_extraction_orchestrator import StateExtractionOrchestrator
 from ..memory.turn_manager import TurnManager
+from ..context.state_extractor_context_builder import StateExtractorContextBuilder, create_state_extractor_context_builder
 from ..memory.state_manager import StateManager
 from ..models.combat_state import CombatPhase
 from ..services.rules_cache_service import RulesCacheService
@@ -203,7 +204,8 @@ class DMToolsDependencies:
         state_manager: Optional[StateManager] = None,
         monster_spawner: Optional[MonsterSpawner] = None,
         logger: Optional[GameLogger] = None,
-        state_extractor: Optional["StateExtractionOrchestrator"] = None
+        state_extractor: Optional["StateExtractionOrchestrator"] = None,
+        state_extractor_context_builder: Optional[StateExtractorContextBuilder] = None
     ):
         self.lance_service = lance_service
         self.turn_manager = turn_manager
@@ -213,6 +215,7 @@ class DMToolsDependencies:
         self.logger = logger
         # Combat step tool dependencies
         self.state_extractor = state_extractor
+        self.state_extractor_context_builder = state_extractor_context_builder
         self.turn_complete: bool = False  # Flag set by complete_step when turn is done
         self.step_narratives: List[str] = []  # Accumulated narratives from complete_step calls
 
@@ -970,6 +973,7 @@ async def roll_dice(
     valid_dice = {4, 6, 8, 10, 12, 20, 100}
 
     results = []
+    roll_results_log = []  # For logging actual results
     for roll_request in rolls:
         char_id = roll_request.character_id
         num_dice = roll_request.num_dice
@@ -1021,7 +1025,16 @@ async def roll_dice(
 
         results.append(f"🎲 {char_id} [{label}]: {roll_desc} {mod_str if modifier != 0 else ''} = **{total}**")
 
-    log.dm_tool("roll_dice complete", roll_count=len(rolls))
+        # Log the actual result for debugging
+        roll_results_log.append({
+            "character_id": char_id,
+            "label": label,
+            "roll_desc": roll_desc,
+            "modifier": modifier,
+            "total": total
+        })
+
+    log.dm_tool("roll_dice complete", roll_count=len(rolls), results=roll_results_log)
 
     return "\n".join(results)
 
@@ -1201,6 +1214,73 @@ async def end_combat(
 # ==================== Combat Step Tool ====================
 
 
+async def _run_state_extraction(
+    ctx: RunContext[DMToolsDependencies],
+    log: Union[GameLogger, _NullToolLogger],
+    turn_manager: TurnManager,
+    current_turn,
+    current_idx: int
+) -> None:
+    """Run state extraction at resolution steps. Logs errors but doesn't raise."""
+    state_extractor = ctx.deps.state_extractor
+    state_manager = ctx.deps.state_manager
+    context_builder = ctx.deps.state_extractor_context_builder
+
+    # Check all dependencies present
+    missing = [name for name, dep in [
+        ("state_extractor", state_extractor),
+        ("state_manager", state_manager),
+        ("context_builder", context_builder)
+    ] if not dep]
+    if missing:
+        log.extraction("State extraction skipped", missing_deps=missing, level=LogLevel.DEBUG)
+        return
+
+    try:
+        log.extraction("Resolution step - state extraction",
+                      turn_id=current_turn.turn_id, step_index=current_idx)
+
+        snapshot = turn_manager.get_snapshot()
+        current_turn_ctx = snapshot.turn_stack[-1][0] if snapshot.turn_stack else None
+        if not current_turn_ctx:
+            log.extraction("No turn context available", level=LogLevel.WARNING)
+            return
+
+        character_map = state_manager.get_character_name_to_id_map()
+        formatted_context = context_builder.build_context(
+            current_turn=current_turn_ctx,
+            character_map=character_map
+        )
+
+        state_commands = await state_extractor.extract_state_changes(
+            formatted_turn_context=formatted_context,
+            game_context={
+                "turn_id": current_turn_ctx.turn_id,
+                "turn_level": current_turn_ctx.turn_level,
+                "active_character": current_turn_ctx.active_character
+            },
+            turn_snapshot=snapshot
+        )
+
+        if not state_commands or not state_commands.commands:
+            log.extraction("No state commands extracted")
+            return
+
+        # Log and apply commands
+        for cmd in state_commands.commands:
+            log.extraction("Command extracted",
+                          type=type(cmd).__name__,
+                          target=getattr(cmd, 'target_id', None) or getattr(cmd, 'character_id', None))
+
+        state_results = state_manager.apply_commands(state_commands)
+        log.extraction("Commands applied", executed=state_results.get('commands_executed', 0))
+
+    except Exception as e:
+        import traceback
+        log.extraction("State extraction failed", error=str(e),
+                      traceback=traceback.format_exc(), level=LogLevel.WARNING)
+
+
 async def complete_step(
     ctx: RunContext[DMToolsDependencies],
     narrative: Optional[str] = None
@@ -1264,37 +1344,7 @@ async def complete_step(
 
     # State extraction at resolution steps (BEFORE advancing)
     if is_resolution_step_index(current_idx, step_list):
-        state_extractor = ctx.deps.state_extractor
-        state_manager = ctx.deps.state_manager
-
-        if state_extractor and state_manager:
-            try:
-                log.extraction("Resolution step - triggering state extraction",
-                             turn_id=current_turn.turn_id,
-                             step_index=current_idx)
-
-                snapshot = turn_manager.get_snapshot()
-                current_turn_ctx = snapshot.turn_stack[-1][0] if snapshot.turn_stack else None
-
-                if current_turn_ctx:
-                    state_commands = await state_extractor.extract_state_changes(
-                        formatted_turn_context=current_turn_ctx,
-                        game_context={
-                            "turn_id": current_turn_ctx.turn_id,
-                            "turn_level": current_turn_ctx.turn_level,
-                            "active_character": current_turn_ctx.active_character
-                        },
-                        turn_snapshot=snapshot
-                    )
-
-                    if state_commands and state_commands.commands:
-                        state_results = state_manager.apply_commands(state_commands)
-                        log.extraction("State commands applied",
-                                     commands_executed=state_results.get('commands_executed', 0))
-            except Exception as e:
-                log.extraction("State extraction failed (continuing)",
-                             error=str(e), level=LogLevel.WARNING)
-                # Don't fail the step completion - just log and continue
+        await _run_state_extraction(ctx, log, turn_manager, current_turn, current_idx)
 
     # Advance the step
     more_steps = current_turn.advance_step()
@@ -1420,6 +1470,9 @@ def create_dm_tools(
         dm_agent = create_dungeon_master_agent(tools=tools)
         result = await dm_agent.process_message(context, deps=deps)
     """
+    # Create state extractor context builder if state extraction is enabled
+    state_extractor_context_builder = create_state_extractor_context_builder() if state_extractor else None
+
     tools = [query_rules_database, query_character_ability, get_available_monsters, select_encounter_monsters, roll_dice, add_monster_initiative, remove_defeated_participant, end_combat, complete_step]
     dependencies = DMToolsDependencies(
         lance_service=lance_service,
@@ -1428,7 +1481,8 @@ def create_dm_tools(
         state_manager=state_manager,
         monster_spawner=monster_spawner,
         logger=logger,
-        state_extractor=state_extractor
+        state_extractor=state_extractor,
+        state_extractor_context_builder=state_extractor_context_builder
     )
 
     return tools, dependencies
