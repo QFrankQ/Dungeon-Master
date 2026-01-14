@@ -396,6 +396,15 @@ class TurnManager:
         turn_level = len(self.turn_stack)  # Stack depth determines nesting level
         created_turn_ids = []
 
+        # Log the tool call with action details
+        if self.logger:
+            self.logger.turn("start_and_queue_turns called",
+                           action_count=len(actions),
+                           turn_level=turn_level,
+                           phase=phase.value if phase else None,
+                           current_game_phase=self._current_game_phase.value if self._current_game_phase else None,
+                           speakers=[a.speaker for a in actions])
+
         # Merge pending monster reactions for reaction turns (level 1+)
         # This ensures monster reactions recorded by DM are included alongside player reactions
         if turn_level > 0 and self._pending_monster_reactions:
@@ -453,6 +462,13 @@ class TurnManager:
                 self.turn_stack[turn_level].append(turn_context)
 
             created_turn_ids.append(turn_id)
+
+        # Log the created turns
+        if self.logger:
+            self.logger.turn("start_and_queue_turns complete",
+                           created_turn_ids=created_turn_ids,
+                           turn_level=turn_level,
+                           step_list_length=len(game_step_list))
 
         #TODO: return the context of the first turn to be processed
         return {
@@ -887,12 +903,17 @@ class TurnManager:
 
         duration = (completed_turn.end_time - completed_turn.start_time).total_seconds()
 
+        # Log turn completion with clear distinction
+        # embedded_in_parent: Was this subturn condensed and added to parent context
+        # has_remaining_turns: Are there still turns on the stack after this one
+        was_embedded = (completed_turn.turn_level > 0 and condensation_result is not None)
         if self.logger:
             self.logger.turn("Turn completed",
                            turn_id=completed_turn.turn_id,
                            turn_level=completed_turn.turn_level,
                            duration_seconds=duration,
-                           embedded_in_parent=len(self.turn_stack) >= 1)
+                           was_embedded_in_parent=was_embedded,
+                           has_remaining_turns=len(self.turn_stack) >= 1)
 
         return {
             "turn_id": completed_turn.turn_id,
